@@ -1028,13 +1028,36 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       mapState: nextMapState,
     };
     const nextSavedMaps = [...savedMaps, nextPreset];
+    const nextJournal = [
+      {
+        id: `${Date.now()}-${Math.random()}`,
+        type: 'map' as const,
+        text: `Загружена карта «${file.name}» и создана новая вкладка.`,
+        time: nowTime(),
+      },
+      ...journal,
+    ].slice(0, 20);
 
     setMapName(nextName);
     setMapPresetName(nextName);
     setMapState(nextMapState);
     setSavedMaps(nextSavedMaps);
     setActiveSavedMapId(nextPresetId);
-    addJournalEntry('map', `Загружена карта «${file.name}» и создана новая вкладка.`);
+    setJournal(nextJournal);
+
+    if (isLoadedFromStorage) {
+      const payload = buildSavedRoomState({
+        mapName: nextName,
+        mapState: nextMapState,
+        savedMaps: nextSavedMaps,
+        activeSavedMapId: nextPresetId,
+        tokens,
+        sheets,
+        journal: nextJournal,
+      });
+      window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
+    }
+
     event.target.value = '';
   };
 
