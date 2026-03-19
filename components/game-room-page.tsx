@@ -1001,6 +1001,56 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     addJournalEntry('save', `Карта «${nextPreset.name}» сохранена локально для комнаты ${roomId}.`);
   };
 
+  const handleExportMapJson = () => {
+    const payload: SavedRoomState = {
+      mapName,
+      mapState,
+      savedMaps,
+      activeSavedMapId,
+      tokens,
+      sheets,
+      journal,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${(mapPresetName || mapName || roomId).replace(/[^a-zA-Zа-яА-Я0-9-_]+/g, '_')}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    addJournalEntry('save', `Экспортирован JSON сцены «${mapPresetName || mapName}».`);
+  };
+
+  const handleImportMapJson = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const parsed = JSON.parse(await file.text()) as Partial<SavedRoomState>;
+      if (!parsed.mapName || !parsed.mapState?.publicTiles || !parsed.mapState?.gmTiles) {
+        addJournalEntry('system', `Файл ${file.name} не содержит валидную карту комнаты.`);
+        return;
+      }
+
+      setMapName(parsed.mapName);
+      setMapPresetName(parsed.mapName);
+      setMapState(parsed.mapState);
+      setGridColsInput(String(parsed.mapState.cols));
+      setGridRowsInput(String(parsed.mapState.rows));
+      setSavedMaps(parsed.savedMaps ?? []);
+      setActiveSavedMapId(parsed.activeSavedMapId ?? null);
+      if (parsed.tokens) setTokens(parsed.tokens);
+      if (parsed.sheets) setSheets(parsed.sheets);
+      if (parsed.journal) setJournal(parsed.journal);
+      addJournalEntry('map', `JSON-карта «${file.name}» загружена в комнату.`);
+    } catch {
+      addJournalEntry('system', `Файл ${file.name} не является валидным JSON карты.`);
+    } finally {
+      event.target.value = '';
+    }
+  };
+
   const handleLoadSavedMap = (preset: SavedMapPreset) => {
     setActiveSavedMapId(preset.id);
     setMapPresetName(preset.name);
@@ -1277,8 +1327,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               Загрузить карту
               <input type="file" accept="image/*" className="hidden" onChange={handleUploadMap} />
             </label>
-            <button onClick={handleSaveMap} className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950">
-              Сохранить карту
+            <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
+              Загрузить JSON
+              <input type="file" accept="application/json" className="hidden" onChange={handleImportMapJson} />
+            </label>
+            <button onClick={handleExportMapJson} className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950">
+              Сохранить JSON
             </button>
           </div>
         </header>
@@ -1298,6 +1352,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               />
               <button onClick={handleSaveMap} className="rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">
                 Сохранить как вкладку
+              </button>
+              <button onClick={handleExportMapJson} className="rounded-full border border-white/10 px-4 py-3 text-sm font-medium text-slate-200">
+                Экспорт JSON
               </button>
             </div>
           </div>
