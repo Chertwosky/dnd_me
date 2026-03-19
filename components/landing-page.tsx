@@ -27,7 +27,7 @@ export function LandingPage() {
       <main>
         <section className="mx-auto grid max-w-7xl gap-10 px-6 py-20 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
           <div className="space-y-8">
-            <span className="badge">Игровой стол + мастерская мастера</span>
+            <span className="badge">Игровой стол + мастерская мастера • roadmap 1–4</span>
             <div className="space-y-5">
               <h1 className="max-w-4xl text-5xl font-semibold tracking-tight text-white md:text-6xl">
                 Онлайн-платформа для D&amp;D-сессий с картой, токенами, лутом и встроенной справкой.
@@ -35,7 +35,8 @@ export function LandingPage() {
               <p className="max-w-2xl text-lg leading-8 text-slate-300">
                 MVP заточен под быстрый старт партии: мастер создаёт комнату, загружает карту,
                 двигает NPC, открывает карточки и запускает игровые инструменты прямо во время
-                сессии.
+                сессии. Демо-версия на текущем этапе уже визуализирует все запланированные фазы
+                roadmap — от foundation до fog of war и базы знаний.
               </p>
             </div>
 
@@ -65,7 +66,7 @@ export function LandingPage() {
 
           <div className="card overflow-hidden border-fuchsia-500/20 bg-slate-950/80">
             <div className="border-b border-white/10 px-6 py-4">
-              <p className="text-sm font-medium text-fuchsia-300">Что умеет первый релиз</p>
+              <p className="text-sm font-medium text-fuchsia-300">Что уже покрывает текущее демо</p>
             </div>
             <div className="space-y-4 p-6 text-sm text-slate-200">
               {[
@@ -77,6 +78,7 @@ export function LandingPage() {
                 'Сгенерировать лут',
                 'Вызвать случайное событие',
                 'Открыть справку в боковой панели',
+                'Управлять инициативой и fog of war',
               ].map((item) => (
                 <div key={item} className="flex items-center gap-3">
                   <span className="h-2.5 w-2.5 rounded-full bg-cyan-400" />
