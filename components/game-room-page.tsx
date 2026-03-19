@@ -1062,7 +1062,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   };
 
   const handleSaveMap = () => {
-    const presetId = activeSavedMapId ?? `map-${Date.now()}`;
+    const presetId = `map-${Date.now()}`;
     const nextPreset: SavedMapPreset = {
       id: presetId,
       name: mapPresetName.trim() || mapName || 'Новая сцена',
@@ -1070,9 +1070,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       mapState,
     };
 
-    const nextSavedMaps = savedMaps.some((preset) => preset.id === presetId)
-      ? savedMaps.map((preset) => (preset.id === presetId ? nextPreset : preset))
-      : [...savedMaps, nextPreset];
+    const nextSavedMaps = [...savedMaps, nextPreset];
 
     setSavedMaps(nextSavedMaps);
     setActiveSavedMapId(presetId);
@@ -1087,7 +1085,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       journal,
     });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
-    addJournalEntry('save', `Карта «${nextPreset.name}» сохранена локально для комнаты ${roomId}.`);
+    addJournalEntry('save', `Карта «${nextPreset.name}» сохранена локально для комнаты ${roomId} как новая вкладка.`);
   };
 
   const handleExportMapJson = () => {
