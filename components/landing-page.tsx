@@ -3,20 +3,19 @@ import { Header } from '@/components/header';
 import { productHighlights, roadmap } from '@/lib/mock-data';
 
 const masterActions = [
-  'создать комнату / сессию',
-  'загрузить карту',
-  'расставить токены игроков и NPC',
-  'открывать карточки монстров, предметов и заклинаний',
-  'запускать генератор лута и случайные события',
-  'вести журнал и управлять туманом войны',
+  'создать комнату, задать пароль и автоматически стать мастером',
+  'загрузить карту и рисовать отдельными слоями: покрытие, препятствия, текстуры, мебель',
+  'масштабировать тактическую карту прямо в интерфейсе',
+  'запускать случайные события и лут с привязкой к dnd.su',
+  'держать рядом виджет карты реальной местности для региональной навигации',
 ];
 
 const playerActions = [
-  'зайти по invite-ссылке',
-  'видеть карту и свои токены',
-  'двигать только свой токен',
-  'открывать лист персонажа',
-  'бросать кубы и получать эффекты событий',
+  'войти в комнату по тому же паролю и автоматически стать игроком',
+  'создать лист персонажа вручную прямо в комнате',
+  'или загрузить JSON с longstoryshort.app/digital characters',
+  'управлять своим токеном и править свой лист',
+  'видеть тактическую карту и региональный виджет одновременно',
 ];
 
 export function LandingPage() {
@@ -27,16 +26,13 @@ export function LandingPage() {
       <main>
         <section className="mx-auto grid max-w-7xl gap-10 px-6 py-20 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
           <div className="space-y-8">
-            <span className="badge">Игровой стол + мастерская мастера • roadmap 1–4</span>
+            <span className="badge">Игровой стол + мастерская мастера • password room flow</span>
             <div className="space-y-5">
               <h1 className="max-w-4xl text-5xl font-semibold tracking-tight text-white md:text-6xl">
-                Онлайн-платформа для D&amp;D-сессий с картой, токенами, лутом и встроенной справкой.
+                Одна комната с паролем, тактической картой, импортом персонажей и regional map widget.
               </h1>
               <p className="max-w-2xl text-lg leading-8 text-slate-300">
-                MVP заточен под быстрый старт партии: мастер создаёт комнату, загружает карту,
-                двигает NPC, открывает карточки и запускает игровые инструменты прямо во время
-                сессии. Демо-версия на текущем этапе уже визуализирует все запланированные фазы
-                roadmap — и уже даёт локальный интерактив: рисование карты, перемещение токенов и редактирование листа персонажа.
+                Вместо отдельной демо-комнаты теперь используется обычная комната: первый вход задаёт пароль и становится мастером, следующие участники заходят как игроки. Игрок может заполнить лист в интерфейсе или загрузить JSON с Long Story Short, а мастер получает масштабируемую карту со слоями препятствий, текстур и мебели.
               </p>
             </div>
 
@@ -45,7 +41,7 @@ export function LandingPage() {
                 href="/rooms/demo-room"
                 className="rounded-full bg-fuchsia-500 px-6 py-3 font-medium text-white shadow-lg shadow-fuchsia-500/20 transition hover:bg-fuchsia-400"
               >
-                Открыть демо-комнату
+                Открыть комнату
               </Link>
               <a
                 href="#features"
@@ -70,17 +66,14 @@ export function LandingPage() {
             </div>
             <div className="space-y-4 p-6 text-sm text-slate-200">
               {[
-                'Создать комнату',
-                'Загрузить карту',
-                'Двигать фишки',
-                'Открыть карточку персонажа',
-                'Бросить кубы',
-                'Сгенерировать лут',
-                'Вызвать случайное событие',
-                'Открыть справку в боковой панели',
-                'Рисовать карту и ставить fog of war',
-                'Перетаскивать токены по полю',
-                'Редактировать лист персонажа',
+                'Вход в комнату по паролю',
+                'Первый вход = мастер, остальные = игроки',
+                'Ручное создание листа персонажа',
+                'Импорт JSON с Long Story Short',
+                'Масштабируемая battle map',
+                'Рисование препятствий, текстур и столов',
+                'Лут и события со ссылкой на dnd.su',
+                'Виджет карты местности рядом со сценой',
               ].map((item) => (
                 <div key={item} className="flex items-center gap-3">
                   <span className="h-2.5 w-2.5 rounded-full bg-cyan-400" />
@@ -95,27 +88,27 @@ export function LandingPage() {
           <div className="mb-10 flex items-end justify-between gap-6">
             <div className="space-y-3">
               <span className="badge">MVP-функции</span>
-              <h2 className="section-title">Функциональность, строго соответствующая спецификации</h2>
+              <h2 className="section-title">Функциональность под новый room flow</h2>
             </div>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
             {[
               {
-                title: 'Комнаты и роли',
-                items: ['invite-ссылки', 'мастер / игрок / наблюдатель', 'права на управление объектами'],
+                title: 'Комната и роли',
+                items: ['пароль комнаты', 'первый вход становится мастером', 'следующие входы получают роль игрока'],
               },
               {
                 title: 'Игровое поле',
-                items: ['карта и сетка', 'токены персонажей и NPC', 'pan / zoom / distance / fog'],
+                items: ['масштабирование карты', 'слои terrain / obstacle / texture / furniture', 'токены и fog of war'],
               },
               {
                 title: 'Карточки персонажей',
-                items: ['JSON / PDF / изображение', 'HP / AC / speed / stats', 'быстрый просмотр по токену'],
+                items: ['ручное создание листа', 'JSON import с Long Story Short', 'редактирование характеристик'],
               },
               {
                 title: 'Инструменты мастера',
-                items: ['dice roller', 'генератор лута', 'случайные события', 'база знаний'],
+                items: ['dice roller', 'лут c dnd.su', 'события c dnd.su', 'виджет региональной карты'],
               },
             ].map((feature) => (
               <div key={feature.title} className="card p-6">
@@ -136,7 +129,7 @@ export function LandingPage() {
         <section id="scenarios" className="mx-auto grid max-w-7xl gap-6 px-6 py-16 lg:grid-cols-2">
           <div className="card p-8">
             <span className="badge">Для мастера</span>
-            <h2 className="mt-4 text-2xl font-semibold text-white">Быстрое ведение сессии</h2>
+            <h2 className="mt-4 text-2xl font-semibold text-white">Тактический и региональный контроль</h2>
             <ul className="mt-6 space-y-3 text-sm leading-7 text-slate-300">
               {masterActions.map((action) => (
                 <li key={action} className="flex gap-3">
@@ -149,7 +142,7 @@ export function LandingPage() {
 
           <div className="card p-8">
             <span className="badge">Для игрока</span>
-            <h2 className="mt-4 text-2xl font-semibold text-white">Вход по ссылке и игра без лишних действий</h2>
+            <h2 className="mt-4 text-2xl font-semibold text-white">Быстрый вход и импорт персонажа</h2>
             <ul className="mt-6 space-y-3 text-sm leading-7 text-slate-300">
               {playerActions.map((action) => (
                 <li key={action} className="flex gap-3">
