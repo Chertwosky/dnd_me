@@ -38,28 +38,56 @@ type RoomToken = {
   visionRadius?: number;
 };
 
+type CharacterStats = {
+  str: number;
+  dex: number;
+  con: number;
+  int: number;
+  wis: number;
+  cha: number;
+};
+
 type CharacterSheet = {
   id: string;
   tokenId: string;
   name: string;
   race: string;
   heroClass: string;
+  subclass?: string;
+  background?: string;
+  alignment?: string;
+  playerName?: string;
   level: number;
+  experience?: number;
   hp: number;
   maxHp: number;
   ac: number;
   speed: number;
-  stats: {
-    str: number;
-    dex: number;
-    con: number;
-    int: number;
-    wis: number;
-    cha: number;
-  };
+  initiative?: number;
+  proficiencyBonus?: number;
+  stats: CharacterStats;
+  age?: string;
+  height?: string;
+  weight?: string;
+  eyes?: string;
+  skin?: string;
+  hair?: string;
+  avatarUrl?: string;
   notes: string;
   inventory: string;
   spells: string;
+  appearance?: string;
+  personality?: string;
+  ideals?: string;
+  bonds?: string;
+  flaws?: string;
+  allies?: string;
+  proficiencies?: string;
+  traits?: string;
+  equipmentDetails?: string;
+  attacks?: string;
+  feats?: string;
+  features?: string;
 };
 
 type JournalEntry = {
@@ -1144,21 +1172,115 @@ function readNestedNumber(source: unknown, paths: string[][], fallback = 10) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function readDocumentText(value: unknown): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map((item) => readDocumentText(item)).filter(Boolean).join('\n');
+  if (typeof value !== 'object') return '';
+
+  const record = value as Record<string, unknown>;
+
+  if (typeof record.text === 'string') return record.text;
+  if (record.value) return readDocumentText(record.value);
+  if (record.data) return readDocumentText(record.data);
+  if (Array.isArray(record.content)) {
+    return record.content
+      .map((item) => readDocumentText(item))
+      .filter(Boolean)
+      .join(record.type === 'paragraph' ? '' : '\n');
+  }
+
+  return '';
+}
+
+function normalizeMultiline(value: string) {
+  return value
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function extractStats(stats: Record<string, unknown> | undefined): CharacterStats {
+  return {
+    str: Number((stats?.str as Record<string, unknown> | undefined)?.score ?? 10),
+    dex: Number((stats?.dex as Record<string, unknown> | undefined)?.score ?? 10),
+    con: Number((stats?.con as Record<string, unknown> | undefined)?.score ?? 10),
+    int: Number((stats?.int as Record<string, unknown> | undefined)?.score ?? 10),
+    wis: Number((stats?.wis as Record<string, unknown> | undefined)?.score ?? 10),
+    cha: Number((stats?.cha as Record<string, unknown> | undefined)?.score ?? 10),
+  };
+}
+
 function parseLongStoryShortCharacter(raw: unknown): Partial<CharacterSheet> | null {
   if (!raw || typeof raw !== 'object') return null;
 
+  const source = raw as Record<string, unknown>;
+  const embeddedRaw = typeof source.data === 'string' ? source.data : null;
+  let embedded: Record<string, unknown> | null = null;
+
+  if (embeddedRaw) {
+    try {
+      embedded = JSON.parse(embeddedRaw) as Record<string, unknown>;
+    } catch {
+      embedded = null;
+    }
+  }
+
+  const root = embedded ?? source;
+  const info = (root.info as Record<string, { value?: unknown }> | undefined) ?? {};
+  const subInfo = (root.subInfo as Record<string, { value?: unknown }> | undefined) ?? {};
+  const vitality = (root.vitality as Record<string, { value?: unknown }> | undefined) ?? {};
+  const textBlocks = (root.text as Record<string, { value?: unknown }> | undefined) ?? {};
+  const avatar = (root.avatar as Record<string, unknown> | undefined) ?? (source.avatar as Record<string, unknown> | undefined);
+  const speed = Number((vitality['speed']?.value ?? readNestedNumber(raw, [['speed'], ['movement', 'walk']], 30)));
+  const hp = Number(vitality['hp-current']?.value ?? readNestedNumber(raw, [['hp'], ['hitPoints', 'current'], ['health', 'current']], 10));
+  const maxHp = Number(vitality['hp-max']?.value ?? readNestedNumber(raw, [['maxHp'], ['hitPoints', 'max'], ['health', 'max']], hp));
+
+  const notesParts = [
+    normalizeMultiline(readDocumentText(textBlocks.background?.value)),
+    normalizeMultiline(readDocumentText(textBlocks.features?.value)),
+  ].filter(Boolean);
+
   return {
-    name: readNestedString(raw, [['name'], ['characterName'], ['character', 'name']], 'Новый персонаж'),
-    race: readNestedString(raw, [['race'], ['ancestry'], ['species']], 'Не указано'),
-    heroClass: readNestedString(raw, [['class'], ['heroClass'], ['characterClass']], 'Adventurer'),
-    level: readNestedNumber(raw, [['level'], ['character', 'level']], 1),
-    hp: readNestedNumber(raw, [['hp'], ['hitPoints', 'current'], ['health', 'current']], 10),
-    maxHp: readNestedNumber(raw, [['maxHp'], ['hitPoints', 'max'], ['health', 'max']], 10),
-    ac: readNestedNumber(raw, [['ac'], ['armorClass']], 10),
-    speed: readNestedNumber(raw, [['speed'], ['movement', 'walk']], 30),
-    spells: readNestedString(raw, [['spellsText'], ['spells']], ''),
-    inventory: readNestedString(raw, [['inventoryText'], ['inventory'], ['equipment']], ''),
-    notes: readNestedString(raw, [['notes'], ['backstory'], ['description']], 'Импортировано из Long Story Short.'),
+    name: String((root.name as { value?: unknown } | undefined)?.value ?? readNestedString(raw, [['name'], ['characterName'], ['character', 'name']], 'Новый персонаж')),
+    race: String(info.race?.value ?? readNestedString(raw, [['race'], ['ancestry'], ['species']], 'Не указано')),
+    heroClass: String(info.charClass?.value ?? readNestedString(raw, [['class'], ['heroClass'], ['characterClass']], 'Adventurer')),
+    subclass: String(info.charSubclass?.value ?? ''),
+    background: String(info.background?.value ?? ''),
+    alignment: String(info.alignment?.value ?? ''),
+    playerName: String(info.playerName?.value ?? ''),
+    level: Number(info.level?.value ?? readNestedNumber(raw, [['level'], ['character', 'level']], 1)),
+    experience: Number(info.experience?.value ?? 0),
+    hp,
+    maxHp,
+    ac: Number(vitality['ac']?.value ?? readNestedNumber(raw, [['ac'], ['armorClass']], 10)),
+    speed,
+    initiative: Number(vitality['initiative']?.value ?? 0),
+    proficiencyBonus: Number(root.proficiency ?? 0),
+    stats: extractStats(root.stats as Record<string, unknown> | undefined),
+    age: String(subInfo.age?.value ?? ''),
+    height: String(subInfo.height?.value ?? ''),
+    weight: String(subInfo.weight?.value ?? ''),
+    eyes: String(subInfo.eyes?.value ?? ''),
+    skin: String(subInfo.skin?.value ?? ''),
+    hair: String(subInfo.hair?.value ?? ''),
+    avatarUrl: typeof avatar?.webp === 'string' ? avatar.webp : typeof avatar?.jpeg === 'string' ? avatar.jpeg : undefined,
+    spells: normalizeMultiline(readDocumentText(textBlocks.traits?.value) || readNestedString(raw, [['spellsText'], ['spells']], '')),
+    inventory: normalizeMultiline(readDocumentText(textBlocks.equipment?.value) || readNestedString(raw, [['inventoryText'], ['inventory'], ['equipment']], '')),
+    notes: notesParts.join('\n\n') || readNestedString(raw, [['notes'], ['backstory'], ['description']], 'Импортировано из Long Story Short.'),
+    appearance: normalizeMultiline(readDocumentText(textBlocks.appearance?.value)),
+    personality: normalizeMultiline(readDocumentText(textBlocks.personality?.value)),
+    ideals: normalizeMultiline(readDocumentText(textBlocks.ideals?.value)),
+    bonds: normalizeMultiline(readDocumentText(textBlocks.bonds?.value)),
+    flaws: normalizeMultiline(readDocumentText(textBlocks.flaws?.value)),
+    allies: normalizeMultiline(readDocumentText(textBlocks.allies?.value)),
+    proficiencies: normalizeMultiline(readDocumentText(textBlocks.prof?.value)),
+    traits: normalizeMultiline(readDocumentText(textBlocks.traits?.value)),
+    equipmentDetails: normalizeMultiline(readDocumentText(textBlocks.equipment?.value)),
+    attacks: normalizeMultiline(readDocumentText(textBlocks.attacks?.value)),
+    feats: normalizeMultiline(readDocumentText(textBlocks.feats?.value)),
+    features: normalizeMultiline(readDocumentText(textBlocks.features?.value)),
   };
 }
 
@@ -1214,6 +1336,58 @@ function resizeTiles(source: CellData[], oldCols: number, oldRows: number, newCo
 
 function boardButtonClass(isActive: boolean) {
   return `rounded-full border px-3 py-2 text-sm ${isActive ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`;
+}
+
+const statLabels: Array<{ key: keyof CharacterStats; label: string }> = [
+  { key: 'str', label: 'СИЛ' },
+  { key: 'dex', label: 'ЛОВ' },
+  { key: 'con', label: 'ТЕЛ' },
+  { key: 'int', label: 'ИНТ' },
+  { key: 'wis', label: 'МДР' },
+  { key: 'cha', label: 'ХАР' },
+];
+
+function createDefaultStats(): CharacterStats {
+  return { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+}
+
+function createEmptyCharacterSheet(id: string, tokenId: string, name: string): CharacterSheet {
+  return {
+    id,
+    tokenId,
+    name,
+    race: 'Human',
+    heroClass: 'Adventurer',
+    level: 1,
+    hp: 12,
+    maxHp: 12,
+    ac: 12,
+    speed: 30,
+    stats: createDefaultStats(),
+    notes: 'Создано игроком в комнате.',
+    inventory: '',
+    spells: '',
+  };
+}
+
+function characterSections(sheet: CharacterSheet) {
+  return [
+    { title: 'Описание', value: sheet.appearance },
+    { title: 'Личность', value: sheet.personality },
+    { title: 'Идеалы', value: sheet.ideals },
+    { title: 'Привязанности', value: sheet.bonds },
+    { title: 'Слабости', value: sheet.flaws },
+    { title: 'Союзники и связи', value: sheet.allies },
+    { title: 'Владения и языки', value: sheet.proficiencies },
+    { title: 'Черты и формы', value: sheet.traits },
+    { title: 'Снаряжение', value: sheet.equipmentDetails || sheet.inventory },
+    { title: 'Атаки и расовые заметки', value: sheet.attacks },
+    { title: 'Черты/feat', value: sheet.feats },
+    { title: 'Особенности', value: sheet.features },
+    { title: 'Заклинания', value: sheet.spells },
+    { title: 'Инвентарь', value: sheet.inventory },
+    { title: 'Заметки', value: sheet.notes },
+  ].filter((section) => section.value);
 }
 
 function Board({
@@ -1363,6 +1537,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     [selectedToken?.id, sheets],
   );
   const playerTokens = useMemo(() => getPlayerTokens(tokens), [tokens]);
+  const groupSheets = useMemo(
+    () => sheets.filter((sheet) => playerTokens.some((token) => token.sheetId === sheet.id)),
+    [playerTokens, sheets],
+  );
+  const canEditSheet = useCallback((sheet: CharacterSheet) => {
+    if (role === 'gm') return true;
+    if (role !== 'player') return false;
+    const ownerToken = tokens.find((token) => token.sheetId === sheet.id);
+    return ownerToken?.owner === displayName;
+  }, [displayName, role, tokens]);
   const activePalette = useMemo(() => {
     const toolConfig = toolMeta.find((item) => item.value === tool);
     return toolConfig?.layer ? layerPalette[toolConfig.layer] : layerPalette.terrain;
@@ -1779,7 +1963,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   };
 
   const handleSheetChange = <K extends keyof CharacterSheet>(key: K, value: CharacterSheet[K]) => {
-    if (!selectedSheet || role !== 'player') return;
+    if (!selectedSheet || !canEditSheet(selectedSheet)) return;
 
     setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? { ...sheet, [key]: value } : sheet)));
 
@@ -1861,22 +2045,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       visionRadius: 3,
     };
 
-    const nextSheet: CharacterSheet = {
-      id: sheetId,
-      tokenId,
-      name,
-      race: 'Human',
-      heroClass: 'Adventurer',
-      level: 1,
-      hp: 12,
-      maxHp: 12,
-      ac: 12,
-      speed: 30,
-      stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
-      notes: 'Создано игроком в комнате.',
-      inventory: '',
-      spells: '',
-    };
+    const nextSheet: CharacterSheet = createEmptyCharacterSheet(sheetId, tokenId, name);
 
     setTokens((current) => [...current, nextToken]);
     setSheets((current) => [...current, nextSheet]);
@@ -1925,17 +2094,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       };
 
       const nextSheet: CharacterSheet = {
+        ...createEmptyCharacterSheet(sheetId, tokenId, characterName),
+        ...imported,
         id: sheetId,
         tokenId,
         name: characterName,
-        race: imported.race || 'Не указано',
-        heroClass: imported.heroClass || 'Adventurer',
-        level: imported.level ?? 1,
         hp,
         maxHp,
         ac,
         speed,
-        stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+        stats: imported.stats ?? createDefaultStats(),
         notes: imported.notes || 'Импортировано из Long Story Short.',
         inventory: imported.inventory || '',
         spells: imported.spells || '',
@@ -1965,6 +2133,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     );
   };
 
+  const handleAvatarUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !selectedSheet || !canEditSheet(selectedSheet)) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      if (!result) return;
+      setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? { ...sheet, avatarUrl: result } : sheet)));
+      addJournalEntry('sheet', `Для персонажа ${selectedSheet.name} загружен портрет.`);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
   const paintedCells = activeTiles.filter((tile) => tile.terrain !== DEFAULT_TERRAIN).length;
   const foggedCells = activeTiles.filter((tile) => tile.fog).length;
   const obstacleCells = activeTiles.filter((tile) => tile.obstacle).length;
@@ -1986,67 +2169,66 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             <Link href="/" className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
               На главную
             </Link>
-            <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
-              Загрузить карту
-              <input type="file" accept="image/*" className="hidden" onChange={handleUploadMap} />
-            </label>
-            <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
-              Загрузить JSON
-              <input type="file" accept="application/json" className="hidden" onChange={handleImportMapJson} />
-            </label>
-            <button onClick={handleExportMapJson} className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950">
-              Сохранить JSON
-            </button>
+            {role !== 'player' || joinStep !== 'ready' ? (
+              <>
+                <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
+                  Загрузить карту
+                  <input type="file" accept="image/*" className="hidden" onChange={handleUploadMap} />
+                </label>
+                <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
+                  Загрузить JSON
+                  <input type="file" accept="application/json" className="hidden" onChange={handleImportMapJson} />
+                </label>
+                <button onClick={handleExportMapJson} className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950">
+                  Сохранить JSON
+                </button>
+              </>
+            ) : null}
           </div>
         </header>
 
-        <section className="card p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-sm text-slate-400">Сохранённые сцены</div>
-              <div className="mt-1 text-sm text-slate-300">Каждая вкладка хранит пару карт: публичную для игроков и скрытую для мастера. При переключении меняются обе карты сразу.</div>
+        {role !== 'player' || joinStep !== 'ready' ? (
+          <section className="card p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-sm text-slate-400">Сохранённые сцены</div>
+                <div className="mt-1 text-sm text-slate-300">Каждая вкладка хранит пару карт: публичную для игроков и скрытую для мастера. При переключении меняются обе карты сразу.</div>
+              </div>
+              <div className="flex w-full max-w-xl gap-2">
+                <input
+                  value={mapPresetName}
+                  onChange={(event) => setMapPresetName(event.target.value)}
+                  placeholder="Название вкладки карты"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                />
+                <button onClick={handleSaveMap} className="rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">
+                  Сохранить как вкладку
+                </button>
+                <button onClick={handleExportMapJson} className="rounded-full border border-white/10 px-4 py-3 text-sm font-medium text-slate-200">
+                  Экспорт JSON
+                </button>
+              </div>
             </div>
-            <div className="flex w-full max-w-xl gap-2">
-              <input
-                value={mapPresetName}
-                onChange={(event) => setMapPresetName(event.target.value)}
-                placeholder="Название вкладки карты"
-                className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
-              />
-              <button onClick={handleSaveMap} className="rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">
-                Сохранить как вкладку
-              </button>
-              <button onClick={handleExportMapJson} className="rounded-full border border-white/10 px-4 py-3 text-sm font-medium text-slate-200">
-                Экспорт JSON
-              </button>
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {savedMaps.length ? (
-              savedMaps.map((preset, index) => (
-                <div key={preset.id} className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleLoadSavedMap(preset)}
-                    className={boardButtonClass(activeSavedMapId === preset.id)}
-                  >
-                    {preset.name}
-                  </button>
-                  {index > 0 ? (
-                    <button
-                      onClick={() => handleDeleteSavedMap(preset.id)}
-                      className="rounded-full border border-white/10 px-3 py-2 text-sm text-rose-300"
-                      aria-label={`Удалить вкладку ${preset.name}`}
-                    >
-                      ×
+            <div className="mt-4 flex flex-wrap gap-2">
+              {savedMaps.length ? (
+                savedMaps.map((preset, index) => (
+                  <div key={preset.id} className="flex items-center gap-2">
+                    <button onClick={() => handleLoadSavedMap(preset)} className={boardButtonClass(activeSavedMapId === preset.id)}>
+                      {preset.name}
                     </button>
-                  ) : null}
-                </div>
-              ))
-            ) : (
-              <div className="text-sm text-slate-400">Пока нет сохранённых вкладок. Сохраните текущую сцену, чтобы быстро переключаться между наборами карт.</div>
-            )}
-          </div>
-        </section>
+                    {index > 0 ? (
+                      <button onClick={() => handleDeleteSavedMap(preset.id)} className="rounded-full border border-white/10 px-3 py-2 text-sm text-rose-300" aria-label={`Удалить вкладку ${preset.name}`}>
+                        ×
+                      </button>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-slate-400">Пока нет сохранённых вкладок. Сохраните текущую сцену, чтобы быстро переключаться между наборами карт.</div>
+              )}
+            </div>
+          </section>
+        ) : null}
 
         {joinStep !== 'ready' ? (
           <section className="grid gap-4 lg:grid-cols-2">
@@ -2113,7 +2295,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </section>
         ) : null}
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <section className={`grid gap-4 md:grid-cols-2 ${role === 'gm' ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
           <div className="card p-4">
             <div className="text-sm text-slate-400">Карта</div>
             <div className="mt-2 text-xl font-semibold text-white">{mapName}</div>
@@ -2122,10 +2304,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             <div className="text-sm text-slate-400">Роль</div>
             <div className="mt-2 text-xl font-semibold text-white">{role === 'gm' ? 'Мастер' : role === 'player' ? 'Игрок' : 'Не выбрана'}</div>
           </div>
-          <div className="card p-4">
-            <div className="text-sm text-slate-400">Пароль комнаты</div>
-            <div className="mt-2 text-xl font-semibold text-white">{roomPassword ? '••••••••' : 'Не задан'}</div>
-          </div>
+          {role === 'gm' ? (
+            <div className="card p-4">
+              <div className="text-sm text-slate-400">Пароль комнаты</div>
+              <div className="mt-2 text-xl font-semibold text-white">{roomPassword ? '••••••••' : 'Не задан'}</div>
+            </div>
+          ) : null}
           <div className="card p-4">
             <div className="text-sm text-slate-400">Активный токен</div>
             <div className="mt-2 text-xl font-semibold text-white">{selectedToken?.name ?? '—'}</div>
@@ -2138,64 +2322,62 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
         <section className="space-y-4">
           <div className="grid gap-4 xl:grid-cols-2">
-            <div className="space-y-4">
-              <div className="card p-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white">Инструменты карты</h2>
-                  <span className="badge">master map kit</span>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2 text-sm">
-                  <button className={boardButtonClass(activeBoard === 'public')} onClick={() => setActiveBoard('public')}>
-                    Публичная карта
-                  </button>
-                  {role === 'gm' ? (
+            {role === 'gm' ? (
+              <div className="space-y-4">
+                <div className="card p-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-white">Админ-панель мастера</h2>
+                    <span className="badge">master only</span>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2 text-sm">
+                    <button className={boardButtonClass(activeBoard === 'public')} onClick={() => setActiveBoard('public')}>
+                      Публичная карта
+                    </button>
                     <button className={boardButtonClass(activeBoard === 'gm')} onClick={() => setActiveBoard('gm')}>
                       Скрытая карта мастера
                     </button>
-                  ) : null}
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                  {toolMeta.map((item) => (
-                    <button
-                      key={item.value}
-                      onClick={() => {
-                        setTool(item.value);
-                        if (item.layer) setSelectedColor(layerPalette[item.layer][0]);
-                      }}
-                      className={`rounded-2xl border px-3 py-2 ${tool === item.value ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-4">
-                  <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Палитра активного слоя</div>
-                  <div className="flex flex-wrap gap-2">
-                    {activePalette.map((color) => (
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                    {toolMeta.map((item) => (
                       <button
-                        key={`${tool}-${color}`}
-                        onClick={() => setSelectedColor(color)}
-                        className={`h-9 w-9 rounded-full border ${selectedColor === color ? 'border-white' : 'border-white/20'}`}
-                        style={{ backgroundColor: color }}
-                        aria-label={`Выбрать цвет ${color}`}
-                      />
+                        key={item.value}
+                        onClick={() => {
+                          setTool(item.value);
+                          if (item.layer) setSelectedColor(layerPalette[item.layer][0]);
+                        }}
+                        className={`rounded-2xl border px-3 py-2 ${tool === item.value ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`}
+                      >
+                        {item.label}
+                      </button>
                     ))}
                   </div>
-                </div>
-                <div className="mt-4 space-y-3 text-sm text-slate-300">
-                  <label className="block">
-                    <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Zoom</div>
-                    <input type="range" min="60" max="180" value={Math.round(zoom * 100)} onChange={(event) => setZoom(Number(event.target.value) / 100)} className="w-full" />
-                  </label>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
-                    <div>Покрытие: {paintedCells}</div>
-                    <div>Fog: {foggedCells}</div>
-                    <div>Препятствия: {obstacleCells}</div>
-                    <div>Текстуры: {textureCells}</div>
-                    <div>Мебель: {furnitureCells}</div>
+                  <div className="mt-4">
+                    <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Палитра активного слоя</div>
+                    <div className="flex flex-wrap gap-2">
+                      {activePalette.map((color) => (
+                        <button
+                          key={`${tool}-${color}`}
+                          onClick={() => setSelectedColor(color)}
+                          className={`h-9 w-9 rounded-full border ${selectedColor === color ? 'border-white' : 'border-white/20'}`}
+                          style={{ backgroundColor: color }}
+                          aria-label={`Выбрать цвет ${color}`}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-                {role === 'gm' ? (
+                  <div className="mt-4 space-y-3 text-sm text-slate-300">
+                    <label className="block">
+                      <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Zoom</div>
+                      <input type="range" min="60" max="180" value={Math.round(zoom * 100)} onChange={(event) => setZoom(Number(event.target.value) / 100)} className="w-full" />
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
+                      <div>Покрытие: {paintedCells}</div>
+                      <div>Fog: {foggedCells}</div>
+                      <div>Препятствия: {obstacleCells}</div>
+                      <div>Текстуры: {textureCells}</div>
+                      <div>Мебель: {furnitureCells}</div>
+                    </div>
+                  </div>
                   <div className="mt-4 rounded-2xl border border-white/10 p-3 text-sm text-slate-300">
                     <div className="mb-3 text-xs uppercase tracking-wide text-slate-400">Размер поля</div>
                     <div className="grid grid-cols-2 gap-2">
@@ -2207,33 +2389,31 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     </button>
                     <div className="mt-2 text-xs text-slate-400">Любой формат в диапазоне от {MIN_GRID}×{MIN_GRID} до {MAX_GRID}×{MAX_GRID}.</div>
                   </div>
-                ) : null}
-                <button
-                  onClick={() => {
-                    setTilesForBoard(activeBoard, createEmptyMap(cols, rows));
-                    addJournalEntry('map', `Карта ${activeBoard === 'public' ? 'игроков' : 'мастера'} очищена до базовой сетки.`);
-                  }}
-                  className="mt-4 w-full rounded-full border border-white/10 px-4 py-3 text-sm text-slate-200"
-                >
-                  Очистить активную карту
-                </button>
-              </div>
+                  <button
+                    onClick={() => {
+                      setTilesForBoard(activeBoard, createEmptyMap(cols, rows));
+                      addJournalEntry('map', `Карта ${activeBoard === 'public' ? 'игроков' : 'мастера'} очищена до базовой сетки.`);
+                    }}
+                    className="mt-4 w-full rounded-full border border-white/10 px-4 py-3 text-sm text-slate-200"
+                  >
+                    Очистить активную карту
+                  </button>
+                </div>
 
-              <div className="card p-4">
-                <h2 className="text-lg font-semibold text-white">Токены</h2>
-                <div className="mt-4 space-y-3 text-sm">
-                  {tokens.map((token) => (
-                    <div key={token.id} className={`rounded-2xl border px-3 py-3 ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}>
-                      <button onClick={() => setSelectedTokenId(token.id)} className="w-full text-left">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="font-medium text-white">{token.name}</div>
-                            <div className="text-slate-400">{token.kind} • {cellCoordinate(token.x, token.y)}</div>
+                <div className="card p-4">
+                  <h2 className="text-lg font-semibold text-white">Токены</h2>
+                  <div className="mt-4 space-y-3 text-sm">
+                    {tokens.map((token) => (
+                      <div key={token.id} className={`rounded-2xl border px-3 py-3 ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}>
+                        <button onClick={() => setSelectedTokenId(token.id)} className="w-full text-left">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="font-medium text-white">{token.name}</div>
+                              <div className="text-slate-400">{token.kind} • {cellCoordinate(token.x, token.y)}</div>
+                            </div>
+                            <span className="text-xs text-slate-300">HP {token.hp}/{token.maxHp}</span>
                           </div>
-                          <span className="text-xs text-slate-300">HP {token.hp}/{token.maxHp}</span>
-                        </div>
-                      </button>
-                      {role === 'gm' ? (
+                        </button>
                         <div className="mt-3 grid gap-2 text-xs text-slate-300">
                           <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2">
                             <span>Скрыт от игроков</span>
@@ -2246,192 +2426,233 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                             </label>
                           ) : null}
                         </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="card p-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-white">Лист персонажа</h2>
-                    <span className="badge">player editable</span>
-                  </div>
-
-                  {selectedSheet ? (
-                    <div className="mt-4 space-y-3 text-sm text-slate-200">
-                      <input value={selectedSheet.name} disabled={role !== 'player'} onChange={(event) => handleSheetChange('name', event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
-                      <div className="grid grid-cols-2 gap-2">
-                        <input value={selectedSheet.race} disabled={role !== 'player'} onChange={(event) => handleSheetChange('race', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
-                        <input value={selectedSheet.heroClass} disabled={role !== 'player'} onChange={(event) => handleSheetChange('heroClass', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
                       </div>
-                      <div className="grid grid-cols-4 gap-2">
-                        <input type="number" disabled={role !== 'player'} value={selectedSheet.level} onChange={(event) => handleSheetChange('level', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                        <input type="number" disabled={role !== 'player'} value={selectedSheet.hp} onChange={(event) => handleSheetChange('hp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                        <input type="number" disabled={role !== 'player'} value={selectedSheet.maxHp} onChange={(event) => handleSheetChange('maxHp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                        <input type="number" disabled={role !== 'player'} value={selectedSheet.ac} onChange={(event) => handleSheetChange('ac', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                      </div>
-                      <input type="number" disabled={role !== 'player'} value={selectedSheet.speed} onChange={(event) => handleSheetChange('speed', Number(event.target.value))} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
-                      <textarea value={selectedSheet.spells} disabled={role !== 'player'} onChange={(event) => handleSheetChange('spells', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Заклинания" />
-                      <textarea value={selectedSheet.inventory} disabled={role !== 'player'} onChange={(event) => handleSheetChange('inventory', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Инвентарь" />
-                      <textarea value={selectedSheet.notes} disabled={role !== 'player'} onChange={(event) => handleSheetChange('notes', event.target.value)} rows={4} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Заметки персонажа" />
-                      <button onClick={() => addJournalEntry('sheet', `Лист ${selectedSheet.name} обновлён.`)} className="w-full rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">
-                        Зафиксировать изменение листа
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-4 rounded-2xl border border-white/8 px-4 py-3 text-sm text-slate-300">
-                      У выбранного токена нет листа персонажа.
-                    </div>
-                  )}
-                </div>
-
-                <div className="card p-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-white">Инструменты мастера</h2>
-                    <span className="badge">dnd.su only</span>
-                  </div>
-                  <div className="mt-4 space-y-3 text-sm text-slate-300">
-                    <div className="rounded-2xl border border-white/8 px-4 py-3">
-                      <div className="font-medium text-white">Последний лут</div>
-                      <div className="mt-1">{lootResult.name}</div>
-                      <div className="mt-1 text-slate-400">{lootResult.details}</div>
-                      {lootResult.rolledMagicItems?.length ? (
-                        <div className="mt-3 space-y-2">
-                          <div className="text-xs uppercase tracking-wide text-slate-500">Выпавшие магические предметы</div>
-                          {lootResult.rolledMagicItems.map((item, index) => (
-                            <a
-                              key={`${item.table}-${item.roll}-${index}-${item.name}`}
-                              className="block text-cyan-300 underline underline-offset-4"
-                              href={item.link}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Таблица {item.table}, бросок {String(item.roll).padStart(2, '0')}: {item.name}
-                            </a>
-                          ))}
-                        </div>
-                      ) : null}
-                      <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={lootResult.link} target="_blank" rel="noreferrer">{lootResult.link}</a>
-                    </div>
-                    <label className="block rounded-2xl border border-white/8 px-4 py-3">
-                      <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Таблица сокровищ dnd.su</div>
-                      <select value={lootCrBand} onChange={(event) => setLootCrBand(event.target.value as LootCrBand)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white">
-                        <option value="0-4">Показатель опасности 0–4</option>
-                        <option value="5-10">Показатель опасности 5–10</option>
-                        <option value="11-16">Показатель опасности 11–16</option>
-                        <option value="17+">Показатель опасности 17+</option>
-                      </select>
-                    </label>
-                    <button onClick={handleRandomLoot} className="w-full rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950">
-                      Сгенерировать лут из таблицы
-                    </button>
-                    <div className="rounded-2xl border border-white/8 px-4 py-3">
-                      <div className="font-medium text-white">Последнее событие</div>
-                      <div className="mt-1">{eventResult.title}</div>
-                      <div className="mt-1 text-slate-400">{eventResult.description}</div>
-                      <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={eventResult.link} target="_blank" rel="noreferrer">{eventResult.link}</a>
-                    </div>
-                    <button onClick={handleRandomEvent} className="w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
-                      Случайное событие
-                    </button>
+                    ))}
                   </div>
                 </div>
               </div>
+            ) : null}
 
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="card p-4">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-white">Чат / заметка</h2>
-                    <span className="text-sm text-slate-400">локально в журнал</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      value={chatInput}
-                      onChange={(event) => setChatInput(event.target.value)}
-                      placeholder="Например: Борин идёт к двери"
-                      className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
-                    />
-                    <button onClick={handleSendChat} className="rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
-                      Отправить
-                    </button>
-                  </div>
-                </div>
-
-                <div className="card p-4">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-white">Кубы</h2>
-                    <span className="text-sm text-slate-400">NdM±K</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      value={diceFormula}
-                      onChange={(event) => setDiceFormula(event.target.value)}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none"
-                    />
-                    <button onClick={handleRoll} className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950">
-                      Roll
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card p-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white">Журнал действий</h2>
-                  <span className="badge">последние 20 событий</span>
-                </div>
-                <div className="space-y-3 text-sm">
-                  {journal.map((entry) => (
-                    <div key={entry.id} className="rounded-2xl border border-white/8 px-4 py-3">
-                      <div className="flex items-center justify-between text-xs text-slate-400">
-                        <span>{entry.type}</span>
-                        <span>{entry.time}</span>
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap text-slate-200">{entry.text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
+            <div className="space-y-4 xl:col-span-1">
               <div className="card p-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white">Виджет местности</h2>
-                  <span className="badge">regional map</span>
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">Панель персонажей группы</h2>
+                    <p className="mt-1 text-sm text-slate-400">Отдельно от админки: и игроки, и мастер могут загружать и просматривать карточки всей группы.</p>
+                  </div>
+                  <span className="badge">party roster</span>
                 </div>
-                <p className="mt-3 text-sm text-slate-300">
-                  Сюда можно подставить внешний URL с региональной картой. Для удобства я сразу поставил Waterdeep с tychmaps.com.
-                </p>
-                <div className="mt-4 flex flex-col gap-3">
-                  <input
-                    value={widgetUrl}
-                    onChange={(event) => setWidgetUrl(event.target.value)}
-                    placeholder="https://tychmaps.com/waterdeep/"
-                    className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
-                  />
-                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
-                    <iframe
-                      title="Внешняя региональная карта"
-                      src={widgetUrl}
-                      className="h-[320px] w-full"
-                    />
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button onClick={createPlayerCharacter} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-white">
+                    Добавить пустую карточку
+                  </button>
+                  <label className="cursor-pointer rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-white">
+                    Импортировать JSON персонажа
+                    <input type="file" accept="application/json" className="hidden" onChange={handleImportCharacterJson} />
+                  </label>
+                  <label className={`cursor-pointer rounded-full border px-4 py-2 text-sm ${selectedSheet && canEditSheet(selectedSheet) ? 'border-white/10 text-slate-200' : 'border-white/5 text-slate-500'}`}>
+                    Загрузить фото персонажа
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={!selectedSheet || !canEditSheet(selectedSheet)} />
+                  </label>
+                </div>
+                <div className="mt-2 text-xs text-slate-400">Поддержан JSON в формате longstoryshort.app, включая вложенный блок `data`, характеристики, биографию, черты, инвентарь и ссылки на аватар.</div>
+
+                <div className="mt-5 grid gap-4 lg:grid-cols-[280px,1fr]">
+                  <div className="space-y-3">
+                    {groupSheets.map((sheet) => {
+                      const token = tokens.find((item) => item.sheetId === sheet.id);
+                      const isActive = selectedSheet?.id === sheet.id;
+                      return (
+                        <button
+                          key={sheet.id}
+                          onClick={() => setSelectedTokenId(token?.id ?? selectedTokenId)}
+                          className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left ${isActive ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8 bg-slate-950/40'}`}
+                        >
+                          <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-slate-900 text-lg font-semibold text-white">
+                            {sheet.avatarUrl ? <img src={sheet.avatarUrl} alt={sheet.name} className="h-full w-full object-cover" /> : <span>{getTokenInitial(sheet.name)}</span>}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-medium text-white">{sheet.name}</div>
+                            <div className="truncate text-xs text-slate-400">{sheet.race} • {sheet.heroClass} • ур. {sheet.level}</div>
+                            <div className="mt-1 text-xs text-slate-500">HP {sheet.hp}/{sheet.maxHp} • AC {sheet.ac} • {token ? cellCoordinate(token.x, token.y) : 'без токена'}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div>
+                    {selectedSheet ? (
+                      <div className="space-y-4 text-sm text-slate-200">
+                        <div className="grid gap-4 lg:grid-cols-[200px,1fr]">
+                          <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70">
+                            <div className="flex aspect-[4/5] items-center justify-center bg-slate-900 text-4xl font-semibold text-white">
+                              {selectedSheet.avatarUrl ? <img src={selectedSheet.avatarUrl} alt={selectedSheet.name} className="h-full w-full object-cover" /> : <span>{getTokenInitial(selectedSheet.name)}</span>}
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            <input value={selectedSheet.name} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('name', event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
+                            <div className="grid gap-2 md:grid-cols-2">
+                              <input value={selectedSheet.race} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('race', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
+                              <input value={selectedSheet.heroClass} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('heroClass', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
+                              <input value={selectedSheet.subclass ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('subclass', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Подкласс" />
+                              <input value={selectedSheet.background ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('background', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Предыстория" />
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-4">
+                              <input type="number" disabled={!canEditSheet(selectedSheet)} value={selectedSheet.level} onChange={(event) => handleSheetChange('level', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
+                              <input type="number" disabled={!canEditSheet(selectedSheet)} value={selectedSheet.hp} onChange={(event) => handleSheetChange('hp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
+                              <input type="number" disabled={!canEditSheet(selectedSheet)} value={selectedSheet.maxHp} onChange={(event) => handleSheetChange('maxHp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
+                              <input type="number" disabled={!canEditSheet(selectedSheet)} value={selectedSheet.ac} onChange={(event) => handleSheetChange('ac', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-4">
+                              <input type="number" disabled={!canEditSheet(selectedSheet)} value={selectedSheet.speed} onChange={(event) => handleSheetChange('speed', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" placeholder="Скорость" />
+                              <input value={selectedSheet.alignment ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('alignment', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" placeholder="Мировоззрение" />
+                              <input value={selectedSheet.playerName ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('playerName', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" placeholder="Игрок" />
+                              <input type="number" value={selectedSheet.experience ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('experience', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" placeholder="XP" />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-6">
+                          {statLabels.map((stat) => (
+                            <div key={stat.key} className="rounded-2xl border border-white/8 bg-slate-950/50 px-3 py-3 text-center">
+                              <div className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</div>
+                              <div className="mt-2 text-xl font-semibold text-white">{selectedSheet.stats[stat.key]}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="grid gap-2 md:grid-cols-3">
+                          <input value={selectedSheet.age ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('age', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Возраст" />
+                          <input value={selectedSheet.height ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('height', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Рост" />
+                          <input value={selectedSheet.weight ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('weight', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Вес" />
+                          <input value={selectedSheet.eyes ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('eyes', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Глаза" />
+                          <input value={selectedSheet.skin ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('skin', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Кожа" />
+                          <input value={selectedSheet.hair ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('hair', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Волосы" />
+                        </div>
+
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          {characterSections(selectedSheet).map((section) => (
+                            <div key={section.title} className="rounded-2xl border border-white/8 bg-slate-950/40 px-4 py-4">
+                              <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">{section.title}</div>
+                              <div className="whitespace-pre-wrap text-slate-200">{section.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-white/8 px-4 py-3 text-sm text-slate-300">Выберите персонажа слева.</div>
+                    )}
                   </div>
                 </div>
-                <div className="mt-3 text-xs text-slate-400">
-                  Если конкретный сайт запрещает открытие внутри iframe, карта не покажется внутри виджета — в таком случае откройте её отдельно:
-                  {' '}
-                  <a href={widgetUrl} target="_blank" rel="noreferrer" className="text-emerald-300 underline underline-offset-4">
-                    открыть карту в новой вкладке
-                  </a>
-                  .
-                </div>
               </div>
+
+              {role === 'gm' ? (
+                <>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="card p-4">
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-white">Инструменты мастера</h2>
+                        <span className="badge">dnd.su only</span>
+                      </div>
+                      <div className="mt-4 space-y-3 text-sm text-slate-300">
+                        <div className="rounded-2xl border border-white/8 px-4 py-3">
+                          <div className="font-medium text-white">Последний лут</div>
+                          <div className="mt-1">{lootResult.name}</div>
+                          <div className="mt-1 text-slate-400">{lootResult.details}</div>
+                          {lootResult.rolledMagicItems?.length ? (
+                            <div className="mt-3 space-y-2">
+                              <div className="text-xs uppercase tracking-wide text-slate-500">Выпавшие магические предметы</div>
+                              {lootResult.rolledMagicItems.map((item, index) => (
+                                <a key={`${item.table}-${item.roll}-${index}-${item.name}`} className="block text-cyan-300 underline underline-offset-4" href={item.link} target="_blank" rel="noreferrer">
+                                  Таблица {item.table}, бросок {String(item.roll).padStart(2, '0')}: {item.name}
+                                </a>
+                              ))}
+                            </div>
+                          ) : null}
+                          <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={lootResult.link} target="_blank" rel="noreferrer">{lootResult.link}</a>
+                        </div>
+                        <label className="block rounded-2xl border border-white/8 px-4 py-3">
+                          <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Таблица сокровищ dnd.su</div>
+                          <select value={lootCrBand} onChange={(event) => setLootCrBand(event.target.value as LootCrBand)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white">
+                            <option value="0-4">Показатель опасности 0–4</option>
+                            <option value="5-10">Показатель опасности 5–10</option>
+                            <option value="11-16">Показатель опасности 11–16</option>
+                            <option value="17+">Показатель опасности 17+</option>
+                          </select>
+                        </label>
+                        <button onClick={handleRandomLoot} className="w-full rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950">Сгенерировать лут из таблицы</button>
+                        <div className="rounded-2xl border border-white/8 px-4 py-3">
+                          <div className="font-medium text-white">Последнее событие</div>
+                          <div className="mt-1">{eventResult.title}</div>
+                          <div className="mt-1 text-slate-400">{eventResult.description}</div>
+                          <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={eventResult.link} target="_blank" rel="noreferrer">{eventResult.link}</a>
+                        </div>
+                        <button onClick={handleRandomEvent} className="w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">Случайное событие</button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="card p-4">
+                        <div className="mb-4 flex items-center justify-between">
+                          <h2 className="text-lg font-semibold text-white">Чат / заметка</h2>
+                          <span className="text-sm text-slate-400">локально в журнал</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Например: Борин идёт к двери" className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500" />
+                          <button onClick={handleSendChat} className="rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">Отправить</button>
+                        </div>
+                      </div>
+
+                      <div className="card p-4">
+                        <div className="mb-4 flex items-center justify-between">
+                          <h2 className="text-lg font-semibold text-white">Кубы</h2>
+                          <span className="text-sm text-slate-400">NdM±K</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <input value={diceFormula} onChange={(event) => setDiceFormula(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none" />
+                          <button onClick={handleRoll} className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950">Roll</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="card p-4">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-semibold text-white">Журнал действий</h2>
+                      <span className="badge">последние 20 событий</span>
+                    </div>
+                    <div className="space-y-3 text-sm">
+                      {journal.map((entry) => (
+                        <div key={entry.id} className="rounded-2xl border border-white/8 px-4 py-3">
+                          <div className="flex items-center justify-between text-xs text-slate-400">
+                            <span>{entry.type}</span>
+                            <span>{entry.time}</span>
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap text-slate-200">{entry.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="card p-4">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-semibold text-white">Виджет местности</h2>
+                      <span className="badge">regional map</span>
+                    </div>
+                    <p className="mt-3 text-sm text-slate-300">Сюда можно подставить внешний URL с региональной картой. Для удобства я сразу поставил Waterdeep с tychmaps.com.</p>
+                    <div className="mt-4 flex flex-col gap-3">
+                      <input value={widgetUrl} onChange={(event) => setWidgetUrl(event.target.value)} placeholder="https://tychmaps.com/waterdeep/" className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white" />
+                      <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
+                        <iframe title="Внешняя региональная карта" src={widgetUrl} className="h-[320px] w-full" />
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-slate-400">Если конкретный сайт запрещает открытие внутри iframe, карта не покажется внутри виджета — в таком случае откройте её отдельно: <a href={widgetUrl} target="_blank" rel="noreferrer" className="text-emerald-300 underline underline-offset-4">открыть карту в новой вкладке</a>.</div>
+                  </div>
+                </>
+              ) : null}
             </div>
           </div>
-
           <div className="card flex flex-wrap items-center gap-3 px-4 py-3 text-sm text-slate-200">
             <span className="badge">Инструмент: {tool}</span>
             <span className="badge">Редактируется: {activeBoard === 'public' ? 'публичная карта' : 'скрытая карта'}</span>
