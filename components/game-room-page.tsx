@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import {
+  useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 
@@ -15,6 +16,8 @@ type JoinStep = 'auth' | 'player-sheet' | 'ready';
 type DrawingTool = 'move' | 'terrain' | 'obstacle' | 'texture' | 'furniture' | 'fog' | 'erase';
 type LayerKind = 'terrain' | 'obstacle' | 'texture' | 'furniture';
 type TokenKind = 'player' | 'npc' | 'monster' | 'object';
+type BoardKind = 'public' | 'gm';
+type LootCrBand = '0-4' | '5-10' | '11-16' | '17+';
 
 type RoomToken = {
   id: string;
@@ -31,6 +34,8 @@ type RoomToken = {
   owner: string;
   roleOwner?: RoomRole;
   sheetId?: string;
+  gmOnly?: boolean;
+  visionRadius?: number;
 };
 
 type CharacterSheet = {
@@ -59,7 +64,7 @@ type CharacterSheet = {
 
 type JournalEntry = {
   id: string;
-  type: 'system' | 'move' | 'dice' | 'loot' | 'event' | 'sheet' | 'map' | 'room';
+  type: 'system' | 'move' | 'dice' | 'loot' | 'event' | 'sheet' | 'map' | 'room' | 'save';
   text: string;
   time: string;
 };
@@ -77,10 +82,44 @@ type RoomAccessState = {
   gmExists: boolean;
 };
 
-const GRID_COLS = 16;
-const GRID_ROWS = 10;
+type MapState = {
+  cols: number;
+  rows: number;
+  publicTiles: CellData[];
+  gmTiles: CellData[];
+};
+
+type LootResult = {
+  name: string;
+  details: string;
+  link: string;
+};
+
+type SavedRoomState = {
+  mapName: string;
+  mapState: MapState;
+  savedMaps?: SavedMapPreset[];
+  activeSavedMapId?: string | null;
+  tokens: RoomToken[];
+  sheets: CharacterSheet[];
+  journal: JournalEntry[];
+};
+
+type SavedMapPreset = {
+  id: string;
+  name: string;
+  mapName: string;
+  mapState: MapState;
+};
+
+const DEFAULT_COLS = 16;
+const DEFAULT_ROWS = 10;
+const MIN_GRID = 4;
+const MAX_GRID = 40;
 const DEFAULT_TERRAIN = '#0f172a';
 const roomAccessRegistry = new Map<string, RoomAccessState>();
+
+const STORAGE_PREFIX = 'dnd-me-room:';
 
 const layerPalette: Record<LayerKind, string[]> = {
   terrain: ['#0f172a', '#334155', '#14532d', '#1d4ed8', '#92400e', '#4c1d95'],
@@ -101,39 +140,199 @@ const toolMeta: Array<{ value: DrawingTool; label: string; layer?: LayerKind }> 
 
 const randomEventPool = [
   {
-    title: 'Лесной феномен',
-    description: 'Источник: dnd.su — лесные столкновения и путевые осложнения.',
-    link: 'https://dnd.su',
+    title: 'Смена давления в глубине руин',
+    description: 'Опирается на раздел игровых механик и сцен, чтобы мастер быстро добавил локальное осложнение, шум или внезапное давление среды.',
+    link: 'https://dnd.su/articles/mechanics/',
   },
   {
-    title: 'Подземельный триггер',
-    description: 'Источник: dnd.su — случайные события для данжей и руин.',
-    link: 'https://dnd.su',
+    title: 'Неожиданная находка в пути',
+    description: 'Опирается на раздел инвентаря dnd.su, чтобы превращать исследование в маленькое событие: безделушку, припасы или зацепку.',
+    link: 'https://dnd.su/articles/inventory/',
   },
   {
-    title: 'Городской поворот',
-    description: 'Источник: dnd.su — городские встречи и побочные сцены.',
-    link: 'https://dnd.su',
+    title: 'Сцена для мастера из справочника',
+    description: 'Опирается на основной справочник dnd.su как на стартовую ссылку для выбора конкретного существа, ловушки или предмета прямо во время сессии.',
+    link: 'https://dnd.su/',
   },
 ];
 
-const lootPool = [
-  {
-    name: 'Сумка с припасами и 35 зм',
-    details: 'Источник: dnd.su — генерация лута для low-level encounters.',
-    link: 'https://dnd.su',
-  },
-  {
-    name: 'Зелье лечения + серебряный ключ',
-    details: 'Источник: dnd.su — сокровища подземелий и тайников.',
-    link: 'https://dnd.su',
-  },
-  {
-    name: 'Свиток защиты + набор отмычек',
-    details: 'Источник: dnd.su — таблицы магических и утилитарных находок.',
-    link: 'https://dnd.su',
-  },
+const treasuryArticleLink = 'https://www.dnd.su/articles/inventory/74-treasury/';
+
+const treasureCoinTables: Record<LootCrBand, Array<{ range: [number, number]; coins: string[] }>> = {
+  '0-4': [
+    { range: [1, 30], coins: ['5к6 мм'] },
+    { range: [31, 60], coins: ['4к6 см'] },
+    { range: [61, 70], coins: ['3к6 эм'] },
+    { range: [71, 95], coins: ['3к6 зм'] },
+    { range: [96, 100], coins: ['1к6 пм'] },
+  ],
+  '5-10': [
+    { range: [1, 30], coins: ['4к6 × 100 мм', '1к6 × 10 эм'] },
+    { range: [31, 60], coins: ['6к6 × 10 см', '2к6 × 10 зм'] },
+    { range: [61, 70], coins: ['3к6 × 10 эм', '2к6 × 10 зм'] },
+    { range: [71, 95], coins: ['4к6 × 10 зм'] },
+    { range: [96, 100], coins: ['2к6 × 10 зм', '3к6 пм'] },
+  ],
+  '11-16': [
+    { range: [1, 20], coins: ['4к6 × 100 см', '1к6 × 100 зм'] },
+    { range: [21, 35], coins: ['1к6 × 100 эм', '1к6 × 100 зм'] },
+    { range: [36, 75], coins: ['2к6 × 100 зм', '1к6 × 10 пм'] },
+    { range: [76, 100], coins: ['2к6 × 100 зм', '2к6 × 10 пм'] },
+  ],
+  '17+': [
+    { range: [1, 15], coins: ['2к6 × 1000 эм', '8к6 × 100 зм'] },
+    { range: [16, 55], coins: ['1к6 × 1000 зм', '1к6 × 100 пм'] },
+    { range: [56, 100], coins: ['1к6 × 1000 зм', '2к6 × 100 пм'] },
+  ],
+};
+
+const hoardCoinTables: Record<LootCrBand, string[]> = {
+  '0-4': ['6к6 × 100 мм', '3к6 × 100 см', '2к6 × 10 зм'],
+  '5-10': ['2к6 × 100 мм', '2к6 × 1000 см', '6к6 × 100 зм', '3к6 × 10 пм'],
+  '11-16': ['4к6 × 1000 зм', '5к6 × 100 пм'],
+  '17+': ['12к6 × 1000 зм', '8к6 × 1000 пм'],
+};
+
+const hoardTables: Record<LootCrBand, Array<{ range: [number, number]; treasure: string; magic?: string }>> = {
+  '0-4': [
+    { range: [1, 6], treasure: 'Без дополнительных драгоценностей и произведений искусства.' },
+    { range: [7, 16], treasure: '2к6 драгоценных камней стоимостью 10 зм.' },
+    { range: [17, 26], treasure: '2к4 предметов искусства стоимостью 25 зм.' },
+    { range: [27, 36], treasure: '2к6 драгоценных камней стоимостью 50 зм.' },
+    { range: [37, 44], treasure: '2к6 драгоценных камней стоимостью 10 зм.', magic: '1к6 предметов из таблицы А.' },
+    { range: [45, 52], treasure: '2к4 предметов искусства стоимостью 25 зм.', magic: '1к6 предметов из таблицы А.' },
+    { range: [53, 60], treasure: '2к6 драгоценных камней стоимостью 50 зм.', magic: '1к6 предметов из таблицы А.' },
+    { range: [61, 65], treasure: '2к6 драгоценных камней стоимостью 10 зм.', magic: '1к4 предметов из таблицы Б.' },
+    { range: [66, 70], treasure: '2к4 предметов искусства стоимостью 25 зм.', magic: '1к4 предметов из таблицы Б.' },
+    { range: [71, 75], treasure: '2к6 драгоценных камней стоимостью 50 зм.', magic: '1к4 предметов из таблицы Б.' },
+    { range: [76, 78], treasure: '2к6 драгоценных камней стоимостью 10 зм.', magic: '1к4 предметов из таблицы В.' },
+    { range: [79, 80], treasure: '2к4 предметов искусства стоимостью 25 зм.', magic: '1к4 предметов из таблицы В.' },
+    { range: [81, 85], treasure: '2к6 драгоценных камней стоимостью 50 зм.', magic: '1к4 предметов из таблицы В.' },
+    { range: [86, 92], treasure: '2к4 предметов искусства стоимостью 25 зм.', magic: '1к4 предметов из таблицы Е.' },
+    { range: [93, 97], treasure: '2к6 драгоценных камней стоимостью 50 зм.', magic: '1к4 предметов из таблицы Е.' },
+    { range: [98, 99], treasure: '2к4 предметов искусства стоимостью 25 зм.', magic: '1 предмет из таблицы Ё.' },
+    { range: [100, 100], treasure: '2к6 драгоценных камней стоимостью 50 зм.', magic: '1 предмет из таблицы Ё.' },
+  ],
+  '5-10': [
+    { range: [1, 4], treasure: 'Без дополнительных драгоценностей и произведений искусства.' },
+    { range: [5, 10], treasure: '2к4 предметов искусства стоимостью 25 зм.' },
+    { range: [11, 16], treasure: '3к6 драгоценных камней стоимостью 50 зм.' },
+    { range: [17, 22], treasure: '3к6 драгоценных камней стоимостью 100 зм.' },
+    { range: [23, 28], treasure: '2к4 предметов искусства стоимостью 250 зм.' },
+    { range: [29, 32], treasure: '2к4 предметов искусства стоимостью 25 зм.', magic: '1к6 предметов из таблицы А.' },
+    { range: [33, 36], treasure: '3к6 драгоценных камней стоимостью 50 зм.', magic: '1к6 предметов из таблицы А.' },
+    { range: [37, 40], treasure: '3к6 драгоценных камней стоимостью 100 зм.', magic: '1к6 предметов из таблицы А.' },
+    { range: [41, 44], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1к6 предметов из таблицы А.' },
+    { range: [45, 49], treasure: '2к4 предметов искусства стоимостью 25 зм.', magic: '1к4 предметов из таблицы Б.' },
+    { range: [50, 54], treasure: '3к6 драгоценных камней стоимостью 50 зм.', magic: '1к4 предметов из таблицы Б.' },
+    { range: [55, 59], treasure: '3к6 драгоценных камней стоимостью 100 зм.', magic: '1к4 предметов из таблицы Б.' },
+    { range: [60, 63], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1к4 предметов из таблицы Б.' },
+    { range: [64, 66], treasure: '2к4 предметов искусства стоимостью 25 зм.', magic: '1к4 предметов из таблицы В.' },
+    { range: [67, 69], treasure: '3к6 драгоценных камней стоимостью 50 зм.', magic: '1к4 предметов из таблицы В.' },
+    { range: [70, 72], treasure: '3к6 драгоценных камней стоимостью 100 зм.', magic: '1к4 предметов из таблицы В.' },
+    { range: [73, 74], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1к4 предметов из таблицы В.' },
+    { range: [75, 76], treasure: '2к4 предметов искусства стоимостью 25 зм.', magic: '1 предмет из таблицы Г.' },
+    { range: [77, 78], treasure: '3к6 драгоценных камней стоимостью 50 зм.', magic: '1 предмет из таблицы Г.' },
+    { range: [79, 79], treasure: '3к6 драгоценных камней стоимостью 100 зм.', magic: '1 предмет из таблицы Г.' },
+    { range: [80, 80], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1 предмет из таблицы Г.' },
+    { range: [81, 84], treasure: '2к4 предметов искусства стоимостью 25 зм.', magic: '1к4 предметов из таблицы Е.' },
+    { range: [85, 88], treasure: '3к6 драгоценных камней стоимостью 50 зм.', magic: '1к4 предметов из таблицы Е.' },
+    { range: [89, 91], treasure: '3к6 драгоценных камней стоимостью 100 зм.', magic: '1к4 предметов из таблицы Е.' },
+    { range: [92, 94], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1к4 предметов из таблицы Е.' },
+    { range: [95, 96], treasure: '3к6 драгоценных камней стоимостью 100 зм.', magic: '1к4 предметов из таблицы Ё.' },
+    { range: [97, 98], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1к4 предметов из таблицы Ё.' },
+    { range: [99, 99], treasure: '3к6 драгоценных камней стоимостью 100 зм.', magic: '1 предмет из таблицы Ж.' },
+    { range: [100, 100], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1 предмет из таблицы Ж.' },
+  ],
+  '11-16': [
+    { range: [1, 3], treasure: 'Без дополнительных драгоценностей и произведений искусства.' },
+    { range: [4, 6], treasure: '2к4 предметов искусства стоимостью 250 зм.' },
+    { range: [7, 9], treasure: '2к4 предметов искусства стоимостью 750 зм.' },
+    { range: [10, 12], treasure: '3к6 драгоценных камней стоимостью 500 зм.' },
+    { range: [13, 15], treasure: '3к6 драгоценных камней стоимостью 1000 зм.' },
+    { range: [16, 19], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1к4 предметов из таблицы А и 1к6 предметов из таблицы Б.' },
+    { range: [20, 23], treasure: '2к4 предметов искусства стоимостью 750 зм.', magic: '1к4 предметов из таблицы А и 1к6 предметов из таблицы Б.' },
+    { range: [24, 26], treasure: '3к6 драгоценных камней стоимостью 500 зм.', magic: '1к4 предметов из таблицы А и 1к6 предметов из таблицы Б.' },
+    { range: [27, 29], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1к4 предметов из таблицы А и 1к6 предметов из таблицы Б.' },
+    { range: [30, 35], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1к6 предметов из таблицы В.' },
+    { range: [36, 40], treasure: '2к4 предметов искусства стоимостью 750 зм.', magic: '1к6 предметов из таблицы В.' },
+    { range: [41, 45], treasure: '3к6 драгоценных камней стоимостью 500 зм.', magic: '1к6 предметов из таблицы В.' },
+    { range: [46, 50], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1к6 предметов из таблицы В.' },
+    { range: [51, 54], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1к4 предметов из таблицы Г.' },
+    { range: [55, 58], treasure: '2к4 предметов искусства стоимостью 750 зм.', magic: '1к4 предметов из таблицы Г.' },
+    { range: [59, 62], treasure: '3к6 драгоценных камней стоимостью 500 зм.', magic: '1к4 предметов из таблицы Г.' },
+    { range: [63, 66], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1к4 предметов из таблицы Г.' },
+    { range: [67, 68], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1 предмет из таблицы Д.' },
+    { range: [69, 70], treasure: '2к4 предметов искусства стоимостью 750 зм.', magic: '1 предмет из таблицы Д.' },
+    { range: [71, 72], treasure: '3к6 драгоценных камней стоимостью 500 зм.', magic: '1 предмет из таблицы Д.' },
+    { range: [73, 74], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1 предмет из таблицы Д.' },
+    { range: [75, 76], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1 предмет из таблицы Е и 1к4 предметов из таблицы Ё.' },
+    { range: [77, 78], treasure: '2к4 предметов искусства стоимостью 750 зм.', magic: '1 предмет из таблицы Е и 1к4 предметов из таблицы Ё.' },
+    { range: [79, 80], treasure: '3к6 драгоценных камней стоимостью 500 зм.', magic: '1 предмет из таблицы Е и 1к4 предметов из таблицы Ё.' },
+    { range: [81, 82], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1 предмет из таблицы Е и 1к4 предметов из таблицы Ё.' },
+    { range: [83, 85], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1к4 предметов из таблицы Ж.' },
+    { range: [86, 88], treasure: '2к4 предметов искусства стоимостью 750 зм.', magic: '1к4 предметов из таблицы Ж.' },
+    { range: [89, 90], treasure: '3к6 драгоценных камней стоимостью 500 зм.', magic: '1к4 предметов из таблицы Ж.' },
+    { range: [91, 92], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1к4 предметов из таблицы Ж.' },
+    { range: [93, 94], treasure: '2к4 предметов искусства стоимостью 250 зм.', magic: '1 предмет из таблицы З.' },
+    { range: [95, 96], treasure: '2к4 предметов искусства стоимостью 750 зм.', magic: '1 предмет из таблицы З.' },
+    { range: [97, 98], treasure: '3к6 драгоценных камней стоимостью 500 зм.', magic: '1 предмет из таблицы З.' },
+    { range: [99, 100], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1 предмет из таблицы З.' },
+  ],
+  '17+': [
+    { range: [1, 2], treasure: 'Без дополнительных драгоценностей и произведений искусства.' },
+    { range: [3, 5], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1к8 предметов из таблицы В.' },
+    { range: [6, 8], treasure: '1к10 предметов искусства стоимостью 2500 зм.', magic: '1к8 предметов из таблицы В.' },
+    { range: [9, 11], treasure: '1к4 предметов искусства стоимостью 7500 зм.', magic: '1к8 предметов из таблицы В.' },
+    { range: [12, 14], treasure: '1к8 драгоценных камней стоимостью 5000 зм.', magic: '1к8 предметов из таблицы В.' },
+    { range: [15, 22], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1к6 предметов из таблицы Г.' },
+    { range: [23, 30], treasure: '1к10 предметов искусства стоимостью 2500 зм.', magic: '1к6 предметов из таблицы Г.' },
+    { range: [31, 38], treasure: '1к4 предметов искусства стоимостью 7500 зм.', magic: '1к6 предметов из таблицы Г.' },
+    { range: [39, 46], treasure: '1к8 драгоценных камней стоимостью 5000 зм.', magic: '1к6 предметов из таблицы Г.' },
+    { range: [47, 52], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1к6 предметов из таблицы Д.' },
+    { range: [53, 58], treasure: '1к10 предметов искусства стоимостью 2500 зм.', magic: '1к6 предметов из таблицы Д.' },
+    { range: [59, 63], treasure: '1к4 предметов искусства стоимостью 7500 зм.', magic: '1к6 предметов из таблицы Д.' },
+    { range: [64, 68], treasure: '1к8 драгоценных камней стоимостью 5000 зм.', magic: '1к6 предметов из таблицы Д.' },
+    { range: [69, 69], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1к4 предметов из таблицы Ё.' },
+    { range: [70, 70], treasure: '1к10 предметов искусства стоимостью 2500 зм.', magic: '1к4 предметов из таблицы Ё.' },
+    { range: [71, 71], treasure: '1к4 предметов искусства стоимостью 7500 зм.', magic: '1к4 предметов из таблицы Ё.' },
+    { range: [72, 72], treasure: '1к8 драгоценных камней стоимостью 5000 зм.', magic: '1к4 предметов из таблицы Ё.' },
+    { range: [73, 74], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1к4 предметов из таблицы Ж.' },
+    { range: [75, 76], treasure: '1к10 предметов искусства стоимостью 2500 зм.', magic: '1к4 предметов из таблицы Ж.' },
+    { range: [77, 78], treasure: '1к4 предметов искусства стоимостью 7500 зм.', magic: '1к4 предметов из таблицы Ж.' },
+    { range: [79, 80], treasure: '1к8 драгоценных камней стоимостью 5000 зм.', magic: '1к4 предметов из таблицы Ж.' },
+    { range: [81, 85], treasure: '3к6 драгоценных камней стоимостью 1000 зм.', magic: '1к4 предметов из таблицы З.' },
+    { range: [86, 90], treasure: '1к10 предметов искусства стоимостью 2500 зм.', magic: '1к4 предметов из таблицы З.' },
+    { range: [91, 95], treasure: '1к4 предметов искусства стоимостью 7500 зм.', magic: '1к4 предметов из таблицы З.' },
+    { range: [96, 100], treasure: '1к8 драгоценных камней стоимостью 5000 зм.', magic: '1к4 предметов из таблицы З.' },
+  ],
+};
+
+const gemTables: Array<{ value: number; items: string[] }> = [
+  { value: 10, items: ['Азурит', 'Бирюза', 'Гематит', 'Глазчатый агат', 'Голубой кварц', 'Лазурит', 'Малахит', 'Моховой агат', 'Обсидиан', 'Полосчатый агат', 'Родохрозит', 'Тигровый глаз'] },
+  { value: 50, items: ['Гелиотроп', 'Звёздчатый розовый кварц', 'Кварц', 'Лунный камень', 'Оникс', 'Сардоникс', 'Сердолик', 'Халцедон', 'Хризопраз', 'Циркон', 'Цитрин', 'Яшма'] },
+  { value: 100, items: ['Аметист', 'Гагат', 'Гранат', 'Жемчуг', 'Коралл', 'Нефрит', 'Турмалин', 'Хризоберилл', 'Шпинель', 'Янтарь'] },
+  { value: 500, items: ['Аквамарин', 'Александрит', 'Синяя шпинель', 'Топаз', 'Хризолит', 'Чёрный жемчуг'] },
+  { value: 1000, items: ['Голубой сапфир', 'Жёлтый сапфир', 'Огненный опал', 'Опал', 'Звёздчатый рубин', 'Звёздчатый сапфир', 'Изумруд', 'Чёрный опал'] },
 ];
+
+const randomLootDefault: LootResult = {
+  name: 'Сокровищница по таблицам dnd.su',
+  details: 'Лут генерируется по таблицам статьи “Сокровищница”: индивидуальные монеты, сокровищница по ПО, драгоценности/искусство и ссылки на магические таблицы.',
+  link: treasuryArticleLink,
+};
+
+const magicItemTables: Record<string, string[]> = {
+  А: ['Зелье лечения', 'Свиток заклинания (1-й уровень)', 'Зелье лазания', 'Сумка хранения', 'Друидский талисман +1'],
+  Б: ['Зелье большого лечения', 'Патроны +1', 'Свиток заклинания (2-й уровень)', 'Амулет защиты от обнаружения', 'Верёвка лазания'],
+  В: ['Зелье превосходного лечения', 'Свиток заклинания (3-й уровень)', 'Оружие +1', 'Щит +1', 'Плащ защиты'],
+  Г: ['Свиток заклинания (4-й уровень)', 'Жезл хранителя договоров +1', 'Доспех +1', 'Жезл боевого мага +1', 'Плащ смещения'],
+  Д: ['Свиток заклинания (5-й уровень)', 'Оружие +2', 'Щит +2', 'Кольцо защиты', 'Посох силы'],
+  Е: ['Свиток заклинания (6-й уровень)', 'Зелье высшего лечения', 'Сапоги скорости', 'Кольцо сопротивления', 'Жезл боевого мага +2'],
+  Ё: ['Свиток заклинания (7-й уровень)', 'Оружие +3', 'Пояс силы великана', 'Кольцо телекинеза', 'Посох исцеления'],
+  Ж: ['Свиток заклинания (8-й уровень)', 'Броня +3', 'Посох грома и молний', 'Меч возмездия', 'Ковер-самолёт'],
+  З: ['Свиток заклинания (9-й уровень)', 'Священный мститель', 'Кольцо трёх желаний', 'Посох волшебства', 'Том ясной мысли'],
+};
 
 const initialTokens: RoomToken[] = [
   {
@@ -151,6 +350,7 @@ const initialTokens: RoomToken[] = [
     owner: 'Игрок',
     roleOwner: 'player',
     sheetId: 'sheet-elira',
+    visionRadius: 3,
   },
   {
     id: 'borin',
@@ -167,6 +367,7 @@ const initialTokens: RoomToken[] = [
     owner: 'Игрок',
     roleOwner: 'player',
     sheetId: 'sheet-borin',
+    visionRadius: 3,
   },
   {
     id: 'goblin',
@@ -182,6 +383,7 @@ const initialTokens: RoomToken[] = [
     speed: 30,
     owner: 'GM',
     roleOwner: 'gm',
+    gmOnly: true,
   },
   {
     id: 'table-1',
@@ -245,8 +447,17 @@ function createCell(): CellData {
   };
 }
 
-function createEmptyMap() {
-  return Array.from({ length: GRID_COLS * GRID_ROWS }, createCell);
+function createEmptyMap(cols: number, rows: number) {
+  return Array.from({ length: cols * rows }, createCell);
+}
+
+function createInitialMapState(): MapState {
+  return {
+    cols: DEFAULT_COLS,
+    rows: DEFAULT_ROWS,
+    publicTiles: createEmptyMap(DEFAULT_COLS, DEFAULT_ROWS),
+    gmTiles: createEmptyMap(DEFAULT_COLS, DEFAULT_ROWS),
+  };
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -278,8 +489,70 @@ function rollFormula(formula: string) {
   return { count, sides, modifier, rolls, total };
 }
 
-function getCellIndex(x: number, y: number) {
-  return y * GRID_COLS + x;
+function rollDie(sides: number) {
+  return Math.floor(Math.random() * sides) + 1;
+}
+
+function rollDiceExpression(expression: string) {
+  const match = expression.match(/(\d+)к(\d+)/i);
+  if (!match) return 1;
+
+  const count = Number(match[1]);
+  const sides = Number(match[2]);
+  return Array.from({ length: count }, () => rollDie(sides)).reduce((sum, roll) => sum + roll, 0);
+}
+
+function rollMagicFromReference(reference: string) {
+  const normalized = reference.replace('таблицы', 'таблица').replace('таблицу', 'таблица');
+  const parts = normalized.split(' и ').map((part) => part.trim());
+  const results: string[] = [];
+
+  for (const part of parts) {
+    const match = part.match(/(?:(\d+к\d+)|(\d+))\s+предмет(?:ов)?\s+из\s+таблица\s+([А-ЗЁ])/i) ?? part.match(/(?:(\d+к\d+)|(\d+))\s+предмет(?:ов)?\s+из\s+таблицы\s+([А-ЗЁ])/i);
+    if (!match) continue;
+
+    const count = match[1] ? rollDiceExpression(match[1]) : Number(match[2] || 1);
+    const letter = match[3].toUpperCase();
+    const pool = magicItemTables[letter] ?? [];
+
+    for (let index = 0; index < count; index += 1) {
+      if (!pool.length) continue;
+      const item = pool[Math.floor(Math.random() * pool.length)];
+      results.push(`${letter}: ${item}`);
+    }
+  }
+
+  return results;
+}
+
+function rollTreasureFromTables(crBand: LootCrBand): LootResult {
+  const d100 = rollDie(100);
+  const individualCoins = treasureCoinTables[crBand].find((entry) => d100 >= entry.range[0] && d100 <= entry.range[1]) ?? treasureCoinTables[crBand][0];
+  const hoardRow = hoardTables[crBand].find((entry) => d100 >= entry.range[0] && d100 <= entry.range[1]) ?? hoardTables[crBand][0];
+  const gemMatch = hoardRow.treasure.match(/драгоценных камней стоимостью (\d+) зм/);
+  const gemValue = gemMatch ? Number(gemMatch[1]) : null;
+  const gemBucket = gemValue ? gemTables.find((entry) => entry.value === gemValue) ?? null : null;
+  const gemItem = gemBucket ? gemBucket.items[Math.floor(Math.random() * gemBucket.items.length)] : null;
+  const magicItems = hoardRow.magic ? rollMagicFromReference(hoardRow.magic) : [];
+
+  return {
+    name: `Клад по таблице ПО ${crBand}`,
+    details: [
+      `Бросок к100: ${d100}.`,
+      `Монеты сокровищницы: ${hoardCoinTables[crBand].join(', ')}.`,
+      `Индивидуальные монеты для этой же группы ПО: ${individualCoins.coins.join(', ')}.`,
+      `Строка сокровищницы: ${hoardRow.treasure}`,
+      hoardRow.magic ? `Магические предметы: ${hoardRow.magic}` : 'Магические предметы: без дополнительных бросков.',
+      magicItems.length ? `Результат по таблицам А–З: ${magicItems.join('; ')}.` : '',
+      gemBucket && gemItem ? `Пример камня из соответствующей таблицы: ${gemItem} (${gemBucket.value} зм).` : '',
+      'Источник: таблицы статьи “Сокровищница” на dnd.su.',
+    ].join(' '),
+    link: treasuryArticleLink,
+  };
+}
+
+function getCellIndex(x: number, y: number, cols: number) {
+  return y * cols + x;
 }
 
 function cellCoordinate(x: number, y: number) {
@@ -305,6 +578,7 @@ function readNestedString(source: unknown, paths: string[][], fallback = '') {
       current = (current as Record<string, unknown>)[key];
     }
 
+    if (!found) continue;
     if (typeof current === 'string' && current.trim()) return current;
     if (typeof current === 'number') return String(current);
   }
@@ -340,9 +614,150 @@ function getPlayerTokens(tokens: RoomToken[]) {
   return tokens.filter((token) => token.kind === 'player');
 }
 
+function isCellVisibleToPlayers(x: number, y: number, tokens: RoomToken[]) {
+  const playerTokens = tokens.filter((token) => token.kind === 'player');
+  return playerTokens.some((token) => {
+    const radius = token.visionRadius ?? 3;
+    return Math.abs(token.x - x) + Math.abs(token.y - y) <= radius;
+  });
+}
+
+function getStorageKey(roomId: string) {
+  return `${STORAGE_PREFIX}${roomId}`;
+}
+
+function buildSavedRoomState({
+  mapName,
+  mapState,
+  savedMaps,
+  activeSavedMapId,
+  tokens,
+  sheets,
+  journal,
+}: SavedRoomState): SavedRoomState {
+  return {
+    mapName,
+    mapState,
+    savedMaps,
+    activeSavedMapId,
+    tokens,
+    sheets,
+    journal,
+  };
+}
+
+function resizeTiles(source: CellData[], oldCols: number, oldRows: number, newCols: number, newRows: number) {
+  const nextTiles = createEmptyMap(newCols, newRows);
+
+  for (let y = 0; y < Math.min(oldRows, newRows); y += 1) {
+    for (let x = 0; x < Math.min(oldCols, newCols); x += 1) {
+      nextTiles[getCellIndex(x, y, newCols)] = source[getCellIndex(x, y, oldCols)] ?? createCell();
+    }
+  }
+
+  return nextTiles;
+}
+
+function boardButtonClass(isActive: boolean) {
+  return `rounded-full border px-3 py-2 text-sm ${isActive ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`;
+}
+
+function Board({
+  title,
+  subtitle,
+  cols,
+  rows,
+  tiles,
+  tokens,
+  zoom,
+  visibleMask,
+  onBoardPointerDown,
+  onTokenPointerDown,
+}: {
+  title: string;
+  subtitle: string;
+  cols: number;
+  rows: number;
+  tiles: CellData[];
+  tokens: RoomToken[];
+  zoom: number;
+  visibleMask?: boolean[];
+  onBoardPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onTokenPointerDown?: (tokenId: string) => (event: ReactPointerEvent<HTMLButtonElement>) => void;
+}) {
+  const aspectRatio = `${cols} / ${rows}`;
+  const minWidth = Math.max(600, cols * 44);
+
+  return (
+    <div className="card p-4">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-white">{title}</h2>
+          <p className="text-sm text-slate-400">{subtitle}</p>
+        </div>
+        <span className="badge">{cols}×{rows}</span>
+      </div>
+
+      <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+        <div
+          onPointerDown={onBoardPointerDown}
+          className="relative touch-none select-none overflow-hidden rounded-2xl border border-white/10 bg-slate-900"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+            transform: `scale(${zoom})`,
+            transformOrigin: 'top left',
+            aspectRatio,
+            minWidth,
+          }}
+        >
+          {Array.from({ length: cols * rows }, (_, index) => {
+            const x = index % cols;
+            const y = Math.floor(index / cols);
+            const cell = tiles[index] ?? createCell();
+            const isVisible = visibleMask ? visibleMask[index] : true;
+            return (
+              <div key={`${title}-${x}-${y}`} className="relative border border-white/10" style={{ backgroundColor: cell.terrain }}>
+                {cell.texture ? <div className="absolute inset-[18%] rounded-md opacity-40" style={{ backgroundColor: cell.texture }} /> : null}
+                {cell.obstacle ? <div className="absolute inset-x-[15%] bottom-[15%] top-[15%] rounded-md border-2 opacity-90" style={{ borderColor: cell.obstacle, backgroundColor: `${cell.obstacle}33` }} /> : null}
+                {cell.furniture ? <div className="absolute inset-x-[20%] inset-y-[32%] rounded-sm" style={{ backgroundColor: cell.furniture }} /> : null}
+                {cell.fog ? <div className="absolute inset-0 bg-slate-950/70" /> : null}
+                {!isVisible ? <div className="absolute inset-0 bg-black" /> : null}
+              </div>
+            );
+          })}
+
+          {tokens.map((token) => {
+            const left = `calc(${((token.x + 0.5) / cols) * 100}% - 1.5rem)`;
+            const top = `calc(${((token.y + 0.5) / rows) * 100}% - 1.5rem)`;
+            const style: CSSProperties = {
+              left,
+              top,
+              borderColor: token.color,
+              backgroundColor: `${token.color}33`,
+              boxShadow: `0 0 24px ${token.color}55`,
+            };
+            const isHiddenByMask = visibleMask ? !visibleMask[getCellIndex(token.x, token.y, cols)] : false;
+            if (isHiddenByMask) return null;
+            return (
+              <button
+                key={token.id}
+                onPointerDown={onTokenPointerDown ? onTokenPointerDown(token.id) : undefined}
+                className="absolute flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-semibold text-white shadow-lg"
+                style={style}
+              >
+                {token.short}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function GameRoomPage({ roomId }: { roomId: string }) {
-  const boardViewportRef = useRef<HTMLDivElement | null>(null);
-  const boardRef = useRef<HTMLDivElement | null>(null);
   const [roomPassword, setRoomPassword] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [displayName, setDisplayName] = useState('Мастер Аркейн');
@@ -350,19 +765,26 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [joinStep, setJoinStep] = useState<JoinStep>('auth');
   const [authError, setAuthError] = useState('');
   const [mapName, setMapName] = useState('Руины старой башни');
-  const [mapTiles, setMapTiles] = useState<CellData[]>(createEmptyMap);
+  const [mapState, setMapState] = useState<MapState>(createInitialMapState);
+  const [savedMaps, setSavedMaps] = useState<SavedMapPreset[]>([]);
+  const [activeSavedMapId, setActiveSavedMapId] = useState<string | null>(null);
   const [tokens, setTokens] = useState<RoomToken[]>(initialTokens);
   const [sheets, setSheets] = useState<CharacterSheet[]>(initialSheets);
   const [selectedTokenId, setSelectedTokenId] = useState('elira');
   const [tool, setTool] = useState<DrawingTool>('move');
   const [selectedColor, setSelectedColor] = useState(layerPalette.terrain[1]);
+  const [activeBoard, setActiveBoard] = useState<BoardKind>('public');
   const [isPointerDown, setIsPointerDown] = useState(false);
   const [draggingTokenId, setDraggingTokenId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [diceFormula, setDiceFormula] = useState('1d20+5');
-  const [lootResult, setLootResult] = useState(lootPool[0]);
+  const [lootCrBand, setLootCrBand] = useState<LootCrBand>('0-4');
+  const [lootResult, setLootResult] = useState<LootResult>(randomLootDefault);
   const [eventResult, setEventResult] = useState(randomEventPool[0]);
   const [zoom, setZoom] = useState(1);
+  const [gridColsInput, setGridColsInput] = useState(String(DEFAULT_COLS));
+  const [gridRowsInput, setGridRowsInput] = useState(String(DEFAULT_ROWS));
+  const [mapPresetName, setMapPresetName] = useState('Сцена 1');
   const [journal, setJournal] = useState<JournalEntry[]>([
     {
       id: 'j1',
@@ -371,6 +793,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       time: nowTime(),
     },
   ]);
+  const [isLoadedFromStorage, setIsLoadedFromStorage] = useState(false);
+
+  const cols = mapState.cols;
+  const rows = mapState.rows;
+  const activeTiles = activeBoard === 'public' ? mapState.publicTiles : mapState.gmTiles;
 
   const selectedToken = useMemo(
     () => tokens.find((token) => token.id === selectedTokenId) ?? tokens[0],
@@ -386,60 +813,132 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     return toolConfig?.layer ? layerPalette[toolConfig.layer] : layerPalette.terrain;
   }, [tool]);
 
+  const playerVisibilityMask = useMemo(
+    () => Array.from({ length: cols * rows }, (_, index) => isCellVisibleToPlayers(index % cols, Math.floor(index / cols), tokens)),
+    [cols, rows, tokens],
+  );
+
+  const visibleTokensForPlayers = useMemo(
+    () => tokens.filter((token) => !token.gmOnly && playerVisibilityMask[getCellIndex(token.x, token.y, cols)]),
+    [cols, playerVisibilityMask, tokens],
+  );
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(getStorageKey(roomId));
+    if (!stored) {
+      setIsLoadedFromStorage(true);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as Partial<SavedRoomState>;
+      if (parsed.mapName) {
+        setMapName(parsed.mapName);
+        setMapPresetName(parsed.mapName);
+      }
+      if (parsed.mapState?.cols && parsed.mapState?.rows && parsed.mapState.publicTiles && parsed.mapState.gmTiles) {
+        setMapState(parsed.mapState as MapState);
+        setGridColsInput(String(parsed.mapState.cols));
+        setGridRowsInput(String(parsed.mapState.rows));
+      }
+      if (parsed.savedMaps) setSavedMaps(parsed.savedMaps);
+      if (parsed.activeSavedMapId) setActiveSavedMapId(parsed.activeSavedMapId);
+      if (parsed.tokens) setTokens(parsed.tokens);
+      if (parsed.sheets) setSheets(parsed.sheets);
+      if (parsed.journal) setJournal(parsed.journal);
+    } catch {
+      // ignore corrupted local state
+    }
+
+    setIsLoadedFromStorage(true);
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!isLoadedFromStorage) return;
+    const payload = buildSavedRoomState({ mapName, mapState, savedMaps, activeSavedMapId, tokens, sheets, journal });
+    window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
+  }, [activeSavedMapId, isLoadedFromStorage, journal, mapName, mapState, roomId, savedMaps, sheets, tokens]);
+
+  useEffect(() => {
+    if (!activeSavedMapId) return;
+
+    setSavedMaps((current) =>
+      current.map((preset) =>
+        preset.id === activeSavedMapId
+          ? {
+              ...preset,
+              name: mapPresetName.trim() || preset.name,
+              mapName,
+              mapState,
+            }
+          : preset,
+      ),
+    );
+  }, [activeSavedMapId, mapName, mapPresetName, mapState]);
+
   const addJournalEntry = (type: JournalEntry['type'], text: string) => {
-    setJournal((current) => [{ id: `${Date.now()}-${Math.random()}`, type, text, time: nowTime() }, ...current].slice(0, 16));
+    setJournal((current) => [{ id: `${Date.now()}-${Math.random()}`, type, text, time: nowTime() }, ...current].slice(0, 20));
   };
 
-  const applyCellChange = (index: number, updater: (cell: CellData) => CellData) => {
-    setMapTiles((current) => current.map((cell, cellIndex) => (cellIndex === index ? updater(cell) : cell)));
-  };
+  const setTilesForBoard = useCallback((board: BoardKind, nextTiles: CellData[]) => {
+    setMapState((current) => ({
+      ...current,
+      publicTiles: board === 'public' ? nextTiles : current.publicTiles,
+      gmTiles: board === 'gm' ? nextTiles : current.gmTiles,
+    }));
+  }, []);
 
-  const paintCell = (x: number, y: number) => {
-    const index = getCellIndex(x, y);
+  const applyCellChange = useCallback((board: BoardKind, index: number, updater: (cell: CellData) => CellData) => {
+    const sourceTiles = board === 'public' ? mapState.publicTiles : mapState.gmTiles;
+    setTilesForBoard(board, sourceTiles.map((cell, cellIndex) => (cellIndex === index ? updater(cell) : cell)));
+  }, [mapState.gmTiles, mapState.publicTiles, setTilesForBoard]);
+
+  const paintCell = useCallback((x: number, y: number) => {
+    const index = getCellIndex(x, y, cols);
 
     if (tool === 'terrain') {
-      applyCellChange(index, (cell) => ({ ...cell, terrain: selectedColor }));
+      applyCellChange(activeBoard, index, (cell) => ({ ...cell, terrain: selectedColor }));
       return;
     }
 
     if (tool === 'obstacle') {
-      applyCellChange(index, (cell) => ({ ...cell, obstacle: selectedColor }));
+      applyCellChange(activeBoard, index, (cell) => ({ ...cell, obstacle: selectedColor }));
       return;
     }
 
     if (tool === 'texture') {
-      applyCellChange(index, (cell) => ({ ...cell, texture: selectedColor }));
+      applyCellChange(activeBoard, index, (cell) => ({ ...cell, texture: selectedColor }));
       return;
     }
 
     if (tool === 'furniture') {
-      applyCellChange(index, (cell) => ({ ...cell, furniture: selectedColor }));
+      applyCellChange(activeBoard, index, (cell) => ({ ...cell, furniture: selectedColor }));
       return;
     }
 
     if (tool === 'fog') {
-      applyCellChange(index, (cell) => ({ ...cell, fog: !cell.fog }));
+      applyCellChange(activeBoard, index, (cell) => ({ ...cell, fog: !cell.fog }));
       return;
     }
 
     if (tool === 'erase') {
-      applyCellChange(index, () => createCell());
+      applyCellChange(activeBoard, index, () => createCell());
     }
-  };
+  }, [activeBoard, applyCellChange, cols, selectedColor, tool]);
 
-  const canMoveToken = (token: RoomToken) => {
+  const canMoveToken = useCallback((token: RoomToken) => {
     if (role === 'gm') return true;
     if (role !== 'player') return false;
-    return token.roleOwner === 'player';
-  };
+    return token.roleOwner === 'player' && token.owner === displayName;
+  }, [displayName, role]);
 
-  const applyPointerToBoard = (clientX: number, clientY: number) => {
-    const board = boardRef.current;
-    if (!board) return;
+  const applyPointerToBoard = useCallback((clientX: number, clientY: number, board: BoardKind) => {
+    const boardElement = document.getElementById(`battle-board-${board}`);
+    if (!boardElement) return;
 
-    const rect = board.getBoundingClientRect();
-    const x = clamp(Math.floor(((clientX - rect.left) / rect.width) * GRID_COLS), 0, GRID_COLS - 1);
-    const y = clamp(Math.floor(((clientY - rect.top) / rect.height) * GRID_ROWS), 0, GRID_ROWS - 1);
+    const rect = boardElement.getBoundingClientRect();
+    const x = clamp(Math.floor(((clientX - rect.left) / rect.width) * cols), 0, cols - 1);
+    const y = clamp(Math.floor(((clientY - rect.top) / rect.height) * rows), 0, rows - 1);
 
     if (draggingTokenId) {
       setTokens((current) => current.map((token) => (token.id === draggingTokenId ? { ...token, x, y } : token)));
@@ -459,13 +958,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         }),
       );
     }
-  };
+  }, [canMoveToken, cols, draggingTokenId, paintCell, rows, selectedTokenId, tool]);
 
   useEffect(() => {
     if (!isPointerDown) return undefined;
 
     const handleMove = (event: PointerEvent) => {
-      applyPointerToBoard(event.clientX, event.clientY);
+      applyPointerToBoard(event.clientX, event.clientY, activeBoard);
     };
 
     const handleUp = () => {
@@ -487,12 +986,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       window.removeEventListener('pointermove', handleMove);
       window.removeEventListener('pointerup', handleUp);
     };
-  }, [draggingTokenId, isPointerDown, tokens]);
+  }, [activeBoard, applyPointerToBoard, draggingTokenId, isPointerDown, tokens]);
 
-  const handleBoardPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const handleBoardPointerDown = (board: BoardKind) => (event: ReactPointerEvent<HTMLDivElement>) => {
     if (joinStep !== 'ready') return;
+    setActiveBoard(board);
     setIsPointerDown(true);
-    applyPointerToBoard(event.clientX, event.clientY);
+    applyPointerToBoard(event.clientX, event.clientY, board);
   };
 
   const handleTokenPointerDown = (tokenId: string) => (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -513,8 +1013,173 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setMapName(file.name.replace(/\.[^.]+$/, ''));
-    addJournalEntry('map', `Загружена карта «${file.name}».`);
+    const nextName = file.name.replace(/\.[^.]+$/, '');
+    const nextPresetId = `map-${Date.now()}`;
+    const nextMapState: MapState = {
+      cols,
+      rows,
+      publicTiles: createEmptyMap(cols, rows),
+      gmTiles: createEmptyMap(cols, rows),
+    };
+    const nextPreset: SavedMapPreset = {
+      id: nextPresetId,
+      name: nextName,
+      mapName: nextName,
+      mapState: nextMapState,
+    };
+    const nextSavedMaps = [...savedMaps, nextPreset];
+
+    setMapName(nextName);
+    setMapPresetName(nextName);
+    setMapState(nextMapState);
+    setSavedMaps(nextSavedMaps);
+    setActiveSavedMapId(nextPresetId);
+    addJournalEntry('map', `Загружена карта «${file.name}» и создана новая вкладка.`);
+    event.target.value = '';
+  };
+
+  const handleSaveMap = () => {
+    const presetId = activeSavedMapId ?? `map-${Date.now()}`;
+    const nextPreset: SavedMapPreset = {
+      id: presetId,
+      name: mapPresetName.trim() || mapName || 'Новая сцена',
+      mapName,
+      mapState,
+    };
+
+    const nextSavedMaps = savedMaps.some((preset) => preset.id === presetId)
+      ? savedMaps.map((preset) => (preset.id === presetId ? nextPreset : preset))
+      : [...savedMaps, nextPreset];
+
+    setSavedMaps(nextSavedMaps);
+    setActiveSavedMapId(presetId);
+
+    const payload = buildSavedRoomState({
+      mapName,
+      mapState,
+      savedMaps: nextSavedMaps,
+      activeSavedMapId: presetId,
+      tokens,
+      sheets,
+      journal,
+    });
+    window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
+    addJournalEntry('save', `Карта «${nextPreset.name}» сохранена локально для комнаты ${roomId}.`);
+  };
+
+  const handleExportMapJson = () => {
+    const nextSavedMaps = activeSavedMapId
+      ? savedMaps.map((preset) =>
+          preset.id === activeSavedMapId
+            ? {
+                ...preset,
+                name: mapPresetName.trim() || preset.name,
+                mapName,
+                mapState,
+              }
+            : preset,
+        )
+      : savedMaps;
+
+    const payload = buildSavedRoomState({
+      mapName,
+      mapState,
+      savedMaps: nextSavedMaps,
+      activeSavedMapId,
+      tokens,
+      sheets,
+      journal,
+    });
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${(mapPresetName || mapName || roomId).replace(/[^a-zA-Zа-яА-Я0-9-_]+/g, '_')}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    addJournalEntry('save', `Экспортирован JSON сцены «${mapPresetName || mapName}».`);
+  };
+
+  const handleImportMapJson = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const parsed = JSON.parse(await file.text()) as Partial<SavedRoomState>;
+      if (!parsed.mapName || !parsed.mapState?.publicTiles || !parsed.mapState?.gmTiles) {
+        addJournalEntry('system', `Файл ${file.name} не содержит валидную карту комнаты.`);
+        return;
+      }
+
+      setMapName(parsed.mapName);
+      setMapPresetName(parsed.mapName);
+      setMapState(parsed.mapState);
+      setGridColsInput(String(parsed.mapState.cols));
+      setGridRowsInput(String(parsed.mapState.rows));
+      setSavedMaps(parsed.savedMaps ?? []);
+      setActiveSavedMapId(parsed.activeSavedMapId ?? null);
+      if (parsed.tokens) setTokens(parsed.tokens);
+      if (parsed.sheets) setSheets(parsed.sheets);
+      if (parsed.journal) setJournal(parsed.journal);
+      addJournalEntry('map', `JSON-карта «${file.name}» загружена в комнату.`);
+    } catch {
+      addJournalEntry('system', `Файл ${file.name} не является валидным JSON карты.`);
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const handleLoadSavedMap = (preset: SavedMapPreset) => {
+    setActiveSavedMapId(preset.id);
+    setMapPresetName(preset.name);
+    setMapName(preset.mapName);
+    setMapState(preset.mapState);
+    setGridColsInput(String(preset.mapState.cols));
+    setGridRowsInput(String(preset.mapState.rows));
+    addJournalEntry('map', `Загружена сохранённая сцена «${preset.name}».`);
+  };
+
+  const handleDeleteSavedMap = (presetId: string) => {
+    const presetIndex = savedMaps.findIndex((preset) => preset.id === presetId);
+    if (presetIndex <= 0) return;
+
+    const nextSavedMaps = savedMaps.filter((preset) => preset.id !== presetId);
+    const fallbackPreset = nextSavedMaps[Math.max(0, presetIndex - 1)] ?? nextSavedMaps[0] ?? null;
+
+    setSavedMaps(nextSavedMaps);
+
+    if (activeSavedMapId === presetId) {
+      if (fallbackPreset) {
+        handleLoadSavedMap(fallbackPreset);
+      } else {
+        setActiveSavedMapId(null);
+      }
+    }
+
+    addJournalEntry('map', 'Вкладка карты удалена.');
+  };
+
+  const handleResizeMap = () => {
+    const nextCols = clamp(Number(gridColsInput) || DEFAULT_COLS, MIN_GRID, MAX_GRID);
+    const nextRows = clamp(Number(gridRowsInput) || DEFAULT_ROWS, MIN_GRID, MAX_GRID);
+
+    setMapState((current) => ({
+      cols: nextCols,
+      rows: nextRows,
+      publicTiles: resizeTiles(current.publicTiles, current.cols, current.rows, nextCols, nextRows),
+      gmTiles: resizeTiles(current.gmTiles, current.cols, current.rows, nextCols, nextRows),
+    }));
+
+    setTokens((current) =>
+      current.map((token) => ({
+        ...token,
+        x: clamp(token.x, 0, nextCols - 1),
+        y: clamp(token.y, 0, nextRows - 1),
+      })),
+    );
+
+    addJournalEntry('map', `Размер карты изменён на ${nextCols}×${nextRows}.`);
   };
 
   const handleSendChat = () => {
@@ -538,15 +1203,15 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   };
 
   const handleRandomLoot = () => {
-    const nextLoot = lootPool[Math.floor(Math.random() * lootPool.length)];
+    const nextLoot = rollTreasureFromTables(lootCrBand);
     setLootResult(nextLoot);
-    addJournalEntry('loot', `Лут из dnd.su: ${nextLoot.name}. ${nextLoot.details}`);
+    addJournalEntry('loot', `Лут из таблицы dnd.su (${lootCrBand}): ${nextLoot.details} Ссылка: ${nextLoot.link}`);
   };
 
   const handleRandomEvent = () => {
     const nextEvent = randomEventPool[Math.floor(Math.random() * randomEventPool.length)];
     setEventResult(nextEvent);
-    addJournalEntry('event', `Событие из dnd.su: ${nextEvent.title}. ${nextEvent.description}`);
+    addJournalEntry('event', `Событие из dnd.su: ${nextEvent.title}. Ссылка: ${nextEvent.link}`);
   };
 
   const handleSheetChange = <K extends keyof CharacterSheet>(key: K, value: CharacterSheet[K]) => {
@@ -554,13 +1219,15 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
     setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? { ...sheet, [key]: value } : sheet)));
 
-    if (key === 'hp' || key === 'maxHp' || key === 'ac' || key === 'speed') {
+    if (key === 'hp' || key === 'maxHp' || key === 'ac' || key === 'speed' || key === 'name') {
       setTokens((current) =>
         current.map((token) => {
           if (token.sheetId !== selectedSheet.id) return token;
 
           return {
             ...token,
+            name: key === 'name' ? String(value) : token.name,
+            short: key === 'name' ? getTokenInitial(String(value)) : token.short,
             hp: key === 'hp' ? Number(value) : token.hp,
             maxHp: key === 'maxHp' ? Number(value) : token.maxHp,
             ac: key === 'ac' ? Number(value) : token.ac,
@@ -610,7 +1277,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     const nextIndex = playerTokens.length + 1;
     const tokenId = `player-${nextIndex}`;
     const sheetId = `sheet-${tokenId}`;
-    const name = `Игрок ${nextIndex}`;
+    const name = displayName || `Игрок ${nextIndex}`;
 
     const nextToken: RoomToken = {
       id: tokenId,
@@ -618,8 +1285,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       short: getTokenInitial(name),
       kind: 'player',
       color: 'rgb(96 165 250)',
-      x: 1 + (nextIndex % 4),
-      y: 1 + (nextIndex % 5),
+      x: clamp(1 + (nextIndex % 4), 0, cols - 1),
+      y: clamp(1 + (nextIndex % 5), 0, rows - 1),
       hp: 12,
       maxHp: 12,
       ac: 12,
@@ -627,6 +1294,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       owner: displayName,
       roleOwner: 'player',
       sheetId,
+      visionRadius: 3,
     };
 
     const nextSheet: CharacterSheet = {
@@ -680,8 +1348,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         short: getTokenInitial(characterName),
         kind: 'player',
         color: 'rgb(34 197 94)',
-        x: 1 + (nextIndex % 4),
-        y: 1 + (nextIndex % 5),
+        x: clamp(1 + (nextIndex % 4), 0, cols - 1),
+        y: clamp(1 + (nextIndex % 5), 0, rows - 1),
         hp,
         maxHp,
         ac,
@@ -689,6 +1357,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         owner: displayName,
         roleOwner: 'player',
         sheetId,
+        visionRadius: 3,
       };
 
       const nextSheet: CharacterSheet = {
@@ -718,21 +1387,35 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     }
   };
 
-  const paintedCells = mapTiles.filter((tile) => tile.terrain !== DEFAULT_TERRAIN).length;
-  const foggedCells = mapTiles.filter((tile) => tile.fog).length;
-  const obstacleCells = mapTiles.filter((tile) => tile.obstacle).length;
-  const textureCells = mapTiles.filter((tile) => tile.texture).length;
-  const furnitureCells = mapTiles.filter((tile) => tile.furniture).length;
+  const handleTokenSetting = (tokenId: string, key: 'gmOnly' | 'visionRadius', value: boolean | number) => {
+    if (role !== 'gm') return;
+    setTokens((current) =>
+      current.map((token) =>
+        token.id === tokenId
+          ? {
+              ...token,
+              [key]: key === 'visionRadius' ? Number(value) : value,
+            }
+          : token,
+      ),
+    );
+  };
+
+  const paintedCells = activeTiles.filter((tile) => tile.terrain !== DEFAULT_TERRAIN).length;
+  const foggedCells = activeTiles.filter((tile) => tile.fog).length;
+  const obstacleCells = activeTiles.filter((tile) => tile.obstacle).length;
+  const textureCells = activeTiles.filter((tile) => tile.texture).length;
+  const furnitureCells = activeTiles.filter((tile) => tile.furniture).length;
 
   return (
     <div className="min-h-screen px-4 py-4 md:px-6">
-      <div className="mx-auto flex max-w-[1700px] flex-col gap-4">
+      <div className="mx-auto flex max-w-[1800px] flex-col gap-4">
         <header className="card flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="text-sm text-slate-400">Комната / {roomId}</div>
-            <h1 className="text-2xl font-semibold text-white">Комната с паролем вместо отдельной демо-комнаты</h1>
+            <h1 className="text-2xl font-semibold text-white">Комната мастера с двумя картами и видимостью игроков</h1>
             <p className="mt-1 text-sm text-slate-400">
-              Первый вход по паролю становится мастером, следующие участники с тем же паролем заходят как игроки и создают лист вручную или через JSON с Long Story Short.
+              Мастер видит игровую карту и скрытую карту для тумана войны, НПС и секретов. Лут и события теперь ведут на конкретные ссылки dnd.su, а карта сохраняется локально в браузере.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -743,15 +1426,70 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               Загрузить карту
               <input type="file" accept="image/*" className="hidden" onChange={handleUploadMap} />
             </label>
+            <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
+              Загрузить JSON
+              <input type="file" accept="application/json" className="hidden" onChange={handleImportMapJson} />
+            </label>
+            <button onClick={handleExportMapJson} className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950">
+              Сохранить JSON
+            </button>
           </div>
         </header>
 
+        <section className="card p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-sm text-slate-400">Сохранённые сцены</div>
+              <div className="mt-1 text-sm text-slate-300">Каждая вкладка хранит пару карт: публичную для игроков и скрытую для мастера. При переключении меняются обе карты сразу.</div>
+            </div>
+            <div className="flex w-full max-w-xl gap-2">
+              <input
+                value={mapPresetName}
+                onChange={(event) => setMapPresetName(event.target.value)}
+                placeholder="Название вкладки карты"
+                className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+              />
+              <button onClick={handleSaveMap} className="rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">
+                Сохранить как вкладку
+              </button>
+              <button onClick={handleExportMapJson} className="rounded-full border border-white/10 px-4 py-3 text-sm font-medium text-slate-200">
+                Экспорт JSON
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {savedMaps.length ? (
+              savedMaps.map((preset, index) => (
+                <div key={preset.id} className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleLoadSavedMap(preset)}
+                    className={boardButtonClass(activeSavedMapId === preset.id)}
+                  >
+                    {preset.name}
+                  </button>
+                  {index > 0 ? (
+                    <button
+                      onClick={() => handleDeleteSavedMap(preset.id)}
+                      className="rounded-full border border-white/10 px-3 py-2 text-sm text-rose-300"
+                      aria-label={`Удалить вкладку ${preset.name}`}
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
+              ))
+            ) : (
+              <div className="text-sm text-slate-400">Пока нет сохранённых вкладок. Сохраните текущую сцену, чтобы быстро переключаться между наборами карт.</div>
+            )}
+          </div>
+        </section>
+
         {joinStep !== 'ready' ? (
-          <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <section className="grid gap-4 lg:grid-cols-2">
             <div className="card p-6">
-              <span className="badge">Вход в комнату</span>
-              <h2 className="mt-4 text-2xl font-semibold text-white">Одна комната, пароль и автоматическая роль</h2>
-              <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-300">
+              <span className="badge">Вход</span>
+              <h2 className="mt-4 text-2xl font-semibold text-white">Одна комната, один пароль, две роли</h2>
+              <p className="mt-3 text-sm text-slate-300">
                 Если комната ещё не создана, введённый пароль будет сохранён и этот вход станет мастером. Если комната уже существует, тот же пароль пустит внутрь как игрока.
               </p>
               <div className="mt-6 grid gap-3 md:grid-cols-2">
@@ -798,11 +1536,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   <div className="mt-4 space-y-3 text-sm text-slate-300">
                     <div className="rounded-2xl border border-white/10 px-4 py-3">
                       <div className="font-medium text-white">Мастер</div>
-                      <div className="mt-1">Задаёт пароль, загружает карту, рисует препятствия, текстуры, мебель и запускает dnd.su-инструменты.</div>
+                      <div className="mt-1">Задаёт размер карты, сохраняет карту, настраивает обзор игроков, управляет публичной и скрытой картой отдельно.</div>
                     </div>
                     <div className="rounded-2xl border border-white/10 px-4 py-3">
                       <div className="font-medium text-white">Игрок</div>
-                      <div className="mt-1">Заходит по тому же паролю, импортирует лист или заполняет его вручную, затем управляет своим токеном.</div>
+                      <div className="mt-1">Заходит по тому же паролю, импортирует лист или заполняет его вручную, затем управляет только своим токеном.</div>
                     </div>
                   </div>
                 </>
@@ -834,292 +1572,323 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)_420px]">
-          <aside className="space-y-4">
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Инструменты карты</h2>
-                <span className="badge">master map kit</span>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                {toolMeta.map((item) => (
-                  <button
-                    key={item.value}
-                    onClick={() => {
-                      setTool(item.value);
-                      if (item.layer) {
-                        setSelectedColor(layerPalette[item.layer][0]);
-                      }
-                    }}
-                    className={`rounded-2xl border px-3 py-2 ${tool === item.value ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`}
-                  >
-                    {item.label}
+        <section className="space-y-4">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="space-y-4">
+              <div className="card p-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-white">Инструменты карты</h2>
+                  <span className="badge">master map kit</span>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2 text-sm">
+                  <button className={boardButtonClass(activeBoard === 'public')} onClick={() => setActiveBoard('public')}>
+                    Публичная карта
                   </button>
-                ))}
-              </div>
-              <div className="mt-4">
-                <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Палитра активного слоя</div>
-                <div className="flex flex-wrap gap-2">
-                  {activePalette.map((color) => (
+                  {role === 'gm' ? (
+                    <button className={boardButtonClass(activeBoard === 'gm')} onClick={() => setActiveBoard('gm')}>
+                      Скрытая карта мастера
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                  {toolMeta.map((item) => (
                     <button
-                      key={`${tool}-${color}`}
-                      onClick={() => setSelectedColor(color)}
-                      className={`h-9 w-9 rounded-full border ${selectedColor === color ? 'border-white' : 'border-white/20'}`}
-                      style={{ backgroundColor: color }}
-                      aria-label={`Выбрать цвет ${color}`}
-                    />
+                      key={item.value}
+                      onClick={() => {
+                        setTool(item.value);
+                        if (item.layer) setSelectedColor(layerPalette[item.layer][0]);
+                      }}
+                      className={`rounded-2xl border px-3 py-2 ${tool === item.value ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4">
+                  <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Палитра активного слоя</div>
+                  <div className="flex flex-wrap gap-2">
+                    {activePalette.map((color) => (
+                      <button
+                        key={`${tool}-${color}`}
+                        onClick={() => setSelectedColor(color)}
+                        className={`h-9 w-9 rounded-full border ${selectedColor === color ? 'border-white' : 'border-white/20'}`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Выбрать цвет ${color}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-4 space-y-3 text-sm text-slate-300">
+                  <label className="block">
+                    <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Zoom</div>
+                    <input type="range" min="60" max="180" value={Math.round(zoom * 100)} onChange={(event) => setZoom(Number(event.target.value) / 100)} className="w-full" />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
+                    <div>Покрытие: {paintedCells}</div>
+                    <div>Fog: {foggedCells}</div>
+                    <div>Препятствия: {obstacleCells}</div>
+                    <div>Текстуры: {textureCells}</div>
+                    <div>Мебель: {furnitureCells}</div>
+                  </div>
+                </div>
+                {role === 'gm' ? (
+                  <div className="mt-4 rounded-2xl border border-white/10 p-3 text-sm text-slate-300">
+                    <div className="mb-3 text-xs uppercase tracking-wide text-slate-400">Размер поля</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input value={gridColsInput} onChange={(event) => setGridColsInput(event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white" placeholder="Колонки" />
+                      <input value={gridRowsInput} onChange={(event) => setGridRowsInput(event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white" placeholder="Строки" />
+                    </div>
+                    <button onClick={handleResizeMap} className="mt-3 w-full rounded-full bg-cyan-500 px-4 py-3 font-medium text-slate-950">
+                      Применить размер
+                    </button>
+                    <div className="mt-2 text-xs text-slate-400">Любой формат в диапазоне от {MIN_GRID}×{MIN_GRID} до {MAX_GRID}×{MAX_GRID}.</div>
+                  </div>
+                ) : null}
+                <button
+                  onClick={() => {
+                    setTilesForBoard(activeBoard, createEmptyMap(cols, rows));
+                    addJournalEntry('map', `Карта ${activeBoard === 'public' ? 'игроков' : 'мастера'} очищена до базовой сетки.`);
+                  }}
+                  className="mt-4 w-full rounded-full border border-white/10 px-4 py-3 text-sm text-slate-200"
+                >
+                  Очистить активную карту
+                </button>
+              </div>
+
+              <div className="card p-4">
+                <h2 className="text-lg font-semibold text-white">Токены</h2>
+                <div className="mt-4 space-y-3 text-sm">
+                  {tokens.map((token) => (
+                    <div key={token.id} className={`rounded-2xl border px-3 py-3 ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}>
+                      <button onClick={() => setSelectedTokenId(token.id)} className="w-full text-left">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="font-medium text-white">{token.name}</div>
+                            <div className="text-slate-400">{token.kind} • {cellCoordinate(token.x, token.y)}</div>
+                          </div>
+                          <span className="text-xs text-slate-300">HP {token.hp}/{token.maxHp}</span>
+                        </div>
+                      </button>
+                      {role === 'gm' ? (
+                        <div className="mt-3 grid gap-2 text-xs text-slate-300">
+                          <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2">
+                            <span>Скрыт от игроков</span>
+                            <input type="checkbox" checked={Boolean(token.gmOnly)} onChange={(event) => handleTokenSetting(token.id, 'gmOnly', event.target.checked)} />
+                          </label>
+                          {token.kind === 'player' ? (
+                            <label className="rounded-xl border border-white/10 px-3 py-2">
+                              <div className="mb-2">Обзор игрока: {token.visionRadius ?? 3} клетки</div>
+                              <input type="range" min="1" max="8" value={token.visionRadius ?? 3} onChange={(event) => handleTokenSetting(token.id, 'visionRadius', Number(event.target.value))} className="w-full" />
+                            </label>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               </div>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                <label className="block">
-                  <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Zoom</div>
-                  <input type="range" min="60" max="180" value={Math.round(zoom * 100)} onChange={(event) => setZoom(Number(event.target.value) / 100)} className="w-full" />
-                </label>
-                <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
-                  <div>Покрытие: {paintedCells}</div>
-                  <div>Fog: {foggedCells}</div>
-                  <div>Препятствия: {obstacleCells}</div>
-                  <div>Текстуры: {textureCells}</div>
-                  <div>Мебель: {furnitureCells}</div>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setMapTiles(createEmptyMap());
-                  addJournalEntry('map', 'Карта очищена до базовой сетки.');
-                }}
-                className="mt-4 w-full rounded-full border border-white/10 px-4 py-3 text-sm text-slate-200"
-              >
-                Очистить карту
-              </button>
             </div>
 
-            <div className="card p-4">
-              <h2 className="text-lg font-semibold text-white">Токены</h2>
-              <div className="mt-4 space-y-3 text-sm">
-                {tokens.map((token) => (
-                  <button
-                    key={token.id}
-                    onClick={() => setSelectedTokenId(token.id)}
-                    className={`w-full rounded-2xl border px-3 py-3 text-left ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-white">{token.name}</div>
-                        <div className="text-slate-400">{token.kind} • {cellCoordinate(token.x, token.y)}</div>
+            <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="card p-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-white">Лист персонажа</h2>
+                    <span className="badge">player editable</span>
+                  </div>
+
+                  {selectedSheet ? (
+                    <div className="mt-4 space-y-3 text-sm text-slate-200">
+                      <input value={selectedSheet.name} disabled={role !== 'player'} onChange={(event) => handleSheetChange('name', event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input value={selectedSheet.race} disabled={role !== 'player'} onChange={(event) => handleSheetChange('race', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
+                        <input value={selectedSheet.heroClass} disabled={role !== 'player'} onChange={(event) => handleSheetChange('heroClass', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
                       </div>
-                      <span className="text-xs text-slate-300">HP {token.hp}/{token.maxHp}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </aside>
-
-          <main className="space-y-4">
-            <div className="card flex flex-wrap items-center gap-3 px-4 py-3 text-sm text-slate-200">
-              <span className="badge">Инструмент: {tool}</span>
-              <span className="badge">Zoom: {Math.round(zoom * 100)}%</span>
-              <span className="badge">Роль: {role === 'gm' ? 'Мастер' : 'Игрок'}</span>
-              <span className="badge">Игрок редактирует только свой лист и свой токен</span>
-            </div>
-
-            <div className="card p-4">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Игровое поле</h2>
-                  <p className="text-sm text-slate-400">Карта масштабируется и поддерживает отдельные слои: покрытие, препятствия, текстуры, мебель и fog of war.</p>
-                </div>
-                <span className="badge">{GRID_COLS}×{GRID_ROWS}</span>
-              </div>
-
-              <div ref={boardViewportRef} className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/70 p-3">
-                <div
-                  ref={boardRef}
-                  onPointerDown={handleBoardPointerDown}
-                  className="relative aspect-[16/10] min-w-[760px] touch-none select-none overflow-hidden rounded-2xl border border-white/10 bg-slate-900"
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: `repeat(${GRID_COLS}, minmax(0, 1fr))`,
-                    gridTemplateRows: `repeat(${GRID_ROWS}, minmax(0, 1fr))`,
-                    transform: `scale(${zoom})`,
-                    transformOrigin: 'top left',
-                  }}
-                >
-                  {Array.from({ length: GRID_COLS * GRID_ROWS }, (_, index) => {
-                    const x = index % GRID_COLS;
-                    const y = Math.floor(index / GRID_COLS);
-                    const cell = mapTiles[index];
-                    return (
-                      <div key={`${x}-${y}`} className="relative border border-white/10" style={{ backgroundColor: cell.terrain }}>
-                        {cell.texture ? <div className="absolute inset-[18%] rounded-md opacity-40" style={{ backgroundColor: cell.texture }} /> : null}
-                        {cell.obstacle ? <div className="absolute inset-x-[15%] bottom-[15%] top-[15%] rounded-md border-2 opacity-90" style={{ borderColor: cell.obstacle, backgroundColor: `${cell.obstacle}33` }} /> : null}
-                        {cell.furniture ? <div className="absolute inset-x-[20%] inset-y-[32%] rounded-sm" style={{ backgroundColor: cell.furniture }} /> : null}
-                        {cell.fog ? <div className="absolute inset-0 bg-slate-950/70" /> : null}
+                      <div className="grid grid-cols-4 gap-2">
+                        <input type="number" disabled={role !== 'player'} value={selectedSheet.level} onChange={(event) => handleSheetChange('level', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
+                        <input type="number" disabled={role !== 'player'} value={selectedSheet.hp} onChange={(event) => handleSheetChange('hp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
+                        <input type="number" disabled={role !== 'player'} value={selectedSheet.maxHp} onChange={(event) => handleSheetChange('maxHp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
+                        <input type="number" disabled={role !== 'player'} value={selectedSheet.ac} onChange={(event) => handleSheetChange('ac', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
                       </div>
-                    );
-                  })}
-
-                  {tokens.map((token) => {
-                    const left = `calc(${((token.x + 0.5) / GRID_COLS) * 100}% - 1.5rem)`;
-                    const top = `calc(${((token.y + 0.5) / GRID_ROWS) * 100}% - 1.5rem)`;
-                    return (
-                      <button
-                        key={token.id}
-                        onPointerDown={handleTokenPointerDown(token.id)}
-                        className="absolute flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-semibold text-white shadow-lg"
-                        style={{
-                          left,
-                          top,
-                          borderColor: token.color,
-                          backgroundColor: `${token.color}33`,
-                          boxShadow: `0 0 24px ${token.color}55`,
-                        }}
-                      >
-                        {token.short}
+                      <input type="number" disabled={role !== 'player'} value={selectedSheet.speed} onChange={(event) => handleSheetChange('speed', Number(event.target.value))} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
+                      <textarea value={selectedSheet.spells} disabled={role !== 'player'} onChange={(event) => handleSheetChange('spells', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Заклинания" />
+                      <textarea value={selectedSheet.inventory} disabled={role !== 'player'} onChange={(event) => handleSheetChange('inventory', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Инвентарь" />
+                      <textarea value={selectedSheet.notes} disabled={role !== 'player'} onChange={(event) => handleSheetChange('notes', event.target.value)} rows={4} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Заметки персонажа" />
+                      <button onClick={() => addJournalEntry('sheet', `Лист ${selectedSheet.name} обновлён.`)} className="w-full rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">
+                        Зафиксировать изменение листа
                       </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="card p-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white">Чат / заметка</h2>
-                  <span className="text-sm text-slate-400">локально в журнал</span>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={chatInput}
-                    onChange={(event) => setChatInput(event.target.value)}
-                    placeholder="Например: Борин идёт к двери"
-                    className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
-                  />
-                  <button onClick={handleSendChat} className="rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
-                    Отправить
-                  </button>
-                </div>
-              </div>
-
-              <div className="card p-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white">Кубы</h2>
-                  <span className="text-sm text-slate-400">NdM±K</span>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={diceFormula}
-                    onChange={(event) => setDiceFormula(event.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none"
-                  />
-                  <button onClick={handleRoll} className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950">
-                    Roll
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="card p-4">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Журнал действий</h2>
-                <span className="badge">последние 16 событий</span>
-              </div>
-              <div className="space-y-3 text-sm">
-                {journal.map((entry) => (
-                  <div key={entry.id} className="rounded-2xl border border-white/8 px-4 py-3">
-                    <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span>{entry.type}</span>
-                      <span>{entry.time}</span>
                     </div>
-                    <p className="mt-2 text-slate-200">{entry.text}</p>
+                  ) : (
+                    <div className="mt-4 rounded-2xl border border-white/8 px-4 py-3 text-sm text-slate-300">
+                      У выбранного токена нет листа персонажа.
+                    </div>
+                  )}
+                </div>
+
+                <div className="card p-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-white">Инструменты мастера</h2>
+                    <span className="badge">dnd.su only</span>
                   </div>
-                ))}
+                  <div className="mt-4 space-y-3 text-sm text-slate-300">
+                    <div className="rounded-2xl border border-white/8 px-4 py-3">
+                      <div className="font-medium text-white">Последний лут</div>
+                      <div className="mt-1">{lootResult.name}</div>
+                      <div className="mt-1 text-slate-400">{lootResult.details}</div>
+                      <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={lootResult.link} target="_blank" rel="noreferrer">{lootResult.link}</a>
+                    </div>
+                    <label className="block rounded-2xl border border-white/8 px-4 py-3">
+                      <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Таблица сокровищ dnd.su</div>
+                      <select value={lootCrBand} onChange={(event) => setLootCrBand(event.target.value as LootCrBand)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white">
+                        <option value="0-4">Показатель опасности 0–4</option>
+                        <option value="5-10">Показатель опасности 5–10</option>
+                        <option value="11-16">Показатель опасности 11–16</option>
+                        <option value="17+">Показатель опасности 17+</option>
+                      </select>
+                    </label>
+                    <button onClick={handleRandomLoot} className="w-full rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950">
+                      Сгенерировать лут из таблицы
+                    </button>
+                    <div className="rounded-2xl border border-white/8 px-4 py-3">
+                      <div className="font-medium text-white">Последнее событие</div>
+                      <div className="mt-1">{eventResult.title}</div>
+                      <div className="mt-1 text-slate-400">{eventResult.description}</div>
+                      <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={eventResult.link} target="_blank" rel="noreferrer">{eventResult.link}</a>
+                    </div>
+                    <button onClick={handleRandomEvent} className="w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
+                      Случайное событие
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="card p-4">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-white">Чат / заметка</h2>
+                    <span className="text-sm text-slate-400">локально в журнал</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={chatInput}
+                      onChange={(event) => setChatInput(event.target.value)}
+                      placeholder="Например: Борин идёт к двери"
+                      className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+                    />
+                    <button onClick={handleSendChat} className="rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
+                      Отправить
+                    </button>
+                  </div>
+                </div>
+
+                <div className="card p-4">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-white">Кубы</h2>
+                    <span className="text-sm text-slate-400">NdM±K</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={diceFormula}
+                      onChange={(event) => setDiceFormula(event.target.value)}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none"
+                    />
+                    <button onClick={handleRoll} className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950">
+                      Roll
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card p-4">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-white">Журнал действий</h2>
+                  <span className="badge">последние 20 событий</span>
+                </div>
+                <div className="space-y-3 text-sm">
+                  {journal.map((entry) => (
+                    <div key={entry.id} className="rounded-2xl border border-white/8 px-4 py-3">
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>{entry.type}</span>
+                        <span>{entry.time}</span>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-slate-200">{entry.text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card p-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-white">Виджет местности</h2>
+                  <span className="badge">regional map</span>
+                </div>
+                <p className="mt-3 text-sm text-slate-300">
+                  Отдельный виджет с картой реальной местности по аналогии с waterdeep viewer — можно держать региональный контекст рядом с тактической сценой.
+                </p>
+                <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
+                  <iframe
+                    title="Карта местности Waterdeep style"
+                    src="https://www.openstreetmap.org/export/embed.html?bbox=37.55%2C55.70%2C37.75%2C55.82&amp;layer=mapnik"
+                    className="h-[320px] w-full"
+                  />
+                </div>
+                <div className="mt-3 text-xs text-slate-400">Встраивание сделано как внешний map widget, который можно заменить на любой конкретный регион кампании.</div>
               </div>
             </div>
-          </main>
+          </div>
 
-          <aside className="space-y-4">
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Лист персонажа</h2>
-                <span className="badge">player editable</span>
-              </div>
+          <div className="card flex flex-wrap items-center gap-3 px-4 py-3 text-sm text-slate-200">
+            <span className="badge">Инструмент: {tool}</span>
+            <span className="badge">Редактируется: {activeBoard === 'public' ? 'публичная карта' : 'скрытая карта'}</span>
+            <span className="badge">Видимость игроков: {playerTokens.map((token) => `${token.name} ${token.visionRadius ?? 3}`).join(' • ') || 'нет'}</span>
+          </div>
 
-              {selectedSheet ? (
-                <div className="mt-4 space-y-3 text-sm text-slate-200">
-                  <input value={selectedSheet.name} disabled={role !== 'player'} onChange={(event) => handleSheetChange('name', event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input value={selectedSheet.race} disabled={role !== 'player'} onChange={(event) => handleSheetChange('race', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
-                    <input value={selectedSheet.heroClass} disabled={role !== 'player'} onChange={(event) => handleSheetChange('heroClass', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    <input type="number" disabled={role !== 'player'} value={selectedSheet.level} onChange={(event) => handleSheetChange('level', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                    <input type="number" disabled={role !== 'player'} value={selectedSheet.hp} onChange={(event) => handleSheetChange('hp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                    <input type="number" disabled={role !== 'player'} value={selectedSheet.maxHp} onChange={(event) => handleSheetChange('maxHp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                    <input type="number" disabled={role !== 'player'} value={selectedSheet.ac} onChange={(event) => handleSheetChange('ac', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                  </div>
-                  <input type="number" disabled={role !== 'player'} value={selectedSheet.speed} onChange={(event) => handleSheetChange('speed', Number(event.target.value))} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
-                  <textarea value={selectedSheet.spells} disabled={role !== 'player'} onChange={(event) => handleSheetChange('spells', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Заклинания" />
-                  <textarea value={selectedSheet.inventory} disabled={role !== 'player'} onChange={(event) => handleSheetChange('inventory', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Инвентарь" />
-                  <textarea value={selectedSheet.notes} disabled={role !== 'player'} onChange={(event) => handleSheetChange('notes', event.target.value)} rows={4} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Заметки персонажа" />
-                  <button onClick={() => addJournalEntry('sheet', `Лист ${selectedSheet.name} обновлён.`)} className="w-full rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">
-                    Зафиксировать изменение листа
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-4 rounded-2xl border border-white/8 px-4 py-3 text-sm text-slate-300">
-                  У выбранного токена нет листа персонажа.
-                </div>
-              )}
-            </div>
-
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Инструменты мастера</h2>
-                <span className="badge">dnd.su only</span>
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                <div className="rounded-2xl border border-white/8 px-4 py-3">
-                  <div className="font-medium text-white">Последний лут</div>
-                  <div className="mt-1">{lootResult.name}</div>
-                  <a className="mt-2 inline-flex text-cyan-300 underline" href={lootResult.link} target="_blank" rel="noreferrer">Источник: dnd.su</a>
-                </div>
-                <button onClick={handleRandomLoot} className="w-full rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950">
-                  Сгенерировать лут
-                </button>
-                <div className="rounded-2xl border border-white/8 px-4 py-3">
-                  <div className="font-medium text-white">Последнее событие</div>
-                  <div className="mt-1">{eventResult.title}</div>
-                  <div className="mt-1 text-slate-400">{eventResult.description}</div>
-                  <a className="mt-2 inline-flex text-cyan-300 underline" href={eventResult.link} target="_blank" rel="noreferrer">Источник: dnd.su</a>
-                </div>
-                <button onClick={handleRandomEvent} className="w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
-                  Случайное событие
-                </button>
-              </div>
-            </div>
-
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Виджет местности</h2>
-                <span className="badge">regional map</span>
-              </div>
-              <p className="mt-3 text-sm text-slate-300">
-                Отдельный виджет с картой реальной местности по аналогии с waterdeep viewer — можно держать региональный контекст рядом с тактической сценой.
-              </p>
-              <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
-                <iframe
-                  title="Карта местности Waterdeep style"
-                  src="https://www.openstreetmap.org/export/embed.html?bbox=37.55%2C55.70%2C37.75%2C55.82&amp;layer=mapnik"
-                  className="h-[320px] w-full"
+          {role === 'gm' ? (
+            <div className="space-y-4">
+              <div id="battle-board-public">
+                <Board
+                  title="Публичная карта"
+                  subtitle="То, что увидят игроки с учётом публичных слоёв, fog of war и радиуса обзора игроков."
+                  cols={cols}
+                  rows={rows}
+                  tiles={mapState.publicTiles}
+                  tokens={visibleTokensForPlayers}
+                  visibleMask={playerVisibilityMask}
+                  zoom={zoom}
+                  onBoardPointerDown={handleBoardPointerDown('public')}
+                  onTokenPointerDown={handleTokenPointerDown}
                 />
               </div>
-              <div className="mt-3 text-xs text-slate-400">Встраивание сделано как внешний map widget, который можно заменить на любой конкретный регион кампании.</div>
+              <div id="battle-board-gm">
+                <Board
+                  title="Скрытая карта мастера"
+                  subtitle="Здесь мастер держит НПС, ловушки, тайники и будущие сцены до их открытия игрокам."
+                  cols={cols}
+                  rows={rows}
+                  tiles={mapState.gmTiles}
+                  tokens={tokens}
+                  zoom={zoom}
+                  onBoardPointerDown={handleBoardPointerDown('gm')}
+                  onTokenPointerDown={handleTokenPointerDown}
+                />
+              </div>
             </div>
-          </aside>
+          ) : (
+            <div id="battle-board-public">
+              <Board
+                title="Игровое поле"
+                subtitle="Игрок видит только публичную карту и только те клетки, которые открывает обзор персонажей."
+                cols={cols}
+                rows={rows}
+                tiles={mapState.publicTiles}
+                tokens={visibleTokensForPlayers}
+                visibleMask={playerVisibilityMask}
+                zoom={zoom}
+                onBoardPointerDown={handleBoardPointerDown('public')}
+                onTokenPointerDown={handleTokenPointerDown}
+              />
+            </div>
+          )}
         </section>
       </div>
     </div>
