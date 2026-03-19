@@ -1013,9 +1013,29 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setMapName(file.name.replace(/\.[^.]+$/, ''));
-    setMapPresetName(file.name.replace(/\.[^.]+$/, ''));
-    addJournalEntry('map', `Загружена карта «${file.name}».`);
+    const nextName = file.name.replace(/\.[^.]+$/, '');
+    const nextPresetId = `map-${Date.now()}`;
+    const nextMapState: MapState = {
+      cols,
+      rows,
+      publicTiles: createEmptyMap(cols, rows),
+      gmTiles: createEmptyMap(cols, rows),
+    };
+    const nextPreset: SavedMapPreset = {
+      id: nextPresetId,
+      name: nextName,
+      mapName: nextName,
+      mapState: nextMapState,
+    };
+    const nextSavedMaps = [...savedMaps, nextPreset];
+
+    setMapName(nextName);
+    setMapPresetName(nextName);
+    setMapState(nextMapState);
+    setSavedMaps(nextSavedMaps);
+    setActiveSavedMapId(nextPresetId);
+    addJournalEntry('map', `Загружена карта «${file.name}» и создана новая вкладка.`);
+    event.target.value = '';
   };
 
   const handleSaveMap = () => {
@@ -1118,6 +1138,26 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setGridColsInput(String(preset.mapState.cols));
     setGridRowsInput(String(preset.mapState.rows));
     addJournalEntry('map', `Загружена сохранённая сцена «${preset.name}».`);
+  };
+
+  const handleDeleteSavedMap = (presetId: string) => {
+    const presetIndex = savedMaps.findIndex((preset) => preset.id === presetId);
+    if (presetIndex <= 0) return;
+
+    const nextSavedMaps = savedMaps.filter((preset) => preset.id !== presetId);
+    const fallbackPreset = nextSavedMaps[Math.max(0, presetIndex - 1)] ?? nextSavedMaps[0] ?? null;
+
+    setSavedMaps(nextSavedMaps);
+
+    if (activeSavedMapId === presetId) {
+      if (fallbackPreset) {
+        handleLoadSavedMap(fallbackPreset);
+      } else {
+        setActiveSavedMapId(null);
+      }
+    }
+
+    addJournalEntry('map', 'Вкладка карты удалена.');
   };
 
   const handleResizeMap = () => {
@@ -1419,14 +1459,24 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {savedMaps.length ? (
-              savedMaps.map((preset) => (
-                <button
-                  key={preset.id}
-                  onClick={() => handleLoadSavedMap(preset)}
-                  className={boardButtonClass(activeSavedMapId === preset.id)}
-                >
-                  {preset.name}
-                </button>
+              savedMaps.map((preset, index) => (
+                <div key={preset.id} className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleLoadSavedMap(preset)}
+                    className={boardButtonClass(activeSavedMapId === preset.id)}
+                  >
+                    {preset.name}
+                  </button>
+                  {index > 0 ? (
+                    <button
+                      onClick={() => handleDeleteSavedMap(preset.id)}
+                      className="rounded-full border border-white/10 px-3 py-2 text-sm text-rose-300"
+                      aria-label={`Удалить вкладку ${preset.name}`}
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
               ))
             ) : (
               <div className="text-sm text-slate-400">Пока нет сохранённых вкладок. Сохраните текущую сцену, чтобы быстро переключаться между наборами карт.</div>
