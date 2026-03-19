@@ -17,6 +17,7 @@ type DrawingTool = 'move' | 'terrain' | 'obstacle' | 'texture' | 'furniture' | '
 type LayerKind = 'terrain' | 'obstacle' | 'texture' | 'furniture';
 type TokenKind = 'player' | 'npc' | 'monster' | 'object';
 type BoardKind = 'public' | 'gm';
+type LootCrBand = '0-4' | '5-10' | '11-16' | '17+';
 
 type RoomToken = {
   id: string;
@@ -88,6 +89,12 @@ type MapState = {
   gmTiles: CellData[];
 };
 
+type LootResult = {
+  name: string;
+  details: string;
+  link: string;
+};
+
 type SavedRoomState = {
   mapName: string;
   mapState: MapState;
@@ -140,23 +147,49 @@ const randomEventPool = [
   },
 ];
 
-const lootPool = [
-  {
-    name: 'Сокровищница: монеты, безделушки и редкие предметы',
-    details: 'Прямая ссылка на dnd.su-генератор добычи и сокровищницу для быстрого лута без ручного перебора таблиц.',
-    link: 'https://dnd.su/scrolls/',
-  },
-  {
-    name: 'Тайник по таблицам сокровищ',
-    details: 'Прямая ссылка на статью “Сокровищница”, если мастер хочет опираться именно на таблицы и диапазоны бросков.',
-    link: 'https://www.dnd.su/articles/inventory/74-treasury/',
-  },
-  {
-    name: 'Инвентарь и предметные находки',
-    details: 'Прямая ссылка на общий раздел dnd.su с инвентарём, безделушками и предметами для тематического лута.',
-    link: 'https://dnd.su/articles/inventory/',
-  },
+const treasuryArticleLink = 'https://www.dnd.su/articles/inventory/74-treasury/';
+
+const treasureCoinTables: Record<LootCrBand, Array<{ range: [number, number]; coins: string[] }>> = {
+  '0-4': [
+    { range: [1, 30], coins: ['5к6 мм'] },
+    { range: [31, 60], coins: ['4к6 см'] },
+    { range: [61, 70], coins: ['3к6 эм'] },
+    { range: [71, 95], coins: ['3к6 зм'] },
+    { range: [96, 100], coins: ['1к6 пм'] },
+  ],
+  '5-10': [
+    { range: [1, 30], coins: ['4к6 × 100 мм', '1к6 × 10 эм'] },
+    { range: [31, 60], coins: ['6к6 × 10 см', '2к6 × 10 зм'] },
+    { range: [61, 70], coins: ['3к6 × 10 эм', '2к6 × 10 зм'] },
+    { range: [71, 95], coins: ['4к6 × 10 зм'] },
+    { range: [96, 100], coins: ['2к6 × 10 зм', '3к6 пм'] },
+  ],
+  '11-16': [
+    { range: [1, 20], coins: ['4к6 × 100 см', '1к6 × 100 зм'] },
+    { range: [21, 35], coins: ['1к6 × 100 эм', '1к6 × 100 зм'] },
+    { range: [36, 75], coins: ['2к6 × 100 зм', '1к6 × 10 пм'] },
+    { range: [76, 100], coins: ['2к6 × 100 зм', '2к6 × 10 пм'] },
+  ],
+  '17+': [
+    { range: [1, 15], coins: ['2к6 × 1000 эм', '8к6 × 100 зм'] },
+    { range: [16, 55], coins: ['1к6 × 1000 зм', '1к6 × 100 пм'] },
+    { range: [56, 100], coins: ['1к6 × 1000 зм', '2к6 × 100 пм'] },
+  ],
+};
+
+const gemTables: Array<{ value: number; items: string[] }> = [
+  { value: 10, items: ['Азурит', 'Бирюза', 'Гематит', 'Глазчатый агат', 'Голубой кварц', 'Лазурит', 'Малахит', 'Моховой агат', 'Обсидиан', 'Полосчатый агат', 'Родохрозит', 'Тигровый глаз'] },
+  { value: 50, items: ['Гелиотроп', 'Звёздчатый розовый кварц', 'Кварц', 'Лунный камень', 'Оникс', 'Сардоникс', 'Сердолик', 'Халцедон', 'Хризопраз', 'Циркон', 'Цитрин', 'Яшма'] },
+  { value: 100, items: ['Аметист', 'Гагат', 'Гранат', 'Жемчуг', 'Коралл', 'Нефрит', 'Турмалин', 'Хризоберилл', 'Шпинель', 'Янтарь'] },
+  { value: 500, items: ['Аквамарин', 'Александрит', 'Синяя шпинель', 'Топаз', 'Хризолит', 'Чёрный жемчуг'] },
+  { value: 1000, items: ['Голубой сапфир', 'Жёлтый сапфир', 'Огненный опал', 'Опал', 'Звёздчатый рубин', 'Звёздчатый сапфир', 'Изумруд', 'Чёрный опал'] },
 ];
+
+const randomLootDefault: LootResult = {
+  name: 'Сокровищница по таблицам dnd.su',
+  details: 'Лут генерируется по таблицам статьи “Сокровищница”: монеты и, иногда, драгоценный камень из той же статьи.',
+  link: treasuryArticleLink,
+};
 
 const initialTokens: RoomToken[] = [
   {
@@ -311,6 +344,29 @@ function rollFormula(formula: string) {
   const total = rolls.reduce((sum, roll) => sum + roll, 0) + modifier;
 
   return { count, sides, modifier, rolls, total };
+}
+
+function rollDie(sides: number) {
+  return Math.floor(Math.random() * sides) + 1;
+}
+
+function rollTreasureFromTables(crBand: LootCrBand): LootResult {
+  const d100 = rollDie(100);
+  const row = treasureCoinTables[crBand].find((entry) => d100 >= entry.range[0] && d100 <= entry.range[1]) ?? treasureCoinTables[crBand][0];
+  const gemRoll = rollDie(100);
+  const gemBucket = gemRoll >= 85 ? gemTables[Math.floor(Math.random() * gemTables.length)] : null;
+  const gemItem = gemBucket ? gemBucket.items[Math.floor(Math.random() * gemBucket.items.length)] : null;
+
+  return {
+    name: `Клад по таблице ПО ${crBand}`,
+    details: [
+      `Бросок к100 по монетам: ${d100}.`,
+      `Монеты: ${row.coins.join(', ')}.`,
+      gemBucket && gemItem ? `Дополнительно: ${gemItem} стоимостью ${gemBucket.value} зм.` : 'Дополнительно: без драгоценных камней в этом броске.',
+      'Источник: таблицы статьи “Сокровищница” на dnd.su.',
+    ].join(' '),
+    link: treasuryArticleLink,
+  };
 }
 
 function getCellIndex(x: number, y: number, cols: number) {
@@ -518,7 +574,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [draggingTokenId, setDraggingTokenId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [diceFormula, setDiceFormula] = useState('1d20+5');
-  const [lootResult, setLootResult] = useState(lootPool[0]);
+  const [lootCrBand, setLootCrBand] = useState<LootCrBand>('0-4');
+  const [lootResult, setLootResult] = useState<LootResult>(randomLootDefault);
   const [eventResult, setEventResult] = useState(randomEventPool[0]);
   const [zoom, setZoom] = useState(1);
   const [gridColsInput, setGridColsInput] = useState(String(DEFAULT_COLS));
@@ -782,9 +839,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   };
 
   const handleRandomLoot = () => {
-    const nextLoot = lootPool[Math.floor(Math.random() * lootPool.length)];
+    const nextLoot = rollTreasureFromTables(lootCrBand);
     setLootResult(nextLoot);
-    addJournalEntry('loot', `Лут из dnd.su: ${nextLoot.name}. Ссылка: ${nextLoot.link}`);
+    addJournalEntry('loot', `Лут из таблицы dnd.su (${lootCrBand}): ${nextLoot.details} Ссылка: ${nextLoot.link}`);
   };
 
   const handleRandomEvent = () => {
@@ -1099,164 +1156,283 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_430px]">
-          <aside className="space-y-4">
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Инструменты карты</h2>
-                <span className="badge">master map kit</span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2 text-sm">
-                <button className={boardButtonClass(activeBoard === 'public')} onClick={() => setActiveBoard('public')}>
-                  Публичная карта
-                </button>
-                {role === 'gm' ? (
-                  <button className={boardButtonClass(activeBoard === 'gm')} onClick={() => setActiveBoard('gm')}>
-                    Скрытая карта мастера
+        <section className="space-y-4">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="space-y-4">
+              <div className="card p-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-white">Инструменты карты</h2>
+                  <span className="badge">master map kit</span>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2 text-sm">
+                  <button className={boardButtonClass(activeBoard === 'public')} onClick={() => setActiveBoard('public')}>
+                    Публичная карта
                   </button>
-                ) : null}
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                {toolMeta.map((item) => (
-                  <button
-                    key={item.value}
-                    onClick={() => {
-                      setTool(item.value);
-                      if (item.layer) setSelectedColor(layerPalette[item.layer][0]);
-                    }}
-                    className={`rounded-2xl border px-3 py-2 ${tool === item.value ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-4">
-                <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Палитра активного слоя</div>
-                <div className="flex flex-wrap gap-2">
-                  {activePalette.map((color) => (
+                  {role === 'gm' ? (
+                    <button className={boardButtonClass(activeBoard === 'gm')} onClick={() => setActiveBoard('gm')}>
+                      Скрытая карта мастера
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                  {toolMeta.map((item) => (
                     <button
-                      key={`${tool}-${color}`}
-                      onClick={() => setSelectedColor(color)}
-                      className={`h-9 w-9 rounded-full border ${selectedColor === color ? 'border-white' : 'border-white/20'}`}
-                      style={{ backgroundColor: color }}
-                      aria-label={`Выбрать цвет ${color}`}
-                    />
+                      key={item.value}
+                      onClick={() => {
+                        setTool(item.value);
+                        if (item.layer) setSelectedColor(layerPalette[item.layer][0]);
+                      }}
+                      className={`rounded-2xl border px-3 py-2 ${tool === item.value ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4">
+                  <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Палитра активного слоя</div>
+                  <div className="flex flex-wrap gap-2">
+                    {activePalette.map((color) => (
+                      <button
+                        key={`${tool}-${color}`}
+                        onClick={() => setSelectedColor(color)}
+                        className={`h-9 w-9 rounded-full border ${selectedColor === color ? 'border-white' : 'border-white/20'}`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Выбрать цвет ${color}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-4 space-y-3 text-sm text-slate-300">
+                  <label className="block">
+                    <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Zoom</div>
+                    <input type="range" min="60" max="180" value={Math.round(zoom * 100)} onChange={(event) => setZoom(Number(event.target.value) / 100)} className="w-full" />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
+                    <div>Покрытие: {paintedCells}</div>
+                    <div>Fog: {foggedCells}</div>
+                    <div>Препятствия: {obstacleCells}</div>
+                    <div>Текстуры: {textureCells}</div>
+                    <div>Мебель: {furnitureCells}</div>
+                  </div>
+                </div>
+                {role === 'gm' ? (
+                  <div className="mt-4 rounded-2xl border border-white/10 p-3 text-sm text-slate-300">
+                    <div className="mb-3 text-xs uppercase tracking-wide text-slate-400">Размер поля</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input value={gridColsInput} onChange={(event) => setGridColsInput(event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white" placeholder="Колонки" />
+                      <input value={gridRowsInput} onChange={(event) => setGridRowsInput(event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white" placeholder="Строки" />
+                    </div>
+                    <button onClick={handleResizeMap} className="mt-3 w-full rounded-full bg-cyan-500 px-4 py-3 font-medium text-slate-950">
+                      Применить размер
+                    </button>
+                    <div className="mt-2 text-xs text-slate-400">Любой формат в диапазоне от {MIN_GRID}×{MIN_GRID} до {MAX_GRID}×{MAX_GRID}.</div>
+                  </div>
+                ) : null}
+                <button
+                  onClick={() => {
+                    setTilesForBoard(activeBoard, createEmptyMap(cols, rows));
+                    addJournalEntry('map', `Карта ${activeBoard === 'public' ? 'игроков' : 'мастера'} очищена до базовой сетки.`);
+                  }}
+                  className="mt-4 w-full rounded-full border border-white/10 px-4 py-3 text-sm text-slate-200"
+                >
+                  Очистить активную карту
+                </button>
+              </div>
+
+              <div className="card p-4">
+                <h2 className="text-lg font-semibold text-white">Токены</h2>
+                <div className="mt-4 space-y-3 text-sm">
+                  {tokens.map((token) => (
+                    <div key={token.id} className={`rounded-2xl border px-3 py-3 ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}>
+                      <button onClick={() => setSelectedTokenId(token.id)} className="w-full text-left">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="font-medium text-white">{token.name}</div>
+                            <div className="text-slate-400">{token.kind} • {cellCoordinate(token.x, token.y)}</div>
+                          </div>
+                          <span className="text-xs text-slate-300">HP {token.hp}/{token.maxHp}</span>
+                        </div>
+                      </button>
+                      {role === 'gm' ? (
+                        <div className="mt-3 grid gap-2 text-xs text-slate-300">
+                          <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2">
+                            <span>Скрыт от игроков</span>
+                            <input type="checkbox" checked={Boolean(token.gmOnly)} onChange={(event) => handleTokenSetting(token.id, 'gmOnly', event.target.checked)} />
+                          </label>
+                          {token.kind === 'player' ? (
+                            <label className="rounded-xl border border-white/10 px-3 py-2">
+                              <div className="mb-2">Обзор игрока: {token.visionRadius ?? 3} клетки</div>
+                              <input type="range" min="1" max="8" value={token.visionRadius ?? 3} onChange={(event) => handleTokenSetting(token.id, 'visionRadius', Number(event.target.value))} className="w-full" />
+                            </label>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               </div>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                <label className="block">
-                  <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Zoom</div>
-                  <input type="range" min="60" max="180" value={Math.round(zoom * 100)} onChange={(event) => setZoom(Number(event.target.value) / 100)} className="w-full" />
-                </label>
-                <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
-                  <div>Покрытие: {paintedCells}</div>
-                  <div>Fog: {foggedCells}</div>
-                  <div>Препятствия: {obstacleCells}</div>
-                  <div>Текстуры: {textureCells}</div>
-                  <div>Мебель: {furnitureCells}</div>
-                </div>
-              </div>
-              {role === 'gm' ? (
-                <div className="mt-4 rounded-2xl border border-white/10 p-3 text-sm text-slate-300">
-                  <div className="mb-3 text-xs uppercase tracking-wide text-slate-400">Размер поля</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input value={gridColsInput} onChange={(event) => setGridColsInput(event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white" placeholder="Колонки" />
-                    <input value={gridRowsInput} onChange={(event) => setGridRowsInput(event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white" placeholder="Строки" />
-                  </div>
-                  <button onClick={handleResizeMap} className="mt-3 w-full rounded-full bg-cyan-500 px-4 py-3 font-medium text-slate-950">
-                    Применить размер
-                  </button>
-                  <div className="mt-2 text-xs text-slate-400">Любой формат в диапазоне от {MIN_GRID}×{MIN_GRID} до {MAX_GRID}×{MAX_GRID}.</div>
-                </div>
-              ) : null}
-              <button
-                onClick={() => {
-                  setTilesForBoard(activeBoard, createEmptyMap(cols, rows));
-                  addJournalEntry('map', `Карта ${activeBoard === 'public' ? 'игроков' : 'мастера'} очищена до базовой сетки.`);
-                }}
-                className="mt-4 w-full rounded-full border border-white/10 px-4 py-3 text-sm text-slate-200"
-              >
-                Очистить активную карту
-              </button>
             </div>
 
-            <div className="card p-4">
-              <h2 className="text-lg font-semibold text-white">Токены</h2>
-              <div className="mt-4 space-y-3 text-sm">
-                {tokens.map((token) => (
-                  <div key={token.id} className={`rounded-2xl border px-3 py-3 ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}>
-                    <button onClick={() => setSelectedTokenId(token.id)} className="w-full text-left">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="font-medium text-white">{token.name}</div>
-                          <div className="text-slate-400">{token.kind} • {cellCoordinate(token.x, token.y)}</div>
-                        </div>
-                        <span className="text-xs text-slate-300">HP {token.hp}/{token.maxHp}</span>
+            <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="card p-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-white">Лист персонажа</h2>
+                    <span className="badge">player editable</span>
+                  </div>
+
+                  {selectedSheet ? (
+                    <div className="mt-4 space-y-3 text-sm text-slate-200">
+                      <input value={selectedSheet.name} disabled={role !== 'player'} onChange={(event) => handleSheetChange('name', event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input value={selectedSheet.race} disabled={role !== 'player'} onChange={(event) => handleSheetChange('race', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
+                        <input value={selectedSheet.heroClass} disabled={role !== 'player'} onChange={(event) => handleSheetChange('heroClass', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
                       </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        <input type="number" disabled={role !== 'player'} value={selectedSheet.level} onChange={(event) => handleSheetChange('level', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
+                        <input type="number" disabled={role !== 'player'} value={selectedSheet.hp} onChange={(event) => handleSheetChange('hp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
+                        <input type="number" disabled={role !== 'player'} value={selectedSheet.maxHp} onChange={(event) => handleSheetChange('maxHp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
+                        <input type="number" disabled={role !== 'player'} value={selectedSheet.ac} onChange={(event) => handleSheetChange('ac', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
+                      </div>
+                      <input type="number" disabled={role !== 'player'} value={selectedSheet.speed} onChange={(event) => handleSheetChange('speed', Number(event.target.value))} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
+                      <textarea value={selectedSheet.spells} disabled={role !== 'player'} onChange={(event) => handleSheetChange('spells', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Заклинания" />
+                      <textarea value={selectedSheet.inventory} disabled={role !== 'player'} onChange={(event) => handleSheetChange('inventory', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Инвентарь" />
+                      <textarea value={selectedSheet.notes} disabled={role !== 'player'} onChange={(event) => handleSheetChange('notes', event.target.value)} rows={4} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Заметки персонажа" />
+                      <button onClick={() => addJournalEntry('sheet', `Лист ${selectedSheet.name} обновлён.`)} className="w-full rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">
+                        Зафиксировать изменение листа
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-2xl border border-white/8 px-4 py-3 text-sm text-slate-300">
+                      У выбранного токена нет листа персонажа.
+                    </div>
+                  )}
+                </div>
+
+                <div className="card p-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-white">Инструменты мастера</h2>
+                    <span className="badge">dnd.su only</span>
+                  </div>
+                  <div className="mt-4 space-y-3 text-sm text-slate-300">
+                    <div className="rounded-2xl border border-white/8 px-4 py-3">
+                      <div className="font-medium text-white">Последний лут</div>
+                      <div className="mt-1">{lootResult.name}</div>
+                      <div className="mt-1 text-slate-400">{lootResult.details}</div>
+                      <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={lootResult.link} target="_blank" rel="noreferrer">{lootResult.link}</a>
+                    </div>
+                    <label className="block rounded-2xl border border-white/8 px-4 py-3">
+                      <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Таблица сокровищ dnd.su</div>
+                      <select value={lootCrBand} onChange={(event) => setLootCrBand(event.target.value as LootCrBand)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white">
+                        <option value="0-4">Показатель опасности 0–4</option>
+                        <option value="5-10">Показатель опасности 5–10</option>
+                        <option value="11-16">Показатель опасности 11–16</option>
+                        <option value="17+">Показатель опасности 17+</option>
+                      </select>
+                    </label>
+                    <button onClick={handleRandomLoot} className="w-full rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950">
+                      Сгенерировать лут из таблицы
                     </button>
-                    {role === 'gm' ? (
-                      <div className="mt-3 grid gap-2 text-xs text-slate-300">
-                        <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2">
-                          <span>Скрыт от игроков</span>
-                          <input type="checkbox" checked={Boolean(token.gmOnly)} onChange={(event) => handleTokenSetting(token.id, 'gmOnly', event.target.checked)} />
-                        </label>
-                        {token.kind === 'player' ? (
-                          <label className="rounded-xl border border-white/10 px-3 py-2">
-                            <div className="mb-2">Обзор игрока: {token.visionRadius ?? 3} клетки</div>
-                            <input type="range" min="1" max="8" value={token.visionRadius ?? 3} onChange={(event) => handleTokenSetting(token.id, 'visionRadius', Number(event.target.value))} className="w-full" />
-                          </label>
-                        ) : null}
-                      </div>
-                    ) : null}
+                    <div className="rounded-2xl border border-white/8 px-4 py-3">
+                      <div className="font-medium text-white">Последнее событие</div>
+                      <div className="mt-1">{eventResult.title}</div>
+                      <div className="mt-1 text-slate-400">{eventResult.description}</div>
+                      <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={eventResult.link} target="_blank" rel="noreferrer">{eventResult.link}</a>
+                    </div>
+                    <button onClick={handleRandomEvent} className="w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
+                      Случайное событие
+                    </button>
                   </div>
-                ))}
-              </div>
-            </div>
-          </aside>
-
-          <main className="space-y-4">
-            <div className="card flex flex-wrap items-center gap-3 px-4 py-3 text-sm text-slate-200">
-              <span className="badge">Инструмент: {tool}</span>
-              <span className="badge">Редактируется: {activeBoard === 'public' ? 'публичная карта' : 'скрытая карта'}</span>
-              <span className="badge">Видимость игроков: {playerTokens.map((token) => `${token.name} ${token.visionRadius ?? 3}`).join(' • ') || 'нет'}</span>
-            </div>
-
-            {role === 'gm' ? (
-              <div className="grid gap-4 2xl:grid-cols-2">
-                <div id="battle-board-public">
-                  <Board
-                    title="Публичная карта"
-                    subtitle="То, что увидят игроки с учётом публичных слоёв, fog of war и радиуса обзора игроков."
-                    cols={cols}
-                    rows={rows}
-                    tiles={mapState.publicTiles}
-                    tokens={visibleTokensForPlayers}
-                    visibleMask={playerVisibilityMask}
-                    zoom={zoom}
-                    onBoardPointerDown={handleBoardPointerDown('public')}
-                    onTokenPointerDown={handleTokenPointerDown}
-                  />
-                </div>
-                <div id="battle-board-gm">
-                  <Board
-                    title="Скрытая карта мастера"
-                    subtitle="Здесь мастер держит НПС, ловушки, тайники и будущие сцены до их открытия игрокам."
-                    cols={cols}
-                    rows={rows}
-                    tiles={mapState.gmTiles}
-                    tokens={tokens}
-                    zoom={zoom}
-                    onBoardPointerDown={handleBoardPointerDown('gm')}
-                    onTokenPointerDown={handleTokenPointerDown}
-                  />
                 </div>
               </div>
-            ) : (
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="card p-4">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-white">Чат / заметка</h2>
+                    <span className="text-sm text-slate-400">локально в журнал</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={chatInput}
+                      onChange={(event) => setChatInput(event.target.value)}
+                      placeholder="Например: Борин идёт к двери"
+                      className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+                    />
+                    <button onClick={handleSendChat} className="rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
+                      Отправить
+                    </button>
+                  </div>
+                </div>
+
+                <div className="card p-4">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-white">Кубы</h2>
+                    <span className="text-sm text-slate-400">NdM±K</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={diceFormula}
+                      onChange={(event) => setDiceFormula(event.target.value)}
+                      className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none"
+                    />
+                    <button onClick={handleRoll} className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950">
+                      Roll
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card p-4">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-white">Журнал действий</h2>
+                  <span className="badge">последние 20 событий</span>
+                </div>
+                <div className="space-y-3 text-sm">
+                  {journal.map((entry) => (
+                    <div key={entry.id} className="rounded-2xl border border-white/8 px-4 py-3">
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>{entry.type}</span>
+                        <span>{entry.time}</span>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-slate-200">{entry.text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card p-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-white">Виджет местности</h2>
+                  <span className="badge">regional map</span>
+                </div>
+                <p className="mt-3 text-sm text-slate-300">
+                  Отдельный виджет с картой реальной местности по аналогии с waterdeep viewer — можно держать региональный контекст рядом с тактической сценой.
+                </p>
+                <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
+                  <iframe
+                    title="Карта местности Waterdeep style"
+                    src="https://www.openstreetmap.org/export/embed.html?bbox=37.55%2C55.70%2C37.75%2C55.82&amp;layer=mapnik"
+                    className="h-[320px] w-full"
+                  />
+                </div>
+                <div className="mt-3 text-xs text-slate-400">Встраивание сделано как внешний map widget, который можно заменить на любой конкретный регион кампании.</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card flex flex-wrap items-center gap-3 px-4 py-3 text-sm text-slate-200">
+            <span className="badge">Инструмент: {tool}</span>
+            <span className="badge">Редактируется: {activeBoard === 'public' ? 'публичная карта' : 'скрытая карта'}</span>
+            <span className="badge">Видимость игроков: {playerTokens.map((token) => `${token.name} ${token.visionRadius ?? 3}`).join(' • ') || 'нет'}</span>
+          </div>
+
+          {role === 'gm' ? (
+            <div className="space-y-4">
               <div id="battle-board-public">
                 <Board
-                  title="Игровое поле"
-                  subtitle="Игрок видит только публичную карту и только те клетки, которые открывает обзор персонажей."
+                  title="Публичная карта"
+                  subtitle="То, что увидят игроки с учётом публичных слоёв, fog of war и радиуса обзора игроков."
                   cols={cols}
                   rows={rows}
                   tiles={mapState.publicTiles}
@@ -1267,144 +1443,36 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   onTokenPointerDown={handleTokenPointerDown}
                 />
               </div>
-            )}
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="card p-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white">Чат / заметка</h2>
-                  <span className="text-sm text-slate-400">локально в журнал</span>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={chatInput}
-                    onChange={(event) => setChatInput(event.target.value)}
-                    placeholder="Например: Борин идёт к двери"
-                    className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
-                  />
-                  <button onClick={handleSendChat} className="rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
-                    Отправить
-                  </button>
-                </div>
-              </div>
-
-              <div className="card p-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white">Кубы</h2>
-                  <span className="text-sm text-slate-400">NdM±K</span>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={diceFormula}
-                    onChange={(event) => setDiceFormula(event.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none"
-                  />
-                  <button onClick={handleRoll} className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950">
-                    Roll
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="card p-4">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Журнал действий</h2>
-                <span className="badge">последние 20 событий</span>
-              </div>
-              <div className="space-y-3 text-sm">
-                {journal.map((entry) => (
-                  <div key={entry.id} className="rounded-2xl border border-white/8 px-4 py-3">
-                    <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span>{entry.type}</span>
-                      <span>{entry.time}</span>
-                    </div>
-                    <p className="mt-2 whitespace-pre-wrap text-slate-200">{entry.text}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </main>
-
-          <aside className="space-y-4">
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Лист персонажа</h2>
-                <span className="badge">player editable</span>
-              </div>
-
-              {selectedSheet ? (
-                <div className="mt-4 space-y-3 text-sm text-slate-200">
-                  <input value={selectedSheet.name} disabled={role !== 'player'} onChange={(event) => handleSheetChange('name', event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input value={selectedSheet.race} disabled={role !== 'player'} onChange={(event) => handleSheetChange('race', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
-                    <input value={selectedSheet.heroClass} disabled={role !== 'player'} onChange={(event) => handleSheetChange('heroClass', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    <input type="number" disabled={role !== 'player'} value={selectedSheet.level} onChange={(event) => handleSheetChange('level', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                    <input type="number" disabled={role !== 'player'} value={selectedSheet.hp} onChange={(event) => handleSheetChange('hp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                    <input type="number" disabled={role !== 'player'} value={selectedSheet.maxHp} onChange={(event) => handleSheetChange('maxHp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                    <input type="number" disabled={role !== 'player'} value={selectedSheet.ac} onChange={(event) => handleSheetChange('ac', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" />
-                  </div>
-                  <input type="number" disabled={role !== 'player'} value={selectedSheet.speed} onChange={(event) => handleSheetChange('speed', Number(event.target.value))} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
-                  <textarea value={selectedSheet.spells} disabled={role !== 'player'} onChange={(event) => handleSheetChange('spells', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Заклинания" />
-                  <textarea value={selectedSheet.inventory} disabled={role !== 'player'} onChange={(event) => handleSheetChange('inventory', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Инвентарь" />
-                  <textarea value={selectedSheet.notes} disabled={role !== 'player'} onChange={(event) => handleSheetChange('notes', event.target.value)} rows={4} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Заметки персонажа" />
-                  <button onClick={() => addJournalEntry('sheet', `Лист ${selectedSheet.name} обновлён.`)} className="w-full rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">
-                    Зафиксировать изменение листа
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-4 rounded-2xl border border-white/8 px-4 py-3 text-sm text-slate-300">
-                  У выбранного токена нет листа персонажа.
-                </div>
-              )}
-            </div>
-
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Инструменты мастера</h2>
-                <span className="badge">dnd.su only</span>
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                <div className="rounded-2xl border border-white/8 px-4 py-3">
-                  <div className="font-medium text-white">Последний лут</div>
-                  <div className="mt-1">{lootResult.name}</div>
-                  <div className="mt-1 text-slate-400">{lootResult.details}</div>
-                  <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={lootResult.link} target="_blank" rel="noreferrer">{lootResult.link}</a>
-                </div>
-                <button onClick={handleRandomLoot} className="w-full rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950">
-                  Сгенерировать лут
-                </button>
-                <div className="rounded-2xl border border-white/8 px-4 py-3">
-                  <div className="font-medium text-white">Последнее событие</div>
-                  <div className="mt-1">{eventResult.title}</div>
-                  <div className="mt-1 text-slate-400">{eventResult.description}</div>
-                  <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={eventResult.link} target="_blank" rel="noreferrer">{eventResult.link}</a>
-                </div>
-                <button onClick={handleRandomEvent} className="w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
-                  Случайное событие
-                </button>
-              </div>
-            </div>
-
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Виджет местности</h2>
-                <span className="badge">regional map</span>
-              </div>
-              <p className="mt-3 text-sm text-slate-300">
-                Отдельный виджет с картой реальной местности по аналогии с waterdeep viewer — можно держать региональный контекст рядом с тактической сценой.
-              </p>
-              <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
-                <iframe
-                  title="Карта местности Waterdeep style"
-                  src="https://www.openstreetmap.org/export/embed.html?bbox=37.55%2C55.70%2C37.75%2C55.82&amp;layer=mapnik"
-                  className="h-[320px] w-full"
+              <div id="battle-board-gm">
+                <Board
+                  title="Скрытая карта мастера"
+                  subtitle="Здесь мастер держит НПС, ловушки, тайники и будущие сцены до их открытия игрокам."
+                  cols={cols}
+                  rows={rows}
+                  tiles={mapState.gmTiles}
+                  tokens={tokens}
+                  zoom={zoom}
+                  onBoardPointerDown={handleBoardPointerDown('gm')}
+                  onTokenPointerDown={handleTokenPointerDown}
                 />
               </div>
-              <div className="mt-3 text-xs text-slate-400">Встраивание сделано как внешний map widget, который можно заменить на любой конкретный регион кампании.</div>
             </div>
-          </aside>
+          ) : (
+            <div id="battle-board-public">
+              <Board
+                title="Игровое поле"
+                subtitle="Игрок видит только публичную карту и только те клетки, которые открывает обзор персонажей."
+                cols={cols}
+                rows={rows}
+                tiles={mapState.publicTiles}
+                tokens={visibleTokensForPlayers}
+                visibleMask={playerVisibilityMask}
+                zoom={zoom}
+                onBoardPointerDown={handleBoardPointerDown('public')}
+                onTokenPointerDown={handleTokenPointerDown}
+              />
+            </div>
+          )}
         </section>
       </div>
     </div>
