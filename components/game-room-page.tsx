@@ -100,6 +100,7 @@ type SavedRoomState = {
   mapState: MapState;
   savedMaps?: SavedMapPreset[];
   activeSavedMapId?: string | null;
+  widgetUrl?: string;
   tokens: RoomToken[];
   sheets: CharacterSheet[];
   journal: JournalEntry[];
@@ -120,6 +121,7 @@ const DEFAULT_TERRAIN = '#0f172a';
 const roomAccessRegistry = new Map<string, RoomAccessState>();
 
 const STORAGE_PREFIX = 'dnd-me-room:';
+const DEFAULT_WIDGET_URL = 'https://tychmaps.com/waterdeep/';
 
 const layerPalette: Record<LayerKind, string[]> = {
   terrain: ['#0f172a', '#334155', '#14532d', '#1d4ed8', '#92400e', '#4c1d95'],
@@ -631,6 +633,7 @@ function buildSavedRoomState({
   mapState,
   savedMaps,
   activeSavedMapId,
+  widgetUrl,
   tokens,
   sheets,
   journal,
@@ -640,6 +643,7 @@ function buildSavedRoomState({
     mapState,
     savedMaps,
     activeSavedMapId,
+    widgetUrl,
     tokens,
     sheets,
     journal,
@@ -785,6 +789,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [gridColsInput, setGridColsInput] = useState(String(DEFAULT_COLS));
   const [gridRowsInput, setGridRowsInput] = useState(String(DEFAULT_ROWS));
   const [mapPresetName, setMapPresetName] = useState('Сцена 1');
+  const [widgetUrl, setWidgetUrl] = useState(DEFAULT_WIDGET_URL);
   const [journal, setJournal] = useState<JournalEntry[]>([
     {
       id: 'j1',
@@ -843,6 +848,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       }
       if (parsed.savedMaps) setSavedMaps(parsed.savedMaps);
       if (parsed.activeSavedMapId) setActiveSavedMapId(parsed.activeSavedMapId);
+      if (parsed.widgetUrl) setWidgetUrl(parsed.widgetUrl);
       if (parsed.tokens) setTokens(parsed.tokens);
       if (parsed.sheets) setSheets(parsed.sheets);
       if (parsed.journal) setJournal(parsed.journal);
@@ -855,9 +861,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   useEffect(() => {
     if (!isLoadedFromStorage) return;
-    const payload = buildSavedRoomState({ mapName, mapState, savedMaps, activeSavedMapId, tokens, sheets, journal });
+    const payload = buildSavedRoomState({ mapName, mapState, savedMaps, activeSavedMapId, widgetUrl, tokens, sheets, journal });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
-  }, [activeSavedMapId, isLoadedFromStorage, journal, mapName, mapState, roomId, savedMaps, sheets, tokens]);
+  }, [activeSavedMapId, isLoadedFromStorage, journal, mapName, mapState, roomId, savedMaps, sheets, tokens, widgetUrl]);
 
   useEffect(() => {
     if (!activeSavedMapId) return;
@@ -1054,6 +1060,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         tokens,
         sheets,
         journal: nextJournal,
+        widgetUrl,
       });
       window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
     }
@@ -1083,6 +1090,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       tokens,
       sheets,
       journal,
+      widgetUrl,
     });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
     addJournalEntry('save', `Карта «${nextPreset.name}» сохранена локально для комнаты ${roomId} как новая вкладка.`);
@@ -1110,6 +1118,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       tokens,
       sheets,
       journal,
+      widgetUrl,
     });
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -1140,6 +1149,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setGridRowsInput(String(parsed.mapState.rows));
       setSavedMaps(parsed.savedMaps ?? []);
       setActiveSavedMapId(parsed.activeSavedMapId ?? null);
+      setWidgetUrl(parsed.widgetUrl ?? DEFAULT_WIDGET_URL);
       if (parsed.tokens) setTokens(parsed.tokens);
       if (parsed.sheets) setSheets(parsed.sheets);
       if (parsed.journal) setJournal(parsed.journal);
@@ -1844,16 +1854,31 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   <span className="badge">regional map</span>
                 </div>
                 <p className="mt-3 text-sm text-slate-300">
-                  Отдельный виджет с картой реальной местности по аналогии с waterdeep viewer — можно держать региональный контекст рядом с тактической сценой.
+                  Сюда можно подставить внешний URL с региональной картой. Для удобства я сразу поставил Waterdeep с tychmaps.com.
                 </p>
-                <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
-                  <iframe
-                    title="Карта местности Waterdeep style"
-                    src="https://www.openstreetmap.org/export/embed.html?bbox=37.55%2C55.70%2C37.75%2C55.82&amp;layer=mapnik"
-                    className="h-[320px] w-full"
+                <div className="mt-4 flex flex-col gap-3">
+                  <input
+                    value={widgetUrl}
+                    onChange={(event) => setWidgetUrl(event.target.value)}
+                    placeholder="https://tychmaps.com/waterdeep/"
+                    className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
                   />
+                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80">
+                    <iframe
+                      title="Внешняя региональная карта"
+                      src={widgetUrl}
+                      className="h-[320px] w-full"
+                    />
+                  </div>
                 </div>
-                <div className="mt-3 text-xs text-slate-400">Встраивание сделано как внешний map widget, который можно заменить на любой конкретный регион кампании.</div>
+                <div className="mt-3 text-xs text-slate-400">
+                  Если конкретный сайт запрещает открытие внутри iframe, карта не покажется внутри виджета — в таком случае откройте её отдельно:
+                  {' '}
+                  <a href={widgetUrl} target="_blank" rel="noreferrer" className="text-emerald-300 underline underline-offset-4">
+                    открыть карту в новой вкладке
+                  </a>
+                  .
+                </div>
               </div>
             </div>
           </div>
