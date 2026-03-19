@@ -626,6 +626,26 @@ function getStorageKey(roomId: string) {
   return `${STORAGE_PREFIX}${roomId}`;
 }
 
+function buildSavedRoomState({
+  mapName,
+  mapState,
+  savedMaps,
+  activeSavedMapId,
+  tokens,
+  sheets,
+  journal,
+}: SavedRoomState): SavedRoomState {
+  return {
+    mapName,
+    mapState,
+    savedMaps,
+    activeSavedMapId,
+    tokens,
+    sheets,
+    journal,
+  };
+}
+
 function resizeTiles(source: CellData[], oldCols: number, oldRows: number, newCols: number, newRows: number) {
   const nextTiles = createEmptyMap(newCols, newRows);
 
@@ -835,9 +855,26 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   useEffect(() => {
     if (!isLoadedFromStorage) return;
-    const payload: SavedRoomState = { mapName, mapState, savedMaps, activeSavedMapId, tokens, sheets, journal };
+    const payload = buildSavedRoomState({ mapName, mapState, savedMaps, activeSavedMapId, tokens, sheets, journal });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
   }, [activeSavedMapId, isLoadedFromStorage, journal, mapName, mapState, roomId, savedMaps, sheets, tokens]);
+
+  useEffect(() => {
+    if (!activeSavedMapId) return;
+
+    setSavedMaps((current) =>
+      current.map((preset) =>
+        preset.id === activeSavedMapId
+          ? {
+              ...preset,
+              name: mapPresetName.trim() || preset.name,
+              mapName,
+              mapState,
+            }
+          : preset,
+      ),
+    );
+  }, [activeSavedMapId, mapName, mapPresetName, mapState]);
 
   const addJournalEntry = (type: JournalEntry['type'], text: string) => {
     setJournal((current) => [{ id: `${Date.now()}-${Math.random()}`, type, text, time: nowTime() }, ...current].slice(0, 20));
@@ -990,27 +1027,49 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       mapState,
     };
 
-    setSavedMaps((current) => {
-      const existing = current.some((preset) => preset.id === presetId);
-      return existing ? current.map((preset) => (preset.id === presetId ? nextPreset : preset)) : [...current, nextPreset];
-    });
+    const nextSavedMaps = savedMaps.some((preset) => preset.id === presetId)
+      ? savedMaps.map((preset) => (preset.id === presetId ? nextPreset : preset))
+      : [...savedMaps, nextPreset];
+
+    setSavedMaps(nextSavedMaps);
     setActiveSavedMapId(presetId);
 
-    const payload: SavedRoomState = { mapName, mapState, savedMaps, activeSavedMapId: presetId, tokens, sheets, journal };
+    const payload = buildSavedRoomState({
+      mapName,
+      mapState,
+      savedMaps: nextSavedMaps,
+      activeSavedMapId: presetId,
+      tokens,
+      sheets,
+      journal,
+    });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
     addJournalEntry('save', `Карта «${nextPreset.name}» сохранена локально для комнаты ${roomId}.`);
   };
 
   const handleExportMapJson = () => {
-    const payload: SavedRoomState = {
+    const nextSavedMaps = activeSavedMapId
+      ? savedMaps.map((preset) =>
+          preset.id === activeSavedMapId
+            ? {
+                ...preset,
+                name: mapPresetName.trim() || preset.name,
+                mapName,
+                mapState,
+              }
+            : preset,
+        )
+      : savedMaps;
+
+    const payload = buildSavedRoomState({
       mapName,
       mapState,
-      savedMaps,
+      savedMaps: nextSavedMaps,
       activeSavedMapId,
       tokens,
       sheets,
       journal,
-    };
+    });
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
