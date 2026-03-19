@@ -1,243 +1,492 @@
+'use client';
+
 import Link from 'next/link';
-import {
-  characterSheets,
-  chatMessages,
-  eventTables,
-  fogZones,
-  initiativeOrder,
-  journal,
-  knowledgeBase,
-  lootResults,
-  phaseChecklist,
-  randomEvents,
-  roomMembers,
-  roomStats,
-  tokens,
-} from '@/lib/mock-data';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from 'react';
 
-function PhaseOverview() {
-  return (
-    <div className="card p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-white">Покрытие roadmap</h2>
-          <p className="text-sm text-slate-400">Все этапы сведены в один демонстрационный рабочий экран.</p>
-        </div>
-        <span className="badge">4 / 4 этапа</span>
-      </div>
+type RoomToken = {
+  id: string;
+  name: string;
+  short: string;
+  kind: 'player' | 'npc' | 'monster' | 'object';
+  color: string;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  ac: number;
+  speed: number;
+  owner: string;
+  sheetId?: string;
+};
 
-      <div className="space-y-4">
-        {phaseChecklist.map((phase) => (
-          <div key={phase.title} className="rounded-3xl border border-white/8 bg-slate-950/40 p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="font-medium text-white">{phase.title}</h3>
-                <p className="mt-1 text-sm text-slate-400">{phase.summary}</p>
-              </div>
-              <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
-                done
-              </span>
-            </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2">
-              {phase.items.map((item) => (
-                <div key={item.label} className="rounded-2xl border border-white/8 px-3 py-2 text-sm text-slate-200">
-                  <span className="mr-2 text-emerald-300">✓</span>
-                  {item.label}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+type CharacterSheet = {
+  id: string;
+  tokenId: string;
+  name: string;
+  race: string;
+  heroClass: string;
+  level: number;
+  hp: number;
+  maxHp: number;
+  ac: number;
+  speed: number;
+  stats: {
+    str: number;
+    dex: number;
+    con: number;
+    int: number;
+    wis: number;
+    cha: number;
+  };
+  notes: string;
+  inventory: string;
+  spells: string;
+};
+
+type JournalEntry = {
+  id: string;
+  type: 'system' | 'move' | 'dice' | 'loot' | 'event' | 'sheet' | 'map';
+  text: string;
+  time: string;
+};
+
+const GRID_COLS = 12;
+const GRID_ROWS = 8;
+const DEFAULT_TILE = '#0f172a';
+const palette = ['#0f172a', '#334155', '#14532d', '#1d4ed8', '#92400e', '#7c3aed'];
+const randomEventPool = [
+  'Лесной дозор замечает костёр и выходит на переговоры.',
+  'Скрытая ловушка активируется рядом с алтарём.',
+  'Сверху осыпается кладка и открывает тайный проход.',
+  'NPC-проводник находит безопасный путь к башне.',
+];
+const lootPool = ['Potion of Healing', '34 gp', 'Scroll of Shield', 'Silver key', 'Ration pack'];
+
+const initialTokens: RoomToken[] = [
+  {
+    id: 'elira',
+    name: 'Элира',
+    short: 'Э',
+    kind: 'player',
+    color: 'rgb(34 211 238)',
+    x: 1,
+    y: 3,
+    hp: 28,
+    maxHp: 32,
+    ac: 15,
+    speed: 30,
+    owner: 'Игрок',
+    sheetId: 'sheet-elira',
+  },
+  {
+    id: 'borin',
+    name: 'Борин',
+    short: 'Б',
+    kind: 'player',
+    color: 'rgb(251 191 36)',
+    x: 3,
+    y: 4,
+    hp: 41,
+    maxHp: 41,
+    ac: 18,
+    speed: 25,
+    owner: 'Игрок',
+    sheetId: 'sheet-borin',
+  },
+  {
+    id: 'goblin',
+    name: 'Гоблин',
+    short: 'G',
+    kind: 'monster',
+    color: 'rgb(244 63 94)',
+    x: 8,
+    y: 3,
+    hp: 7,
+    maxHp: 7,
+    ac: 13,
+    speed: 30,
+    owner: 'GM',
+  },
+  {
+    id: 'chest',
+    name: 'Сундук',
+    short: '📦',
+    kind: 'object',
+    color: 'rgb(168 85 247)',
+    x: 10,
+    y: 5,
+    hp: 0,
+    maxHp: 0,
+    ac: 12,
+    speed: 0,
+    owner: 'GM',
+  },
+];
+
+const initialSheets: CharacterSheet[] = [
+  {
+    id: 'sheet-elira',
+    tokenId: 'elira',
+    name: 'Элира Найтбриз',
+    race: 'Эльф',
+    heroClass: 'Wizard',
+    level: 4,
+    hp: 28,
+    maxHp: 32,
+    ac: 15,
+    speed: 30,
+    stats: { str: 8, dex: 14, con: 12, int: 18, wis: 13, cha: 10 },
+    notes: 'Ищет скрытый архив башни и избегает ближнего боя.',
+    inventory: 'Arcane focus, Potion of Healing, Explorer pack',
+    spells: 'Magic Missile, Shield, Misty Step',
+  },
+  {
+    id: 'sheet-borin',
+    tokenId: 'borin',
+    name: 'Борин Стоунхарт',
+    race: 'Дварф',
+    heroClass: 'Fighter',
+    level: 4,
+    hp: 41,
+    maxHp: 41,
+    ac: 18,
+    speed: 25,
+    stats: { str: 18, dex: 10, con: 16, int: 9, wis: 12, cha: 8 },
+    notes: 'Держит переднюю линию и прикрывает Элиру щитом.',
+    inventory: 'Battleaxe, Shield, Rope 50 ft',
+    spells: '',
+  },
+];
+
+const createEmptyMap = () => Array.from({ length: GRID_COLS * GRID_ROWS }, () => DEFAULT_TILE);
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
-function GridMap() {
-  const cells = Array.from({ length: 64 }, (_, index) => index);
-
-  return (
-    <div className="card relative overflow-hidden p-4">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-300">
-        <div>
-          <p className="font-medium text-white">Карта: Руины старой башни</p>
-          <p>Слой: карта / объекты / заметки / fog of war / initiative hints</p>
-        </div>
-        <div className="flex gap-2">
-          <span className="badge">Grid 70 px</span>
-          <span className="badge">125%</span>
-          <span className="badge">Distance tool</span>
-        </div>
-      </div>
-
-      <div className="relative aspect-[16/10] overflow-hidden rounded-2xl border border-white/10 bg-slate-900">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.15),transparent_30%),linear-gradient(135deg,rgba(15,23,42,0.75),rgba(30,41,59,0.95))]" />
-        <div className="absolute inset-0 grid grid-cols-8 grid-rows-8">
-          {cells.map((cell) => (
-            <div key={cell} className="border border-white/8" />
-          ))}
-        </div>
-
-        <div className="absolute left-[12%] top-[45%] flex h-12 w-12 items-center justify-center rounded-full border-2 border-cyan-300 bg-cyan-400/20 text-sm font-semibold text-cyan-100 shadow-lg shadow-cyan-500/20">
-          Э
-        </div>
-        <div className="absolute left-[24%] top-[56%] flex h-12 w-12 items-center justify-center rounded-full border-2 border-amber-200 bg-amber-300/20 text-sm font-semibold text-amber-100 shadow-lg shadow-amber-500/20">
-          Б
-        </div>
-        <div className="absolute left-[70%] top-[45%] flex h-10 w-10 items-center justify-center rounded-full border-2 border-rose-300 bg-rose-400/20 text-xs font-semibold text-rose-100 shadow-lg shadow-rose-500/20">
-          NPC
-        </div>
-        <div className="absolute left-[58%] top-[20%] flex h-10 w-10 items-center justify-center rounded-full border-2 border-emerald-300 bg-emerald-400/20 text-xs font-semibold text-emerald-100 shadow-lg shadow-emerald-500/20">
-          W
-        </div>
-        <div className="absolute left-[82%] top-[66%] flex h-10 w-10 items-center justify-center rounded-xl border-2 border-violet-300 bg-violet-400/20 text-xs font-semibold text-violet-100 shadow-lg shadow-violet-500/20">
-          📦
-        </div>
-
-        <div className="absolute left-[58%] top-[18%] h-44 w-48 rounded-3xl bg-slate-950/65 ring-1 ring-white/10 backdrop-blur-sm" />
-        <div className="absolute bottom-[14%] left-[6%] h-24 w-28 rounded-[2rem] border border-dashed border-cyan-400/30 bg-cyan-500/5" />
-        <div className="absolute right-[6%] top-[8%] rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 px-3 py-2 text-xs text-fuchsia-100">
-          Realtime token sync active
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-300">
-        <button className="rounded-full border border-white/10 px-4 py-2">Загрузить карту</button>
-        <button className="rounded-full border border-white/10 px-4 py-2">Измерить расстояние</button>
-        <button className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-emerald-100">Туман войны</button>
-        <button className="rounded-full border border-fuchsia-400/40 bg-fuchsia-500/15 px-4 py-2 text-fuchsia-100">
-          Перемещение токенов realtime
-        </button>
-      </div>
-    </div>
-  );
+function nowTime() {
+  return new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'UTC',
+  }).format(new Date());
 }
 
-function CharacterCard() {
-  const sheet = characterSheets[0];
+function rollFormula(formula: string) {
+  const match = formula.trim().match(/^(\d*)d(\d+)([+-]\d+)?$/i);
+  if (!match) return null;
 
-  return (
-    <div className="card p-4">
-      <h2 className="text-lg font-semibold text-white">Карточка персонажа</h2>
-      <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/8 p-4 text-sm text-slate-200">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-lg font-semibold text-white">{sheet.name}</div>
-            <div className="text-slate-400">{sheet.subtitle}</div>
-          </div>
-          <span className="badge">{sheet.owner}</span>
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-3 text-center text-xs">
-          <div className="rounded-2xl bg-slate-950/70 p-3"><div className="text-slate-400">HP</div><div className="mt-1 text-base font-semibold text-white">{sheet.hp}</div></div>
-          <div className="rounded-2xl bg-slate-950/70 p-3"><div className="text-slate-400">AC</div><div className="mt-1 text-base font-semibold text-white">{sheet.ac}</div></div>
-          <div className="rounded-2xl bg-slate-950/70 p-3"><div className="text-slate-400">Speed</div><div className="mt-1 text-base font-semibold text-white">{sheet.speed}</div></div>
-        </div>
-        <div className="mt-4 text-slate-300">Stats: {sheet.stats}</div>
-        <div className="mt-4 rounded-2xl bg-slate-950/60 p-3 text-slate-300">
-          <div className="text-xs uppercase tracking-wide text-slate-400">Спеллы</div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {sheet.spells.map((spell) => (
-              <span key={spell} className="badge">{spell}</span>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const count = Number(match[1] || 1);
+  const sides = Number(match[2]);
+  const modifier = Number(match[3] || 0);
+
+  if (count < 1 || count > 20 || sides < 2 || sides > 1000) return null;
+
+  const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1);
+  const total = rolls.reduce((sum, roll) => sum + roll, 0) + modifier;
+
+  return { count, sides, modifier, rolls, total };
+}
+
+function getCellIndex(x: number, y: number) {
+  return y * GRID_COLS + x;
 }
 
 export function GameRoomPage({ roomId }: { roomId: string }) {
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const [mapName, setMapName] = useState('Руины старой башни');
+  const [mapTiles, setMapTiles] = useState<string[]>(createEmptyMap);
+  const [fogCells, setFogCells] = useState<boolean[]>(() => Array.from({ length: GRID_COLS * GRID_ROWS }, () => false));
+  const [tokens, setTokens] = useState<RoomToken[]>(initialTokens);
+  const [sheets, setSheets] = useState<CharacterSheet[]>(initialSheets);
+  const [selectedTokenId, setSelectedTokenId] = useState('elira');
+  const [tool, setTool] = useState<'move' | 'paint' | 'fog' | 'erase'>('move');
+  const [selectedColor, setSelectedColor] = useState(palette[1]);
+  const [isPointerDown, setIsPointerDown] = useState(false);
+  const [draggingTokenId, setDraggingTokenId] = useState<string | null>(null);
+  const [chatInput, setChatInput] = useState('');
+  const [diceFormula, setDiceFormula] = useState('1d20+5');
+  const [lootResult, setLootResult] = useState('Potion of Healing');
+  const [eventResult, setEventResult] = useState('Лесной дозор замечает костёр и выходит на переговоры.');
+  const [journal, setJournal] = useState<JournalEntry[]>([
+    { id: 'j1', type: 'system', text: 'Комната инициализирована. Можно рисовать карту и двигать токены.', time: nowTime() },
+  ]);
+
+  const selectedToken = useMemo(
+    () => tokens.find((token) => token.id === selectedTokenId) ?? tokens[0],
+    [selectedTokenId, tokens],
+  );
+  const selectedSheet = useMemo(
+    () => sheets.find((sheet) => sheet.tokenId === selectedToken?.id),
+    [selectedToken?.id, sheets],
+  );
+
+  const addJournalEntry = (type: JournalEntry['type'], text: string) => {
+    setJournal((current) => [{ id: `${Date.now()}-${Math.random()}`, type, text, time: nowTime() }, ...current].slice(0, 12));
+  };
+
+  const paintCell = (x: number, y: number) => {
+    const index = getCellIndex(x, y);
+
+    if (tool === 'paint') {
+      setMapTiles((current) => current.map((tile, tileIndex) => (tileIndex === index ? selectedColor : tile)));
+      return;
+    }
+
+    if (tool === 'erase') {
+      setMapTiles((current) => current.map((tile, tileIndex) => (tileIndex === index ? DEFAULT_TILE : tile)));
+      setFogCells((current) => current.map((cell, cellIndex) => (cellIndex === index ? false : cell)));
+      return;
+    }
+
+    if (tool === 'fog') {
+      setFogCells((current) => current.map((cell, cellIndex) => (cellIndex === index ? !cell : cell)));
+    }
+  };
+
+  const applyPointerToBoard = (clientX: number, clientY: number) => {
+    const board = boardRef.current;
+    if (!board) return;
+
+    const rect = board.getBoundingClientRect();
+    const x = clamp(Math.floor(((clientX - rect.left) / rect.width) * GRID_COLS), 0, GRID_COLS - 1);
+    const y = clamp(Math.floor(((clientY - rect.top) / rect.height) * GRID_ROWS), 0, GRID_ROWS - 1);
+
+    if (draggingTokenId) {
+      setTokens((current) =>
+        current.map((token) => (token.id === draggingTokenId ? { ...token, x, y } : token)),
+      );
+      return;
+    }
+
+    if (tool !== 'move') {
+      paintCell(x, y);
+      return;
+    }
+
+    if (selectedTokenId) {
+      setTokens((current) =>
+        current.map((token) => (token.id === selectedTokenId ? { ...token, x, y } : token)),
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (!isPointerDown) return undefined;
+
+    const handleMove = (event: PointerEvent) => {
+      applyPointerToBoard(event.clientX, event.clientY);
+    };
+
+    const handleUp = () => {
+      if (draggingTokenId) {
+        const moved = tokens.find((token) => token.id === draggingTokenId);
+        if (moved) {
+          addJournalEntry('move', `${moved.name} перемещён на ${String.fromCharCode(65 + moved.x)}${moved.y + 1}.`);
+        }
+      }
+
+      setIsPointerDown(false);
+      setDraggingTokenId(null);
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    };
+  }, [draggingTokenId, isPointerDown, tokens]);
+
+  const handleBoardPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    setIsPointerDown(true);
+    applyPointerToBoard(event.clientX, event.clientY);
+  };
+
+  const handleTokenPointerDown = (tokenId: string) => (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setSelectedTokenId(tokenId);
+    setTool('move');
+    setDraggingTokenId(tokenId);
+    setIsPointerDown(true);
+  };
+
+  const handleUploadMap = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setMapName(file.name.replace(/\.[^.]+$/, ''));
+    addJournalEntry('map', `Загружена карта «${file.name}». Для MVP используется локальное имя файла как сцена.`);
+  };
+
+  const handleSendChat = () => {
+    const trimmed = chatInput.trim();
+    if (!trimmed) return;
+    addJournalEntry('system', `Чат: ${trimmed}`);
+    setChatInput('');
+  };
+
+  const handleRoll = () => {
+    const result = rollFormula(diceFormula);
+    if (!result) {
+      addJournalEntry('system', `Не удалось распознать формулу ${diceFormula}. Пример: 1d20+5.`);
+      return;
+    }
+
+    addJournalEntry(
+      'dice',
+      `${diceFormula} → ${result.total} (${result.rolls.join(', ')}${result.modifier ? ` ${result.modifier > 0 ? '+' : '-'} ${Math.abs(result.modifier)}` : ''})`,
+    );
+  };
+
+  const handleRandomLoot = () => {
+    const nextLoot = lootPool[Math.floor(Math.random() * lootPool.length)];
+    setLootResult(nextLoot);
+    addJournalEntry('loot', `Сгенерирован лут: ${nextLoot}.`);
+  };
+
+  const handleRandomEvent = () => {
+    const nextEvent = randomEventPool[Math.floor(Math.random() * randomEventPool.length)];
+    setEventResult(nextEvent);
+    addJournalEntry('event', `Событие: ${nextEvent}`);
+  };
+
+  const handleSheetChange = <K extends keyof CharacterSheet>(key: K, value: CharacterSheet[K]) => {
+    if (!selectedSheet) return;
+
+    setSheets((current) =>
+      current.map((sheet) => (sheet.id === selectedSheet.id ? { ...sheet, [key]: value } : sheet)),
+    );
+
+    if (key === 'hp' || key === 'maxHp' || key === 'ac' || key === 'speed') {
+      setTokens((current) =>
+        current.map((token) => {
+          if (token.sheetId !== selectedSheet.id) return token;
+
+          return {
+            ...token,
+            hp: key === 'hp' ? Number(value) : token.hp,
+            maxHp: key === 'maxHp' ? Number(value) : token.maxHp,
+            ac: key === 'ac' ? Number(value) : token.ac,
+            speed: key === 'speed' ? Number(value) : token.speed,
+          };
+        }),
+      );
+    }
+  };
+
+  const paintedCells = mapTiles.filter((tile) => tile !== DEFAULT_TILE).length;
+  const foggedCells = fogCells.filter(Boolean).length;
+
   return (
     <div className="min-h-screen px-4 py-4 md:px-6">
       <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
         <header className="card flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="text-sm text-slate-400">Комната / {roomId}</div>
-            <h1 className="text-2xl font-semibold text-white">Playable room MVP · все этапы roadmap</h1>
+            <h1 className="text-2xl font-semibold text-white">Интерактивная демо-комната</h1>
+            <p className="mt-1 text-sm text-slate-400">
+              Здесь уже можно рисовать карту, двигать токены мышкой и редактировать лист персонажа локально.
+            </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/" className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
               На главную
             </Link>
-            <button className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
-              Invite-ссылка
-            </button>
-            <button className="rounded-full bg-fuchsia-500 px-4 py-2 text-sm font-medium text-white">
-              Настройки мастера
-            </button>
+            <label className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200 cursor-pointer">
+              Загрузить карту
+              <input type="file" accept="image/*" className="hidden" onChange={handleUploadMap} />
+            </label>
           </div>
         </header>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {roomStats.map((stat) => (
-            <div key={stat.label} className="card p-4">
-              <div className="text-sm text-slate-400">{stat.label}</div>
-              <div className="mt-2 text-xl font-semibold text-white">{stat.value}</div>
-            </div>
-          ))}
+          <div className="card p-4">
+            <div className="text-sm text-slate-400">Карта</div>
+            <div className="mt-2 text-xl font-semibold text-white">{mapName}</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-sm text-slate-400">Закрашено клеток</div>
+            <div className="mt-2 text-xl font-semibold text-white">{paintedCells}</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-sm text-slate-400">Fog cells</div>
+            <div className="mt-2 text-xl font-semibold text-white">{foggedCells}</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-sm text-slate-400">Активный токен</div>
+            <div className="mt-2 text-xl font-semibold text-white">{selectedToken?.name ?? '—'}</div>
+          </div>
         </section>
 
-        <PhaseOverview />
-
-        <section className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+        <section className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)_380px]">
           <aside className="space-y-4">
             <div className="card p-4">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Участники</h2>
-                <span className="badge">4 online</span>
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white">Инструменты карты</h2>
+                <span className="badge">working demo</span>
               </div>
-              <div className="space-y-3 text-sm">
-                {roomMembers.map((member) => (
-                  <div key={member.name} className="rounded-2xl border border-white/8 px-3 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-white">{member.name}</div>
-                        <div className="text-slate-400">{member.role} • {member.character}</div>
-                      </div>
-                      <span className="text-xs text-cyan-300">{member.status}</span>
-                    </div>
-                  </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                {[
+                  ['move', 'Двигать'],
+                  ['paint', 'Рисовать'],
+                  ['fog', 'Fog'],
+                  ['erase', 'Стереть'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setTool(value as 'move' | 'paint' | 'fog' | 'erase')}
+                    className={`rounded-2xl border px-3 py-2 ${tool === value ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`}
+                  >
+                    {label}
+                  </button>
                 ))}
               </div>
+              <div className="mt-4">
+                <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Палитра</div>
+                <div className="flex flex-wrap gap-2">
+                  {palette.map((color) => (
+                    <button
+                      key={color}
+                      onClick={() => setSelectedColor(color)}
+                      className={`h-9 w-9 rounded-full border ${selectedColor === color ? 'border-white' : 'border-white/20'}`}
+                      style={{ backgroundColor: color }}
+                      aria-label={`Выбрать цвет ${color}`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setMapTiles(createEmptyMap());
+                  setFogCells(Array.from({ length: GRID_COLS * GRID_ROWS }, () => false));
+                  addJournalEntry('map', 'Карта очищена до базовой сетки.');
+                }}
+                className="mt-4 w-full rounded-full border border-white/10 px-4 py-3 text-sm text-slate-200"
+              >
+                Очистить карту
+              </button>
             </div>
 
             <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Токены</h2>
-                <span className="badge">authority server</span>
-              </div>
+              <h2 className="text-lg font-semibold text-white">Токены</h2>
               <div className="mt-4 space-y-3 text-sm">
                 {tokens.map((token) => (
-                  <div key={token.name} className="rounded-2xl border border-white/8 px-3 py-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-medium text-white">{token.name}</div>
-                      <div className="text-slate-400">{token.x}</div>
+                  <button
+                    key={token.id}
+                    onClick={() => setSelectedTokenId(token.id)}
+                    className={`w-full rounded-2xl border px-3 py-3 text-left ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-white">{token.name}</div>
+                        <div className="text-slate-400">{token.kind} • {String.fromCharCode(65 + token.x)}{token.y + 1}</div>
+                      </div>
+                      <span className="text-xs text-slate-300">HP {token.hp}/{token.maxHp}</span>
                     </div>
-                    <div className="mt-1 text-slate-400">{token.owner} • {token.type}</div>
-                    <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-300">
-                      <span>HP {token.hp}</span>
-                      <span>AC {token.ac}</span>
-                      <span>{token.movement}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Инициатива</h2>
-                <span className="badge">round 3</span>
-              </div>
-              <div className="mt-4 space-y-3 text-sm">
-                {initiativeOrder.map((entry) => (
-                  <div key={entry.name} className="flex items-center justify-between rounded-2xl border border-white/8 px-3 py-3 text-slate-200">
-                    <div>
-                      <div className="font-medium text-white">{entry.name}</div>
-                      <div className="text-xs text-slate-400">{entry.state}</div>
-                    </div>
-                    <div className="text-lg font-semibold text-fuchsia-200">{entry.score}</div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -245,142 +494,178 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
           <main className="space-y-4">
             <div className="card flex flex-wrap items-center gap-3 px-4 py-3 text-sm text-slate-200">
-              <span className="badge">Роль: мастер</span>
-              <span className="badge">Realtime: connected</span>
-              <span className="badge">Режим: demo session</span>
-              <button className="rounded-full border border-white/10 px-4 py-2">Выбрать персонажа</button>
-              <button className="rounded-full border border-white/10 px-4 py-2">Открыть лист</button>
-              <button className="rounded-full border border-white/10 px-4 py-2">/roll 1d20+5</button>
+              <span className="badge">Текущий инструмент: {tool}</span>
+              <span className="badge">Drag token: зажми токен и перетащи</span>
+              <span className="badge">Paint/Fog: зажми и веди по клеткам</span>
             </div>
 
-            <GridMap />
+            <div className="card p-4">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Игровое поле</h2>
+                  <p className="text-sm text-slate-400">ЛКМ по сетке рисует карту или двигает выбранный токен в зависимости от инструмента.</p>
+                </div>
+                <span className="badge">{GRID_COLS}×{GRID_ROWS}</span>
+              </div>
 
-            <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+              <div
+                ref={boardRef}
+                onPointerDown={handleBoardPointerDown}
+                className="relative aspect-[16/10] overflow-hidden rounded-2xl border border-white/10 bg-slate-900 touch-none select-none"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${GRID_COLS}, minmax(0, 1fr))`,
+                  gridTemplateRows: `repeat(${GRID_ROWS}, minmax(0, 1fr))`,
+                }}
+              >
+                {Array.from({ length: GRID_COLS * GRID_ROWS }, (_, index) => {
+                  const x = index % GRID_COLS;
+                  const y = Math.floor(index / GRID_COLS);
+                  return (
+                    <div
+                      key={`${x}-${y}`}
+                      className="relative border border-white/10"
+                      style={{ backgroundColor: mapTiles[index] }}
+                    >
+                      {fogCells[index] ? <div className="absolute inset-0 bg-slate-950/70" /> : null}
+                    </div>
+                  );
+                })}
+
+                {tokens.map((token) => {
+                  const left = `calc(${((token.x + 0.5) / GRID_COLS) * 100}% - 1.5rem)`;
+                  const top = `calc(${((token.y + 0.5) / GRID_ROWS) * 100}% - 1.5rem)`;
+                  return (
+                    <button
+                      key={token.id}
+                      onPointerDown={handleTokenPointerDown(token.id)}
+                      className="absolute flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-semibold text-white shadow-lg"
+                      style={{
+                        left,
+                        top,
+                        borderColor: token.color,
+                        backgroundColor: `${token.color}33`,
+                        boxShadow: `0 0 24px ${token.color}55`,
+                      }}
+                    >
+                      {token.short}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
               <div className="card p-4">
                 <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white">Чат</h2>
-                  <span className="text-sm text-slate-400">Команды: /roll, /w, /loot</span>
+                  <h2 className="text-lg font-semibold text-white">Чат / заметка</h2>
+                  <span className="text-sm text-slate-400">локально в журнал</span>
                 </div>
-                <div className="space-y-3 text-sm">
-                  {chatMessages.map((message) => (
-                    <div key={`${message.time}-${message.author}`} className="rounded-2xl border border-white/8 px-4 py-3">
-                      <div className="flex items-center justify-between text-xs text-slate-400">
-                        <span>{message.author}</span>
-                        <span>{message.time}</span>
-                      </div>
-                      <p className="mt-2 text-slate-200">{message.text}</p>
-                    </div>
-                  ))}
+                <div className="flex gap-2">
+                  <input
+                    value={chatInput}
+                    onChange={(event) => setChatInput(event.target.value)}
+                    placeholder="Например: Борин идёт к двери"
+                    className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+                  />
+                  <button onClick={handleSendChat} className="rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
+                    Отправить
+                  </button>
                 </div>
               </div>
 
               <div className="card p-4">
                 <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white">Журнал сессии</h2>
-                  <span className="text-sm text-slate-400">broadcast to room</span>
+                  <h2 className="text-lg font-semibold text-white">Кубы</h2>
+                  <span className="text-sm text-slate-400">NdM±K</span>
                 </div>
-                <div className="space-y-3 text-sm">
-                  {journal.map((entry) => (
-                    <div key={`${entry.time}-${entry.text}`} className="rounded-2xl border border-white/8 px-4 py-3">
-                      <div className="flex items-center justify-between text-xs text-slate-400">
-                        <span>{entry.type}</span>
-                        <span>{entry.time}</span>
-                      </div>
-                      <p className="mt-2 text-slate-200">{entry.text}</p>
+                <div className="flex gap-2">
+                  <input
+                    value={diceFormula}
+                    onChange={(event) => setDiceFormula(event.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none"
+                  />
+                  <button onClick={handleRoll} className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950">
+                    Roll
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="card p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white">Журнал действий</h2>
+                <span className="badge">последние 12 событий</span>
+              </div>
+              <div className="space-y-3 text-sm">
+                {journal.map((entry) => (
+                  <div key={entry.id} className="rounded-2xl border border-white/8 px-4 py-3">
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>{entry.type}</span>
+                      <span>{entry.time}</span>
                     </div>
-                  ))}
-                </div>
+                    <p className="mt-2 text-slate-200">{entry.text}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </main>
 
           <aside className="space-y-4">
             <div className="card p-4">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Справка</h2>
-                <span className="badge">5+ сущностей</span>
-              </div>
-              <input
-                className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
-                placeholder="Поиск по классам, расам, заклинаниям, монстрам, предметам"
-                readOnly
-              />
-              <div className="mt-4 space-y-3 text-sm">
-                {knowledgeBase.map((entry) => (
-                  <div key={entry.title} className="rounded-2xl border border-white/8 px-4 py-3">
-                    <div className="text-xs uppercase tracking-wide text-fuchsia-300">{entry.kind}</div>
-                    <div className="mt-1 font-medium text-white">{entry.title}</div>
-                    <div className="mt-1 text-slate-400">{entry.meta}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <CharacterCard />
-
-            <div className="card p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Генератор лута</h2>
-                <span className="badge">custom tables</span>
+                <h2 className="text-lg font-semibold text-white">Лист персонажа</h2>
+                <span className="badge">editable</span>
               </div>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                {lootResults.map((item) => (
-                  <div key={`${item.name}-${item.target}`} className="rounded-2xl border border-white/8 px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium text-white">{item.name}</span>
-                      <span className="text-xs text-amber-300">{item.rarity}</span>
-                    </div>
-                    <div className="mt-1 text-slate-400">{item.quantity} • {item.target}</div>
+
+              {selectedSheet ? (
+                <div className="mt-4 space-y-3 text-sm text-slate-200">
+                  <input value={selectedSheet.name} onChange={(event) => handleSheetChange('name', event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={selectedSheet.race} onChange={(event) => handleSheetChange('race', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3" />
+                    <input value={selectedSheet.heroClass} onChange={(event) => handleSheetChange('heroClass', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3" />
                   </div>
-                ))}
-              </div>
-              <button className="mt-4 w-full rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950">
-                Сгенерировать лут
-              </button>
+                  <div className="grid grid-cols-4 gap-2">
+                    <input type="number" value={selectedSheet.level} onChange={(event) => handleSheetChange('level', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3" />
+                    <input type="number" value={selectedSheet.hp} onChange={(event) => handleSheetChange('hp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3" />
+                    <input type="number" value={selectedSheet.maxHp} onChange={(event) => handleSheetChange('maxHp', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3" />
+                    <input type="number" value={selectedSheet.ac} onChange={(event) => handleSheetChange('ac', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3" />
+                  </div>
+                  <input type="number" value={selectedSheet.speed} onChange={(event) => handleSheetChange('speed', Number(event.target.value))} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3" />
+                  <textarea value={selectedSheet.spells} onChange={(event) => handleSheetChange('spells', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3" placeholder="Заклинания" />
+                  <textarea value={selectedSheet.inventory} onChange={(event) => handleSheetChange('inventory', event.target.value)} rows={3} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3" placeholder="Инвентарь" />
+                  <textarea value={selectedSheet.notes} onChange={(event) => handleSheetChange('notes', event.target.value)} rows={4} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3" placeholder="Заметки персонажа" />
+                  <button onClick={() => addJournalEntry('sheet', `Лист ${selectedSheet.name} обновлён.`)} className="w-full rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">
+                    Зафиксировать изменение листа
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-white/8 px-4 py-3 text-sm text-slate-300">
+                  У выбранного токена нет листа персонажа.
+                </div>
+              )}
             </div>
 
             <div className="card p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Случайные события</h2>
-                <span className="badge">weighted</span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
-                {eventTables.map((table) => (
-                  <span key={table} className="badge">{table}</span>
-                ))}
+                <h2 className="text-lg font-semibold text-white">Инструменты мастера</h2>
+                <span className="badge">GM toolkit</span>
               </div>
               <div className="mt-4 space-y-3 text-sm text-slate-300">
-                {randomEvents.map((event) => (
-                  <div key={`${event.scene}-${event.effect}`} className="rounded-2xl border border-white/8 px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium text-white">{event.scene}</span>
-                      <span className="text-xs text-fuchsia-300">{event.weight}</span>
-                    </div>
-                    <div className="mt-1 text-slate-400">{event.effect}</div>
-                    <div className="mt-2">{event.text}</div>
-                  </div>
-                ))}
-              </div>
-              <button className="mt-4 w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
-                Случайное событие
-              </button>
-            </div>
-
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Fog of war</h2>
-                <span className="badge">GM only</span>
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                {fogZones.map((zone) => (
-                  <div key={zone.name} className="rounded-2xl border border-white/8 px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium text-white">{zone.name}</span>
-                      <span className="text-xs text-emerald-300">{zone.state}</span>
-                    </div>
-                    <div className="mt-1 text-slate-400">Покрытие: {zone.coverage}</div>
-                  </div>
-                ))}
+                <div className="rounded-2xl border border-white/8 px-4 py-3">
+                  <div className="font-medium text-white">Последний лут</div>
+                  <div className="mt-1">{lootResult}</div>
+                </div>
+                <button onClick={handleRandomLoot} className="w-full rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950">
+                  Сгенерировать лут
+                </button>
+                <div className="rounded-2xl border border-white/8 px-4 py-3">
+                  <div className="font-medium text-white">Последнее событие</div>
+                  <div className="mt-1">{eventResult}</div>
+                </div>
+                <button onClick={handleRandomEvent} className="w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">
+                  Случайное событие
+                </button>
               </div>
             </div>
           </aside>
