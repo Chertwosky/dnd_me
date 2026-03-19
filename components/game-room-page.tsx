@@ -89,10 +89,16 @@ type MapState = {
   gmTiles: CellData[];
 };
 
+type LootReference = {
+  label: string;
+  url: string;
+};
+
 type LootResult = {
   name: string;
   details: string;
   link: string;
+  references?: LootReference[];
 };
 
 type SavedRoomState = {
@@ -324,6 +330,141 @@ const randomLootDefault: LootResult = {
   link: treasuryArticleLink,
 };
 
+type WeightedMagicItem = {
+  range: [number, number];
+  name: string;
+  url?: string;
+};
+
+const weightedMagicItemTables: Partial<Record<string, WeightedMagicItem[]>> = {
+  Ж: [
+    { range: [1, 10], name: 'Оружие +3' },
+    { range: [11, 12], name: 'Амулет планов' },
+    { range: [13, 14], name: 'Ковёр-самолёт', url: 'https://dnd.su/items/87-carpet_of_flying/' },
+    { range: [15, 16], name: 'Хрустальный шар (очень редкая версия)' },
+    { range: [17, 18], name: 'Кольцо регенерации' },
+    { range: [19, 20], name: 'Кольцо падающих звёзд' },
+    { range: [21, 22], name: 'Кольцо телекинеза' },
+    { range: [23, 24], name: 'Мантия сияющих цветов' },
+    { range: [25, 26], name: 'Мантия звёзд' },
+    { range: [27, 28], name: 'Жезл поглощения' },
+    { range: [29, 30], name: 'Жезл бдительности' },
+    { range: [31, 32], name: 'Жезл безопасности' },
+    { range: [33, 34], name: 'Жезл хранителя договора +3' },
+    { range: [35, 36], name: 'Скимитар скорости' },
+    { range: [37, 38], name: 'Щит +3' },
+    { range: [39, 40], name: 'Посох огня' },
+    { range: [41, 42], name: 'Посох мороза' },
+    { range: [43, 44], name: 'Посох силы' },
+    { range: [45, 46], name: 'Посох ударов' },
+    { range: [47, 48], name: 'Посох грома и молнии', url: 'https://dnd.su/items/186-staff_of_thunder_and_lightning/' },
+    { range: [49, 50], name: 'Меч остроты' },
+    { range: [51, 52], name: 'Волшебная палочка превращения' },
+    { range: [53, 54], name: 'Волшебная палочка боевого мага +3' },
+    { range: [55, 55], name: 'Адамантиновый доспех (полулаты)' },
+    { range: [56, 56], name: 'Адамантиновый доспех (латы)' },
+    { range: [57, 57], name: 'Живой щит' },
+    { range: [58, 58], name: 'Пояс силы огненного великана' },
+    { range: [59, 59], name: 'Пояс силы ледяного великана (или каменного)' },
+    { range: [60, 60], name: 'Доспех +1 (кираса)' },
+    { range: [61, 61], name: 'Доспех сопротивления (кираса)' },
+    { range: [62, 62], name: 'Свеча мольбы' },
+    { range: [63, 63], name: 'Доспех +2 (кольчуга)' },
+    { range: [64, 64], name: 'Доспех +2 (кольчужная рубаха)' },
+    { range: [65, 65], name: 'Плащ паука' },
+    { range: [66, 66], name: 'Танцующий меч' },
+    { range: [67, 67], name: 'Демонический доспех' },
+    { range: [68, 68], name: 'Доспех из драконьей чешуи' },
+    { range: [69, 69], name: 'Латы дварфов' },
+    { range: [70, 70], name: 'Дварфский метатель' },
+    { range: [71, 71], name: 'Бутылка с ифритом' },
+    { range: [72, 72], name: 'Статуэтка чудесной силы (обсидиановый скакун)' },
+    { range: [73, 73], name: 'Морозный клинок' },
+    { range: [74, 74], name: 'Шлем блеска' },
+    { range: [75, 75], name: 'Рог Валгаллы (бронзовый)' },
+    { range: [76, 76], name: 'Инструмент бардов (арфа Анструт)' },
+    { range: [77, 77], name: 'Камень Йоун (поглощение)' },
+    { range: [78, 78], name: 'Камень Йоун (проворство)' },
+    { range: [79, 79], name: 'Камень Йоун (стойкость)' },
+    { range: [80, 80], name: 'Камень Йоун (проницательность)' },
+    { range: [81, 81], name: 'Камень Йоун (рассудок)' },
+    { range: [82, 82], name: 'Камень Йоун (лидерство)' },
+    { range: [83, 83], name: 'Камень Йоун (сила)' },
+    { range: [84, 84], name: 'Доспех +2 (кожаный)' },
+    { range: [85, 85], name: 'Справочник телесного здоровья' },
+    { range: [86, 86], name: 'Справочник полезных упражнений' },
+    { range: [87, 87], name: 'Справочник по големам' },
+    { range: [88, 88], name: 'Справочник быстроты действий' },
+    { range: [89, 89], name: 'Зеркало похищения жизни' },
+    { range: [90, 90], name: 'Вор девяти жизней' },
+    { range: [91, 91], name: 'Лук клятвы', url: 'https://www.dnd.su/items/124-oathbow/' },
+    { range: [92, 92], name: 'Доспех +2 (чешуйчатый)' },
+    { range: [93, 93], name: 'Щит от заклинаний' },
+    { range: [94, 94], name: 'Доспех +1 (наборный)' },
+    { range: [95, 95], name: 'Доспех сопротивления (наборный)' },
+    { range: [96, 96], name: 'Доспех +1 (проклёпанный кожаный)' },
+    { range: [97, 97], name: 'Доспех сопротивления (проклёпанный кожаный)' },
+    { range: [98, 98], name: 'Том чистых мыслей' },
+    { range: [99, 99], name: 'Том лидерства и влияния', url: 'https://dnd.su/items/233-tome_of_leadership_and_influence/' },
+    { range: [100, 100], name: 'Том понимания' },
+  ],
+  З: [
+    { range: [1, 5], name: 'Защитник' },
+    { range: [6, 10], name: 'Молот грома' },
+    { range: [11, 15], name: 'Клинок удачи' },
+    { range: [16, 20], name: 'Меч ответа' },
+    { range: [21, 23], name: 'Святой мститель' },
+    { range: [24, 26], name: 'Кольцо призыва джинна' },
+    { range: [27, 29], name: 'Кольцо невидимости' },
+    { range: [30, 32], name: 'Кольцо отражения заклинаний' },
+    { range: [33, 35], name: 'Жезл величественной мощи' },
+    { range: [36, 38], name: 'Посох магов' },
+    { range: [39, 41], name: 'Меч головоруб' },
+    { range: [42, 43], name: 'Пояс силы облачного великана' },
+    { range: [44, 45], name: 'Доспех +2 (кираса)' },
+    { range: [46, 47], name: 'Доспех +3 (кольчуга)' },
+    { range: [48, 49], name: 'Доспех +3 (кольчужная рубаха)' },
+    { range: [50, 51], name: 'Плащ невидимости' },
+    { range: [52, 53], name: 'Хрустальный шар (легендарная версия)' },
+    { range: [54, 55], name: 'Доспех +1 (полулаты)' },
+    { range: [56, 57], name: 'Железная фляга' },
+    { range: [58, 59], name: 'Доспех +3 (кожаный)' },
+    { range: [60, 61], name: 'Доспех +1 (латы)' },
+    { range: [62, 63], name: 'Мантия архимага' },
+    { range: [64, 65], name: 'Жезл воскрешения' },
+    { range: [66, 67], name: 'Доспех +1 (чешуйчатый)' },
+    { range: [68, 69], name: 'Скарабей защиты' },
+    { range: [70, 71], name: 'Доспех +2 (наборный)' },
+    { range: [72, 73], name: 'Доспех +2 (проклёпанная кожа)' },
+    { range: [74, 75], name: 'Колодец многих миров' },
+    { range: [76, 76], name: 'Магический доспех (брось к12 отдельно)' },
+    { range: [77, 77], name: 'Аппарат Квалиша' },
+    { range: [78, 78], name: 'Доспех неуязвимости' },
+    { range: [79, 79], name: 'Пояс силы великана (штормовой)' },
+    { range: [80, 80], name: 'Куб врат' },
+    { range: [81, 81], name: 'Колода многих вещей' },
+    { range: [82, 82], name: 'Кольчуга ифритов' },
+    { range: [83, 83], name: 'Доспех сопротивления (полулаты)' },
+    { range: [84, 84], name: 'Рог Валгаллы (железный)' },
+    { range: [85, 85], name: 'Инструмент бардов (арфа Оллава)' },
+    { range: [86, 86], name: 'Камень Йоун (большое поглощение)' },
+    { range: [87, 87], name: 'Камень Йоун (мастерство)' },
+    { range: [88, 88], name: 'Камень Йоун (регенерация)' },
+    { range: [89, 89], name: 'Латный доспех эфирности' },
+    { range: [90, 90], name: 'Доспех сопротивления (латы)' },
+    { range: [91, 91], name: 'Кольцо командования воздушными элементалями' },
+    { range: [92, 92], name: 'Кольцо командования земляными элементалями' },
+    { range: [93, 93], name: 'Кольцо командования огненными элементалями' },
+    { range: [94, 94], name: 'Кольцо трёх желаний' },
+    { range: [95, 95], name: 'Кольцо командования водяными элементалями' },
+    { range: [96, 96], name: 'Сфера аннигиляции' },
+    { range: [97, 97], name: 'Талисман чистого добра' },
+    { range: [98, 98], name: 'Талисман сферы' },
+    { range: [99, 99], name: 'Талисман абсолютного зла' },
+    { range: [100, 100], name: 'Том молчаливого языка' },
+  ],
+};
+
 const magicItemTables: Record<string, string[]> = {
   А: ['Зелье лечения', 'Свиток заклинания (1-й уровень)', 'Зелье лазания', 'Сумка хранения', 'Друидский талисман +1'],
   Б: ['Зелье большого лечения', 'Патроны +1', 'Свиток заклинания (2-й уровень)', 'Амулет защиты от обнаружения', 'Верёвка лазания'],
@@ -504,10 +645,22 @@ function rollDiceExpression(expression: string) {
   return Array.from({ length: count }, () => rollDie(sides)).reduce((sum, roll) => sum + roll, 0);
 }
 
+function rollWeightedMagicItem(letter: string) {
+  const roll = rollDie(100);
+  const weightedTable = weightedMagicItemTables[letter];
+  if (!weightedTable?.length) return null;
+
+  const result = weightedTable.find((entry) => roll >= entry.range[0] && roll <= entry.range[1]) ?? weightedTable[0];
+  return {
+    label: `${letter} ${String(roll).padStart(2, '0')}: ${result.name}`,
+    url: result.url ?? treasuryArticleLink,
+  };
+}
+
 function rollMagicFromReference(reference: string) {
   const normalized = reference.replace('таблицы', 'таблица').replace('таблицу', 'таблица');
   const parts = normalized.split(' и ').map((part) => part.trim());
-  const results: string[] = [];
+  const results: LootReference[] = [];
 
   for (const part of parts) {
     const match = part.match(/(?:(\d+к\d+)|(\d+))\s+предмет(?:ов)?\s+из\s+таблица\s+([А-ЗЁ])/i) ?? part.match(/(?:(\d+к\d+)|(\d+))\s+предмет(?:ов)?\s+из\s+таблицы\s+([А-ЗЁ])/i);
@@ -518,9 +671,14 @@ function rollMagicFromReference(reference: string) {
     const pool = magicItemTables[letter] ?? [];
 
     for (let index = 0; index < count; index += 1) {
+      const weightedItem = rollWeightedMagicItem(letter);
+      if (weightedItem) {
+        results.push(weightedItem);
+        continue;
+      }
       if (!pool.length) continue;
       const item = pool[Math.floor(Math.random() * pool.length)];
-      results.push(`${letter}: ${item}`);
+      results.push({ label: `${letter}: ${item}`, url: treasuryArticleLink });
     }
   }
 
@@ -531,11 +689,18 @@ function rollTreasureFromTables(crBand: LootCrBand): LootResult {
   const d100 = rollDie(100);
   const individualCoins = treasureCoinTables[crBand].find((entry) => d100 >= entry.range[0] && d100 <= entry.range[1]) ?? treasureCoinTables[crBand][0];
   const hoardRow = hoardTables[crBand].find((entry) => d100 >= entry.range[0] && d100 <= entry.range[1]) ?? hoardTables[crBand][0];
-  const gemMatch = hoardRow.treasure.match(/драгоценных камней стоимостью (\d+) зм/);
-  const gemValue = gemMatch ? Number(gemMatch[1]) : null;
+  const gemMatch = hoardRow.treasure.match(/(\d+к\d+)\s+драгоценных камней стоимостью (\d+) зм/);
+  const gemCount = gemMatch ? rollDiceExpression(gemMatch[1]) : 0;
+  const gemValue = gemMatch ? Number(gemMatch[2]) : null;
   const gemBucket = gemValue ? gemTables.find((entry) => entry.value === gemValue) ?? null : null;
-  const gemItem = gemBucket ? gemBucket.items[Math.floor(Math.random() * gemBucket.items.length)] : null;
+  const gemItems = gemBucket
+    ? Array.from({ length: gemCount }, () => gemBucket.items[Math.floor(Math.random() * gemBucket.items.length)])
+    : [];
   const magicItems = hoardRow.magic ? rollMagicFromReference(hoardRow.magic) : [];
+  const references: LootReference[] = [
+    ...magicItems,
+    ...gemItems.map((item, index) => ({ label: `Камень ${index + 1}: ${item} (${gemBucket?.value ?? gemValue} зм)`, url: treasuryArticleLink })),
+  ];
 
   return {
     name: `Клад по таблице ПО ${crBand}`,
@@ -544,12 +709,13 @@ function rollTreasureFromTables(crBand: LootCrBand): LootResult {
       `Монеты сокровищницы: ${hoardCoinTables[crBand].join(', ')}.`,
       `Индивидуальные монеты для этой же группы ПО: ${individualCoins.coins.join(', ')}.`,
       `Строка сокровищницы: ${hoardRow.treasure}`,
-      hoardRow.magic ? `Магические предметы: ${hoardRow.magic}` : 'Магические предметы: без дополнительных бросков.',
-      magicItems.length ? `Результат по таблицам А–З: ${magicItems.join('; ')}.` : '',
-      gemBucket && gemItem ? `Пример камня из соответствующей таблицы: ${gemItem} (${gemBucket.value} зм).` : '',
+      hoardRow.magic ? `Магические предметы по строке: ${hoardRow.magic}.` : 'Магические предметы: без дополнительных бросков.',
+      magicItems.length ? `Фактические броски по таблицам: ${magicItems.map((item) => item.label).join('; ')}.` : '',
+      gemItems.length ? `Фактические камни: ${gemItems.join('; ')}.` : '',
       'Источник: таблицы статьи “Сокровищница” на dnd.su.',
-    ].join(' '),
+    ].filter(Boolean).join(' '),
     link: treasuryArticleLink,
+    references,
   };
 }
 
@@ -626,6 +792,15 @@ function isCellVisibleToPlayers(x: number, y: number, tokens: RoomToken[]) {
 
 function getStorageKey(roomId: string) {
   return `${STORAGE_PREFIX}${roomId}`;
+}
+
+function createSavedMapPreset(name: string, mapState: MapState): SavedMapPreset {
+  return {
+    id: `map-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    mapName: name,
+    mapState,
+  };
 }
 
 function buildSavedRoomState({
@@ -831,6 +1006,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   useEffect(() => {
     const stored = window.localStorage.getItem(getStorageKey(roomId));
     if (!stored) {
+      const defaultPreset = createSavedMapPreset('Руины старой башни', createInitialMapState());
+      setSavedMaps([defaultPreset]);
+      setActiveSavedMapId(defaultPreset.id);
+      setMapPresetName(defaultPreset.name);
       setIsLoadedFromStorage(true);
       return;
     }
@@ -846,8 +1025,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         setGridColsInput(String(parsed.mapState.cols));
         setGridRowsInput(String(parsed.mapState.rows));
       }
-      if (parsed.savedMaps) setSavedMaps(parsed.savedMaps);
-      if (parsed.activeSavedMapId) setActiveSavedMapId(parsed.activeSavedMapId);
+      if (parsed.savedMaps?.length) {
+        setSavedMaps(parsed.savedMaps);
+        setActiveSavedMapId(parsed.activeSavedMapId ?? parsed.savedMaps[0]?.id ?? null);
+      } else {
+        const fallbackPreset = createSavedMapPreset(parsed.mapName ?? 'Руины старой башни', (parsed.mapState as MapState) ?? createInitialMapState());
+        setSavedMaps([fallbackPreset]);
+        setActiveSavedMapId(fallbackPreset.id);
+      }
       if (parsed.widgetUrl) setWidgetUrl(parsed.widgetUrl);
       if (parsed.tokens) setTokens(parsed.tokens);
       if (parsed.sheets) setSheets(parsed.sheets);
@@ -1020,19 +1205,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     if (!file) return;
 
     const nextName = file.name.replace(/\.[^.]+$/, '');
-    const nextPresetId = `map-${Date.now()}`;
     const nextMapState: MapState = {
       cols,
       rows,
       publicTiles: createEmptyMap(cols, rows),
       gmTiles: createEmptyMap(cols, rows),
     };
-    const nextPreset: SavedMapPreset = {
-      id: nextPresetId,
-      name: nextName,
-      mapName: nextName,
-      mapState: nextMapState,
-    };
+    const nextPreset = createSavedMapPreset(nextName, nextMapState);
+    const nextPresetId = nextPreset.id;
     const nextSavedMaps = [...savedMaps, nextPreset];
     const nextJournal = [
       {
@@ -1069,13 +1249,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   };
 
   const handleSaveMap = () => {
-    const presetId = `map-${Date.now()}`;
-    const nextPreset: SavedMapPreset = {
-      id: presetId,
-      name: mapPresetName.trim() || mapName || 'Новая сцена',
-      mapName,
-      mapState,
-    };
+    const nextPreset = createSavedMapPreset(mapPresetName.trim() || mapName || 'Новая сцена', mapState);
+    const presetId = nextPreset.id;
 
     const nextSavedMaps = [...savedMaps, nextPreset];
 
@@ -1147,8 +1322,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setMapState(parsed.mapState);
       setGridColsInput(String(parsed.mapState.cols));
       setGridRowsInput(String(parsed.mapState.rows));
-      setSavedMaps(parsed.savedMaps ?? []);
-      setActiveSavedMapId(parsed.activeSavedMapId ?? null);
+      const importedSavedMaps = parsed.savedMaps?.length
+        ? parsed.savedMaps
+        : [createSavedMapPreset(parsed.mapName, parsed.mapState as MapState)];
+      setSavedMaps(importedSavedMaps);
+      setActiveSavedMapId(parsed.activeSavedMapId ?? importedSavedMaps[0]?.id ?? null);
       setWidgetUrl(parsed.widgetUrl ?? DEFAULT_WIDGET_URL);
       if (parsed.tokens) setTokens(parsed.tokens);
       if (parsed.sheets) setSheets(parsed.sheets);
@@ -1767,6 +1945,15 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       <div className="mt-1">{lootResult.name}</div>
                       <div className="mt-1 text-slate-400">{lootResult.details}</div>
                       <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={lootResult.link} target="_blank" rel="noreferrer">{lootResult.link}</a>
+                      {lootResult.references?.length ? (
+                        <div className="mt-3 space-y-1 text-xs text-slate-300">
+                          {lootResult.references.map((reference) => (
+                            <a key={`${reference.label}-${reference.url}`} className="block break-all text-cyan-200 underline" href={reference.url} target="_blank" rel="noreferrer">
+                              {reference.label}
+                            </a>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     <label className="block rounded-2xl border border-white/8 px-4 py-3">
                       <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Таблица сокровищ dnd.su</div>
