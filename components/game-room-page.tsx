@@ -348,6 +348,25 @@ const magicItemTableLinks: Record<string, string> = {
   З: treasuryArticleLink,
 };
 
+const directMagicItemLinks: Record<string, string> = {
+  'Зелье лечения': 'https://next.dnd.su/items/16522-potion-of-healing',
+  'Зелье большого лечения': 'https://next.dnd.su/items/16523-potion-of-greater-healing',
+  'Зелье отличного лечения': 'https://next.dnd.su/items/16524-potion-of-superior-healing',
+  'Зелье превосходного лечения': 'https://next.dnd.su/items/16525-potion-of-supreme-healing',
+  'Зелье лазания': 'https://next.dnd.su/items/16024-potion-of-climbing/',
+  'Масло ускользания': 'https://next.dnd.su/items/16004-oil-of-slipperiness/',
+  'Зелье сопротивления': 'https://next.dnd.su/items/16040-potion-of-resistance/',
+  'Мантия полезных предметов': 'https://next.dnd.su/items/16076-robe-of-useful-items/',
+  'Свиток заклинания': 'https://next.dnd.su/items/16854-spell-scroll',
+};
+
+function resolveMagicItemLink(name: string, table: string) {
+  const scrollMatch = name.match(/^Свиток заклинания/i);
+  if (scrollMatch) return directMagicItemLinks['Свиток заклинания'];
+
+  return directMagicItemLinks[name] ?? magicItemTableLinks[table] ?? treasuryArticleLink;
+}
+
 const magicItemTables: Record<string, MagicItemRoll[]> = {
   А: [
     { range: [1, 50], name: 'Зелье лечения' },
@@ -938,12 +957,12 @@ function rollMagicItemFromTable(letter: string) {
                   ? 'Статуэтка чудесной силы (ониксовая собака)'
                   : 'Статуэтка чудесной силы (серпентиновая сова)';
 
-    return { table: letter, roll, name: `${statueName}, доп. бросок к8: ${statueRoll}`, link: magicItemTableLinks[letter] };
+    return { table: letter, roll, name: `${statueName}, доп. бросок к8: ${statueRoll}`, link: resolveMagicItemLink(statueName, letter) };
   }
 
   if (letter === 'Ж' && match.name === 'Пояс силы ледяного великана (или каменного)') {
     const variant = rollDie(2) === 1 ? 'Пояс силы ледяного великана' : 'Пояс силы каменного великана';
-    return { table: letter, roll, name: variant, link: magicItemTableLinks[letter] };
+    return { table: letter, roll, name: variant, link: resolveMagicItemLink(variant, letter) };
   }
 
   if (letter === 'З' && match.name === 'Магический доспех') {
@@ -963,10 +982,10 @@ function rollMagicItemFromTable(letter: string) {
                   ? 'Доспех +3 (полулаты)'
                   : 'Доспех +3 (латы)';
 
-    return { table: letter, roll, name: `${armorName}, доп. бросок к12: ${armorRoll}`, link: magicItemTableLinks[letter] };
+    return { table: letter, roll, name: `${armorName}, доп. бросок к12: ${armorRoll}`, link: resolveMagicItemLink(armorName, letter) };
   }
 
-  return { table: letter, roll, name: match.name, link: magicItemTableLinks[letter] };
+  return { table: letter, roll, name: match.name, link: resolveMagicItemLink(match.name, letter) };
 }
 
 function rollMagicFromReference(reference: string) {
