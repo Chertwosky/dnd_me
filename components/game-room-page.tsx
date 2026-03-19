@@ -98,9 +98,18 @@ type LootResult = {
 type SavedRoomState = {
   mapName: string;
   mapState: MapState;
+  savedMaps?: SavedMapPreset[];
+  activeSavedMapId?: string | null;
   tokens: RoomToken[];
   sheets: CharacterSheet[];
   journal: JournalEntry[];
+};
+
+type SavedMapPreset = {
+  id: string;
+  name: string;
+  mapName: string;
+  mapState: MapState;
 };
 
 const DEFAULT_COLS = 16;
@@ -313,6 +322,18 @@ const randomLootDefault: LootResult = {
   link: treasuryArticleLink,
 };
 
+const magicItemTables: Record<string, string[]> = {
+  А: ['Зелье лечения', 'Свиток заклинания (1-й уровень)', 'Зелье лазания', 'Сумка хранения', 'Друидский талисман +1'],
+  Б: ['Зелье большого лечения', 'Патроны +1', 'Свиток заклинания (2-й уровень)', 'Амулет защиты от обнаружения', 'Верёвка лазания'],
+  В: ['Зелье превосходного лечения', 'Свиток заклинания (3-й уровень)', 'Оружие +1', 'Щит +1', 'Плащ защиты'],
+  Г: ['Свиток заклинания (4-й уровень)', 'Жезл хранителя договоров +1', 'Доспех +1', 'Жезл боевого мага +1', 'Плащ смещения'],
+  Д: ['Свиток заклинания (5-й уровень)', 'Оружие +2', 'Щит +2', 'Кольцо защиты', 'Посох силы'],
+  Е: ['Свиток заклинания (6-й уровень)', 'Зелье высшего лечения', 'Сапоги скорости', 'Кольцо сопротивления', 'Жезл боевого мага +2'],
+  Ё: ['Свиток заклинания (7-й уровень)', 'Оружие +3', 'Пояс силы великана', 'Кольцо телекинеза', 'Посох исцеления'],
+  Ж: ['Свиток заклинания (8-й уровень)', 'Броня +3', 'Посох грома и молний', 'Меч возмездия', 'Ковер-самолёт'],
+  З: ['Свиток заклинания (9-й уровень)', 'Священный мститель', 'Кольцо трёх желаний', 'Посох волшебства', 'Том ясной мысли'],
+};
+
 const initialTokens: RoomToken[] = [
   {
     id: 'elira',
@@ -472,6 +493,38 @@ function rollDie(sides: number) {
   return Math.floor(Math.random() * sides) + 1;
 }
 
+function rollDiceExpression(expression: string) {
+  const match = expression.match(/(\d+)к(\d+)/i);
+  if (!match) return 1;
+
+  const count = Number(match[1]);
+  const sides = Number(match[2]);
+  return Array.from({ length: count }, () => rollDie(sides)).reduce((sum, roll) => sum + roll, 0);
+}
+
+function rollMagicFromReference(reference: string) {
+  const normalized = reference.replace('таблицы', 'таблица').replace('таблицу', 'таблица');
+  const parts = normalized.split(' и ').map((part) => part.trim());
+  const results: string[] = [];
+
+  for (const part of parts) {
+    const match = part.match(/(?:(\d+к\d+)|(\d+))\s+предмет(?:ов)?\s+из\s+таблица\s+([А-ЗЁ])/i) ?? part.match(/(?:(\d+к\d+)|(\d+))\s+предмет(?:ов)?\s+из\s+таблицы\s+([А-ЗЁ])/i);
+    if (!match) continue;
+
+    const count = match[1] ? rollDiceExpression(match[1]) : Number(match[2] || 1);
+    const letter = match[3].toUpperCase();
+    const pool = magicItemTables[letter] ?? [];
+
+    for (let index = 0; index < count; index += 1) {
+      if (!pool.length) continue;
+      const item = pool[Math.floor(Math.random() * pool.length)];
+      results.push(`${letter}: ${item}`);
+    }
+  }
+
+  return results;
+}
+
 function rollTreasureFromTables(crBand: LootCrBand): LootResult {
   const d100 = rollDie(100);
   const individualCoins = treasureCoinTables[crBand].find((entry) => d100 >= entry.range[0] && d100 <= entry.range[1]) ?? treasureCoinTables[crBand][0];
@@ -480,6 +533,7 @@ function rollTreasureFromTables(crBand: LootCrBand): LootResult {
   const gemValue = gemMatch ? Number(gemMatch[1]) : null;
   const gemBucket = gemValue ? gemTables.find((entry) => entry.value === gemValue) ?? null : null;
   const gemItem = gemBucket ? gemBucket.items[Math.floor(Math.random() * gemBucket.items.length)] : null;
+  const magicItems = hoardRow.magic ? rollMagicFromReference(hoardRow.magic) : [];
 
   return {
     name: `Клад по таблице ПО ${crBand}`,
@@ -489,6 +543,7 @@ function rollTreasureFromTables(crBand: LootCrBand): LootResult {
       `Индивидуальные монеты для этой же группы ПО: ${individualCoins.coins.join(', ')}.`,
       `Строка сокровищницы: ${hoardRow.treasure}`,
       hoardRow.magic ? `Магические предметы: ${hoardRow.magic}` : 'Магические предметы: без дополнительных бросков.',
+      magicItems.length ? `Результат по таблицам А–З: ${magicItems.join('; ')}.` : '',
       gemBucket && gemItem ? `Пример камня из соответствующей таблицы: ${gemItem} (${gemBucket.value} зм).` : '',
       'Источник: таблицы статьи “Сокровищница” на dnd.su.',
     ].join(' '),
@@ -691,6 +746,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [authError, setAuthError] = useState('');
   const [mapName, setMapName] = useState('Руины старой башни');
   const [mapState, setMapState] = useState<MapState>(createInitialMapState);
+  const [savedMaps, setSavedMaps] = useState<SavedMapPreset[]>([]);
+  const [activeSavedMapId, setActiveSavedMapId] = useState<string | null>(null);
   const [tokens, setTokens] = useState<RoomToken[]>(initialTokens);
   const [sheets, setSheets] = useState<CharacterSheet[]>(initialSheets);
   const [selectedTokenId, setSelectedTokenId] = useState('elira');
@@ -707,6 +764,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [zoom, setZoom] = useState(1);
   const [gridColsInput, setGridColsInput] = useState(String(DEFAULT_COLS));
   const [gridRowsInput, setGridRowsInput] = useState(String(DEFAULT_ROWS));
+  const [mapPresetName, setMapPresetName] = useState('Сцена 1');
   const [journal, setJournal] = useState<JournalEntry[]>([
     {
       id: 'j1',
@@ -754,12 +812,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
     try {
       const parsed = JSON.parse(stored) as Partial<SavedRoomState>;
-      if (parsed.mapName) setMapName(parsed.mapName);
+      if (parsed.mapName) {
+        setMapName(parsed.mapName);
+        setMapPresetName(parsed.mapName);
+      }
       if (parsed.mapState?.cols && parsed.mapState?.rows && parsed.mapState.publicTiles && parsed.mapState.gmTiles) {
         setMapState(parsed.mapState as MapState);
         setGridColsInput(String(parsed.mapState.cols));
         setGridRowsInput(String(parsed.mapState.rows));
       }
+      if (parsed.savedMaps) setSavedMaps(parsed.savedMaps);
+      if (parsed.activeSavedMapId) setActiveSavedMapId(parsed.activeSavedMapId);
       if (parsed.tokens) setTokens(parsed.tokens);
       if (parsed.sheets) setSheets(parsed.sheets);
       if (parsed.journal) setJournal(parsed.journal);
@@ -772,9 +835,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   useEffect(() => {
     if (!isLoadedFromStorage) return;
-    const payload: SavedRoomState = { mapName, mapState, tokens, sheets, journal };
+    const payload: SavedRoomState = { mapName, mapState, savedMaps, activeSavedMapId, tokens, sheets, journal };
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
-  }, [isLoadedFromStorage, journal, mapName, mapState, roomId, sheets, tokens]);
+  }, [activeSavedMapId, isLoadedFromStorage, journal, mapName, mapState, roomId, savedMaps, sheets, tokens]);
 
   const addJournalEntry = (type: JournalEntry['type'], text: string) => {
     setJournal((current) => [{ id: `${Date.now()}-${Math.random()}`, type, text, time: nowTime() }, ...current].slice(0, 20));
@@ -914,13 +977,38 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     if (!file) return;
 
     setMapName(file.name.replace(/\.[^.]+$/, ''));
+    setMapPresetName(file.name.replace(/\.[^.]+$/, ''));
     addJournalEntry('map', `Загружена карта «${file.name}».`);
   };
 
   const handleSaveMap = () => {
-    const payload: SavedRoomState = { mapName, mapState, tokens, sheets, journal };
+    const presetId = activeSavedMapId ?? `map-${Date.now()}`;
+    const nextPreset: SavedMapPreset = {
+      id: presetId,
+      name: mapPresetName.trim() || mapName || 'Новая сцена',
+      mapName,
+      mapState,
+    };
+
+    setSavedMaps((current) => {
+      const existing = current.some((preset) => preset.id === presetId);
+      return existing ? current.map((preset) => (preset.id === presetId ? nextPreset : preset)) : [...current, nextPreset];
+    });
+    setActiveSavedMapId(presetId);
+
+    const payload: SavedRoomState = { mapName, mapState, savedMaps, activeSavedMapId: presetId, tokens, sheets, journal };
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
-    addJournalEntry('save', `Карта «${mapName}» сохранена локально для комнаты ${roomId}.`);
+    addJournalEntry('save', `Карта «${nextPreset.name}» сохранена локально для комнаты ${roomId}.`);
+  };
+
+  const handleLoadSavedMap = (preset: SavedMapPreset) => {
+    setActiveSavedMapId(preset.id);
+    setMapPresetName(preset.name);
+    setMapName(preset.mapName);
+    setMapState(preset.mapState);
+    setGridColsInput(String(preset.mapState.cols));
+    setGridRowsInput(String(preset.mapState.rows));
+    addJournalEntry('map', `Загружена сохранённая сцена «${preset.name}».`);
   };
 
   const handleResizeMap = () => {
@@ -1194,6 +1282,41 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             </button>
           </div>
         </header>
+
+        <section className="card p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-sm text-slate-400">Сохранённые сцены</div>
+              <div className="mt-1 text-sm text-slate-300">Каждая вкладка хранит пару карт: публичную для игроков и скрытую для мастера. При переключении меняются обе карты сразу.</div>
+            </div>
+            <div className="flex w-full max-w-xl gap-2">
+              <input
+                value={mapPresetName}
+                onChange={(event) => setMapPresetName(event.target.value)}
+                placeholder="Название вкладки карты"
+                className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+              />
+              <button onClick={handleSaveMap} className="rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">
+                Сохранить как вкладку
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {savedMaps.length ? (
+              savedMaps.map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => handleLoadSavedMap(preset)}
+                  className={boardButtonClass(activeSavedMapId === preset.id)}
+                >
+                  {preset.name}
+                </button>
+              ))
+            ) : (
+              <div className="text-sm text-slate-400">Пока нет сохранённых вкладок. Сохраните текущую сцену, чтобы быстро переключаться между наборами карт.</div>
+            )}
+          </div>
+        </section>
 
         {joinStep !== 'ready' ? (
           <section className="grid gap-4 lg:grid-cols-2">
