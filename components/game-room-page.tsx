@@ -29,6 +29,8 @@ import {
 
 type RoomRole = 'gm' | 'player';
 type JoinStep = 'auth' | 'player-sheet' | 'ready';
+type GmPanelId = 'admin' | 'tokens' | 'party' | 'initiative' | 'tools';
+type DropPlacement = 'before' | 'after';
 type DrawingTool = 'move' | 'terrain' | 'obstacle' | 'texture' | 'furniture' | 'fog' | 'erase';
 type LayerKind = 'terrain' | 'obstacle' | 'texture' | 'furniture';
 type TokenKind = 'player' | 'npc' | 'monster' | 'object';
@@ -234,14 +236,14 @@ const layerPalette: Record<LayerKind, string[]> = {
   furniture: ['#f8fafc', '#cbd5e1', '#94a3b8', '#fde68a'],
 };
 
-const toolMeta: Array<{ value: DrawingTool; label: string; layer?: LayerKind }> = [
-  { value: 'move', label: 'Токены' },
-  { value: 'terrain', label: 'Покрытие', layer: 'terrain' },
-  { value: 'obstacle', label: 'Препятствия', layer: 'obstacle' },
-  { value: 'texture', label: 'Текстуры', layer: 'texture' },
-  { value: 'furniture', label: 'Столы/объекты', layer: 'furniture' },
-  { value: 'fog', label: 'Fog' },
-  { value: 'erase', label: 'Стереть' },
+const toolMeta: Array<{ value: DrawingTool; label: string; shortLabel: string; layer?: LayerKind }> = [
+  { value: 'move', label: 'Токены', shortLabel: 'Ткн' },
+  { value: 'terrain', label: 'Покрытие', shortLabel: 'Покр', layer: 'terrain' },
+  { value: 'obstacle', label: 'Препятствия', shortLabel: 'Преп', layer: 'obstacle' },
+  { value: 'texture', label: 'Текстуры', shortLabel: 'Текст', layer: 'texture' },
+  { value: 'furniture', label: 'Столы/объекты', shortLabel: 'Обст', layer: 'furniture' },
+  { value: 'fog', label: 'Fog of war', shortLabel: 'FoW' },
+  { value: 'erase', label: 'Стереть', shortLabel: '⌫' },
 ];
 
 const tokenStatusCatalog: Array<{
@@ -1553,8 +1555,33 @@ function CompactSection({
 }
 
 function boardButtonClass(isActive: boolean) {
-  return `rounded-full border px-3 py-2 text-sm ${isActive ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`;
+  return `rounded-full border px-3 py-2 text-xs sm:text-sm ${isActive ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`;
 }
+
+function compactButtonLabel(fullLabel: string, shortLabel: string) {
+  return (
+    <>
+      <span className="sm:hidden" aria-hidden>{shortLabel}</span>
+      <span className="hidden sm:inline">{fullLabel}</span>
+      <span className="sr-only sm:not-sr-only">{fullLabel}</span>
+    </>
+  );
+}
+
+function getDropPlacement(event: ReactPointerEvent<HTMLElement> | React.DragEvent<HTMLElement>): DropPlacement {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const axis = rect.width >= rect.height ? 'x' : 'y';
+  const midpoint = axis === 'x' ? rect.left + rect.width / 2 : rect.top + rect.height / 2;
+  const pointer = axis === 'x' ? event.clientX : event.clientY;
+  return pointer < midpoint ? 'before' : 'after';
+}
+
+function getPanelSpan(width: number) {
+  if (width >= 900) return 'xl:col-span-12';
+  if (width >= 560) return 'md:col-span-6 xl:col-span-8';
+  return 'md:col-span-6 xl:col-span-4';
+}
+
 
 const statLabels: Array<{ key: keyof CharacterStats; label: string }> = [
   { key: 'str', label: 'СИЛ' },
@@ -1853,8 +1880,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [savedCharacters, setSavedCharacters] = useState<SavedCharacterPreset[]>([]);
   const [customXpInput, setCustomXpInput] = useState('0');
   const [levelRollbackSnapshots, setLevelRollbackSnapshots] = useState<Record<string, CharacterSheet[]>>({});
-  const [gmPanelOrder, setGmPanelOrder] = useState<Array<'admin' | 'tokens'>>(['admin', 'tokens']);
-  const [gmRightPanelOrder, setGmRightPanelOrder] = useState<Array<'party' | 'initiative' | 'tools'>>(['party', 'initiative', 'tools']);
+  const [gmPanelOrder, setGmPanelOrder] = useState<GmPanelId[]>(['admin', 'tokens', 'party', 'initiative', 'tools']);
   const [draggedMasterPanel, setDraggedMasterPanel] = useState<string | null>(null);
   const [gmPanelWidths, setGmPanelWidths] = useState<Record<'admin' | 'tokens' | 'party' | 'initiative' | 'tools', number>>({
     admin: 440,
@@ -2783,7 +2809,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     addJournalEntry('sheet', `${preset.name}: карточка загружена из библиотеки в новую партию.`);
   }, [addJournalEntry, cols, displayName, playerTokens.length, rows]);
 
-  const handleMoveGmPanel = useCallback((panelId: 'admin' | 'tokens', direction: 'up' | 'down') => {
+  const handleMoveGmPanel = useCallback((panelId: GmPanelId, direction: 'up' | 'down') => {
     setGmPanelOrder((current) => {
       const index = current.indexOf(panelId);
       if (index === -1) return current;
@@ -2795,17 +2821,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     });
   }, []);
 
-  const handleMoveGmRightPanel = useCallback((panelId: 'party' | 'initiative' | 'tools', direction: 'up' | 'down') => {
-    setGmRightPanelOrder((current) => {
-      const index = current.indexOf(panelId);
-      if (index === -1) return current;
-      const nextIndex = direction === 'up' ? index - 1 : index + 1;
-      if (nextIndex < 0 || nextIndex >= current.length) return current;
-      const next = [...current];
-      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-      return next;
-    });
-  }, []);
 
   const movePanelInOrder = useCallback((current: string[], draggedId: string, targetId: string) => {
     if (draggedId === targetId) return current;
@@ -2820,17 +2835,18 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setDraggedMasterPanel(panelId);
   }, []);
 
-  const handleDropLeftMasterPanel = useCallback((targetId: 'admin' | 'tokens') => {
-    if (!draggedMasterPanel || !gmPanelOrder.includes(draggedMasterPanel as 'admin' | 'tokens')) return;
-    setGmPanelOrder((current) => movePanelInOrder(current, draggedMasterPanel, targetId) as Array<'admin' | 'tokens'>);
+  const handleDropMasterPanel = useCallback((targetId: GmPanelId, placement: DropPlacement = 'before') => {
+    if (!draggedMasterPanel || !gmPanelOrder.includes(draggedMasterPanel as GmPanelId)) return;
+    setGmPanelOrder((current) => {
+      if (draggedMasterPanel === targetId) return current;
+      const filtered = current.filter((item) => item !== draggedMasterPanel);
+      const targetIndex = filtered.indexOf(targetId);
+      if (targetIndex === -1) return current;
+      filtered.splice(targetIndex + (placement === 'after' ? 1 : 0), 0, draggedMasterPanel as GmPanelId);
+      return filtered;
+    });
     setDraggedMasterPanel(null);
-  }, [draggedMasterPanel, gmPanelOrder, movePanelInOrder]);
-
-  const handleDropRightMasterPanel = useCallback((targetId: 'party' | 'initiative' | 'tools') => {
-    if (!draggedMasterPanel || !gmRightPanelOrder.includes(draggedMasterPanel as 'party' | 'initiative' | 'tools')) return;
-    setGmRightPanelOrder((current) => movePanelInOrder(current, draggedMasterPanel, targetId) as Array<'party' | 'initiative' | 'tools'>);
-    setDraggedMasterPanel(null);
-  }, [draggedMasterPanel, gmRightPanelOrder, movePanelInOrder]);
+  }, [draggedMasterPanel, gmPanelOrder]);
 
   const handleGmPanelWidthChange = useCallback((panelId: 'admin' | 'tokens' | 'party' | 'initiative' | 'tools', width: number) => {
     setGmPanelWidths((current) => ({ ...current, [panelId]: width }));
@@ -3218,21 +3234,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           <div className={`grid gap-4 ${role === 'gm' ? 'xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]' : 'xl:grid-cols-1'}`}>
             {role === 'gm' ? (
               <div className="min-w-0 space-y-4">
-                {gmPanelOrder.map((panelId, index) => (
+                {gmPanelOrder.filter((panelId) => panelId === 'admin' || panelId === 'tokens').map((panelId, index) => (
                   <div
                     key={panelId}
                     draggable
                     onDragStart={() => handleDragStartMasterPanel(panelId)}
                     onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => handleDropLeftMasterPanel(panelId)}
+                    onDrop={(event) => handleDropMasterPanel(panelId, getDropPlacement(event))}
                     onDragEnd={() => setDraggedMasterPanel(null)}
                     style={{ width: `min(100%, ${gmPanelWidths[panelId]}px)` }}
                     className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? 'ring-2 ring-cyan-400/50' : ''}`}
                   >
                     <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
                       <span className="font-medium text-white">Панель мастера: {panelId === 'admin' ? 'админка' : 'токены'}</span>
-                      <button type="button" onClick={() => handleMoveGmPanel(panelId, 'up')} disabled={index === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
-                      <button type="button" onClick={() => handleMoveGmPanel(panelId, 'down')} disabled={index === gmPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
+                      <button type="button" onClick={() => handleMoveGmPanel(panelId, 'up')} disabled={gmPanelOrder.indexOf(panelId) === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
+                      <button type="button" onClick={() => handleMoveGmPanel(panelId, 'down')} disabled={gmPanelOrder.indexOf(panelId) === gmPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
                       <span className="text-slate-500">Ширина</span>
                       <input type="range" min="280" max="680" value={gmPanelWidths[panelId]} onChange={(event) => handleGmPanelWidthChange(panelId, Number(event.target.value))} />
                     </div>
@@ -3244,7 +3260,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         </div>
                         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
                           {toolMeta.map((item) => (
-                            <button key={item.value} onClick={() => { setTool(item.value); if (item.layer) setSelectedColor(layerPalette[item.layer][0]); }} className={`rounded-2xl border px-3 py-2 ${tool === item.value ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`}>{item.label}</button>
+                            <button key={item.value} type="button" title={item.label} onClick={() => { setTool(item.value); if (item.layer) setSelectedColor(layerPalette[item.layer][0]); }} className={`min-w-0 rounded-2xl border px-3 py-2 text-xs sm:text-sm ${tool === item.value ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`}>{compactButtonLabel(item.label, item.shortLabel)}</button>
                           ))}
                         </div>
                         <div className="mt-4"><div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Палитра активного слоя</div><div className="flex flex-wrap gap-2">{activePalette.map((color) => <button key={`${tool}-${color}`} onClick={() => setSelectedColor(color)} className={`h-9 w-9 rounded-full border ${selectedColor === color ? 'border-white' : 'border-white/20'}`} style={{ backgroundColor: color }} aria-label={`Выбрать цвет ${color}`} />)}</div></div>
@@ -3278,16 +3294,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 draggable={role === 'gm'}
                 onDragStart={() => role === 'gm' && handleDragStartMasterPanel('party')}
                 onDragOver={(event) => role === 'gm' && event.preventDefault()}
-                onDrop={() => role === 'gm' && handleDropRightMasterPanel('party')}
+                onDrop={(event) => role === 'gm' && handleDropMasterPanel('party', getDropPlacement(event))}
                 onDragEnd={() => setDraggedMasterPanel(null)}
-                style={role === 'gm' ? { order: gmRightPanelOrder.indexOf('party'), width: `min(100%, ${gmPanelWidths.party}px)` } : undefined}
+                style={role === 'gm' ? { order: gmPanelOrder.indexOf('party'), width: `min(100%, ${gmPanelWidths.party}px)` } : undefined}
                 className={`space-y-2 rounded-3xl ${draggedMasterPanel === 'party' ? 'ring-2 ring-cyan-400/50' : ''}`}
               >
                 {role === 'gm' ? (
                   <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
                     <span className="font-medium text-white">Панель мастера: персонажи</span>
-                    <button type="button" onClick={() => handleMoveGmRightPanel('party', 'up')} disabled={gmRightPanelOrder.indexOf('party') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
-                    <button type="button" onClick={() => handleMoveGmRightPanel('party', 'down')} disabled={gmRightPanelOrder.indexOf('party') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
+                    <button type="button" onClick={() => handleMoveGmPanel('party', 'up')} disabled={gmPanelOrder.indexOf('party') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
+                    <button type="button" onClick={() => handleMoveGmPanel('party', 'down')} disabled={gmPanelOrder.indexOf('party') === gmPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
                     <span className="text-slate-500">Ширина</span>
                     <input type="range" min="320" max="1100" value={gmPanelWidths.party} onChange={(event) => handleGmPanelWidthChange('party', Number(event.target.value))} />
                   </div>
@@ -3387,9 +3403,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               <div className="space-y-3 rounded-3xl border border-white/10 bg-slate-950/40 p-4">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="text-xs uppercase tracking-wide text-slate-500">Campaign progression</span>
-                                  <button type="button" onClick={() => handleProgressionModeChange('xp')} className={`rounded-full px-3 py-1 text-xs ${campaignConfig.progressionMode === 'xp' ? 'bg-cyan-500 text-slate-950' : 'border border-white/10 text-slate-200'}`}>XP mode</button>
-                                  <button type="button" onClick={() => handleProgressionModeChange('milestone')} className={`rounded-full px-3 py-1 text-xs ${campaignConfig.progressionMode === 'milestone' ? 'bg-fuchsia-500 text-white' : 'border border-white/10 text-slate-200'}`}>Milestone mode</button>
-                                  <button type="button" onClick={handleToggleMilestoneReady} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200" disabled={campaignConfig.progressionMode !== 'milestone'}>Открыть level up вручную</button>
+                                  <button type="button" title="XP mode" onClick={() => handleProgressionModeChange('xp')} className={`rounded-full px-3 py-1 text-xs ${campaignConfig.progressionMode === 'xp' ? 'bg-cyan-500 text-slate-950' : 'border border-white/10 text-slate-200'}`}>XP</button>
+                                  <button type="button" onClick={() => handleProgressionModeChange('milestone')} className={`rounded-full px-3 py-1 text-xs ${campaignConfig.progressionMode === 'milestone' ? 'bg-fuchsia-500 text-white' : 'border border-white/10 text-slate-200'}`}>MLS</button>
+                                  <button type="button" onClick={handleToggleMilestoneReady} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200" disabled={campaignConfig.progressionMode !== 'milestone'}>Level Up</button>
                                   <button type="button" onClick={() => handleAddXp(300)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100" disabled={campaignConfig.progressionMode !== 'xp'}>+300 XP</button>
                                   <button type="button" onClick={() => handleAddXp(1200)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100" disabled={campaignConfig.progressionMode !== 'xp'}>+1200 XP</button>
                                   <button type="button" onClick={handleRollbackLastLevelUp} className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100 disabled:opacity-50" disabled={(levelRollbackSnapshots[selectedSheet.id] ?? []).length === 0}>Откатить level up</button>
@@ -3479,11 +3495,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               <div className="text-xs text-slate-500">PB {formatSignedModifier(selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1))}</div>
                             </div>
                             <div className="mt-3 grid gap-2">
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Initiative', `1d20${formatSignedModifier(selectedSheetInitiativeModifier)}`)} className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-100">Бросить инициативу</button>
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Melee attack', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.str) + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`)} className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-left text-sm text-emerald-100">Атака оружием (СИЛ + PB)</button>
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Ranged / finesse attack', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.dex) + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`)} className="rounded-2xl border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-left text-sm text-sky-100">Атака оружием (ЛОВ + PB)</button>
-                              <button type="button" onClick={() => { const spellAbility = getSpellcastingAbility(selectedSheet); const spellMod = getAbilityModifier(selectedSheet.stats[spellAbility]); handleQuickRoll(selectedSheet, `Spell attack (${String(spellAbility).toUpperCase()})`, `1d20${formatSignedModifier(spellMod + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`); }} className="rounded-2xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-left text-sm text-violet-100">Заклинательная атака</button>
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Concentration', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.con))}`)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2 text-left text-sm text-slate-200">Проверка концентрации</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Initiative', `1d20${formatSignedModifier(selectedSheetInitiativeModifier)}`)} className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-100">Инициатива</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Melee attack', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.str) + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`)} className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-left text-sm text-emerald-100">Атака СИЛ</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Ranged / finesse attack', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.dex) + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`)} className="rounded-2xl border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-left text-sm text-sky-100">Атака ЛОВ</button>
+                              <button type="button" onClick={() => { const spellAbility = getSpellcastingAbility(selectedSheet); const spellMod = getAbilityModifier(selectedSheet.stats[spellAbility]); handleQuickRoll(selectedSheet, `Spell attack (${String(spellAbility).toUpperCase()})`, `1d20${formatSignedModifier(spellMod + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`); }} className="rounded-2xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-left text-sm text-violet-100">Спелл-атака</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Concentration', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.con))}`)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2 text-left text-sm text-slate-200">Концентрация</button>
                             </div>
                             <div className="mt-3 text-xs leading-5 text-slate-400">Кнопки сразу бросают d20 по реальным модификаторам, подставляют формулу в общий dice roller и пишут результат в журнал.</div>
                           </div>
@@ -3586,16 +3602,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 draggable={role === 'gm'}
                 onDragStart={() => role === 'gm' && handleDragStartMasterPanel('initiative')}
                 onDragOver={(event) => role === 'gm' && event.preventDefault()}
-                onDrop={() => role === 'gm' && handleDropRightMasterPanel('initiative')}
+                onDrop={(event) => role === 'gm' && handleDropMasterPanel('initiative', getDropPlacement(event))}
                 onDragEnd={() => setDraggedMasterPanel(null)}
-                style={role === 'gm' ? { order: gmRightPanelOrder.indexOf('initiative'), width: `min(100%, ${gmPanelWidths.initiative}px)` } : undefined}
+                style={role === 'gm' ? { order: gmPanelOrder.indexOf('initiative'), width: `min(100%, ${gmPanelWidths.initiative}px)` } : undefined}
                 className={`space-y-2 rounded-3xl ${draggedMasterPanel === 'initiative' ? 'ring-2 ring-cyan-400/50' : ''}`}
               >
                 {role === 'gm' ? (
                   <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
                     <span className="font-medium text-white">Панель мастера: инициатива</span>
-                    <button type="button" onClick={() => handleMoveGmRightPanel('initiative', 'up')} disabled={gmRightPanelOrder.indexOf('initiative') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
-                    <button type="button" onClick={() => handleMoveGmRightPanel('initiative', 'down')} disabled={gmRightPanelOrder.indexOf('initiative') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
+                    <button type="button" onClick={() => handleMoveGmPanel('initiative', 'up')} disabled={gmPanelOrder.indexOf('initiative') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
+                    <button type="button" onClick={() => handleMoveGmPanel('initiative', 'down')} disabled={gmPanelOrder.indexOf('initiative') === gmPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
                     <span className="text-slate-500">Ширина</span>
                     <input type="range" min="320" max="1100" value={gmPanelWidths.initiative} onChange={(event) => handleGmPanelWidthChange('initiative', Number(event.target.value))} />
                   </div>
@@ -3721,17 +3737,18 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   draggable
                   onDragStart={() => handleDragStartMasterPanel('tools')}
                   onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => handleDropRightMasterPanel('tools')}
+                  onDrop={(event) => handleDropMasterPanel('tools', getDropPlacement(event))}
                   onDragEnd={() => setDraggedMasterPanel(null)}
-                  style={{ order: gmRightPanelOrder.indexOf('tools') }}
+                  
+                  style={{ order: gmPanelOrder.indexOf('tools') }}
                   className={`space-y-2 rounded-3xl ${draggedMasterPanel === 'tools' ? 'ring-2 ring-cyan-400/50' : ''}`}
                 >
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                     <div style={{ width: `min(100%, ${gmPanelWidths.tools}px)` }} className="space-y-2">
                       <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
                         <span className="font-medium text-white">Панель мастера: инструменты</span>
-                        <button type="button" onClick={() => handleMoveGmRightPanel('tools', 'up')} disabled={gmRightPanelOrder.indexOf('tools') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
-                        <button type="button" onClick={() => handleMoveGmRightPanel('tools', 'down')} disabled={gmRightPanelOrder.indexOf('tools') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
+                        <button type="button" onClick={() => handleMoveGmPanel('tools', 'up')} disabled={gmPanelOrder.indexOf('tools') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
+                        <button type="button" onClick={() => handleMoveGmPanel('tools', 'down')} disabled={gmPanelOrder.indexOf('tools') === gmPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
                         <span className="text-slate-500">Ширина</span>
                         <input type="range" min="260" max="520" value={gmPanelWidths.tools} onChange={(event) => handleGmPanelWidthChange('tools', Number(event.target.value))} />
                       </div>
