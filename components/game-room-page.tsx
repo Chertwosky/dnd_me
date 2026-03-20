@@ -230,6 +230,18 @@ type MasterPanelDragState = {
   width: number;
 };
 
+function isLeftPanelId(panelId: MasterPanelId): panelId is 'admin' | 'tokens' {
+  return panelId === 'admin' || panelId === 'tokens';
+}
+
+function isRightPanelId(panelId: MasterPanelId): panelId is 'party' | 'initiative' | 'tools' {
+  return panelId === 'party' || panelId === 'initiative' || panelId === 'tools';
+}
+
+function getAllowedMasterPanelColumn(panelId: MasterPanelId): MasterPanelColumn {
+  return isLeftPanelId(panelId) ? 'left' : 'right';
+}
+
 const DEFAULT_COLS = 16;
 const DEFAULT_ROWS = 10;
 const MIN_GRID = 4;
@@ -2824,21 +2836,38 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     });
   }, []);
 
-  const movePanelInOrder = useCallback((current: string[], draggedId: string, targetId: string) => {
-    if (draggedId === targetId) return current;
-    const next = current.filter((item) => item !== draggedId);
-    const targetIndex = next.indexOf(targetId);
-    if (targetIndex === -1) return current;
-    next.splice(targetIndex, 0, draggedId);
-    return next;
-  }, []);
-
   const registerLeftPanelRef = useCallback((panelId: 'admin' | 'tokens', node: HTMLDivElement | null) => {
     leftPanelRefs.current[panelId] = node;
   }, []);
 
   const registerRightPanelRef = useCallback((panelId: 'party' | 'initiative' | 'tools', node: HTMLDivElement | null) => {
     rightPanelRefs.current[panelId] = node;
+  }, []);
+
+  const moveMasterPanelToColumn = useCallback((draggedId: MasterPanelId, nextColumn: MasterPanelColumn, targetId?: MasterPanelId) => {
+    setGmPanelOrder((currentLeft) => {
+      const leftWithoutDragged = currentLeft.filter((panelId) => panelId !== draggedId) as Array<'admin' | 'tokens'>;
+      if (nextColumn === 'left' && isLeftPanelId(draggedId)) {
+        const nextLeft = [...leftWithoutDragged];
+        const insertIndex = targetId && isLeftPanelId(targetId) ? nextLeft.indexOf(targetId) : -1;
+        if (insertIndex >= 0) nextLeft.splice(insertIndex, 0, draggedId);
+        else nextLeft.push(draggedId);
+        return nextLeft;
+      }
+      return leftWithoutDragged;
+    });
+
+    setGmRightPanelOrder((currentRight) => {
+      const rightWithoutDragged = currentRight.filter((panelId) => panelId !== draggedId) as Array<'party' | 'initiative' | 'tools'>;
+      if (nextColumn === 'right' && isRightPanelId(draggedId)) {
+        const nextRight = [...rightWithoutDragged];
+        const insertIndex = targetId && isRightPanelId(targetId) ? nextRight.indexOf(targetId) : -1;
+        if (insertIndex >= 0) nextRight.splice(insertIndex, 0, draggedId);
+        else nextRight.push(draggedId);
+        return nextRight;
+      }
+      return rightWithoutDragged;
+    });
   }, []);
 
   const handleStartMasterPanelDrag = useCallback((
@@ -2870,42 +2899,38 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     });
   }, [role]);
 
-  const reorderMasterPanelsForPointer = useCallback((column: MasterPanelColumn, draggedId: MasterPanelId, clientY: number) => {
-    if (column === 'left') {
+  const reorderMasterPanelsForPointer = useCallback((draggedId: MasterPanelId, clientY: number) => {
+    const nextColumn = getAllowedMasterPanelColumn(draggedId);
+
+    if (nextColumn === 'left') {
+      if (!isLeftPanelId(draggedId)) return;
       const panels = gmPanelOrder.filter((panelId) => panelId !== draggedId);
       for (const panelId of panels) {
         const node = leftPanelRefs.current[panelId];
         if (!node) continue;
         const rect = node.getBoundingClientRect();
         if (clientY < rect.top + rect.height / 2) {
-          setGmPanelOrder((current) => movePanelInOrder(current, draggedId, panelId) as Array<'admin' | 'tokens'>);
+          moveMasterPanelToColumn(draggedId, 'left', panelId);
           return;
         }
       }
-      setGmPanelOrder((current) => {
-        const next = current.filter((panelId) => panelId !== draggedId) as Array<'admin' | 'tokens'>;
-        next.push(draggedId as 'admin' | 'tokens');
-        return next;
-      });
+      moveMasterPanelToColumn(draggedId, 'left');
       return;
     }
 
+    if (!isRightPanelId(draggedId)) return;
     const panels = gmRightPanelOrder.filter((panelId) => panelId !== draggedId);
     for (const panelId of panels) {
       const node = rightPanelRefs.current[panelId];
       if (!node) continue;
       const rect = node.getBoundingClientRect();
       if (clientY < rect.top + rect.height / 2) {
-        setGmRightPanelOrder((current) => movePanelInOrder(current, draggedId, panelId) as Array<'party' | 'initiative' | 'tools'>);
+        moveMasterPanelToColumn(draggedId, 'right', panelId);
         return;
       }
     }
-    setGmRightPanelOrder((current) => {
-      const next = current.filter((panelId) => panelId !== draggedId) as Array<'party' | 'initiative' | 'tools'>;
-      next.push(draggedId as 'party' | 'initiative' | 'tools');
-      return next;
-    });
-  }, [gmPanelOrder, gmRightPanelOrder, movePanelInOrder]);
+    moveMasterPanelToColumn(draggedId, 'right');
+  }, [gmPanelOrder, gmRightPanelOrder, moveMasterPanelToColumn]);
 
   useEffect(() => {
     if (!masterPanelDrag) return undefined;
@@ -2914,8 +2939,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (event.pointerId !== masterPanelDrag.pointerId) return;
       const nextX = event.clientX - masterPanelDrag.offsetX;
       const nextY = event.clientY - masterPanelDrag.offsetY;
-      setMasterPanelDrag((current) => (current ? { ...current, x: nextX, y: nextY } : current));
-      reorderMasterPanelsForPointer(masterPanelDrag.column, masterPanelDrag.panelId, event.clientY);
+      const nextColumn = getAllowedMasterPanelColumn(masterPanelDrag.panelId);
+      setMasterPanelDrag((current) => (current ? { ...current, x: nextX, y: nextY, column: nextColumn } : current));
+      reorderMasterPanelsForPointer(masterPanelDrag.panelId, event.clientY);
     };
 
     const finishDrag = (pointerId: number) => {
