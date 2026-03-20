@@ -92,9 +92,26 @@ type CharacterSheet = {
 
 type JournalEntry = {
   id: string;
-  type: 'system' | 'move' | 'dice' | 'loot' | 'event' | 'sheet' | 'map' | 'room' | 'save';
+  type: 'system' | 'move' | 'dice' | 'loot' | 'event' | 'sheet' | 'map' | 'room' | 'save' | 'initiative';
   text: string;
   time: string;
+};
+
+type InitiativeParticipant = {
+  tokenId: string;
+  name: string;
+  kind: TokenKind;
+  initiative: number;
+  initiativeModifier: number;
+  color: string;
+  hiddenFromPlayers?: boolean;
+};
+
+type InitiativeState = {
+  active: boolean;
+  round: number;
+  currentTurnIndex: number;
+  participants: InitiativeParticipant[];
 };
 
 type CellData = {
@@ -139,6 +156,7 @@ type SavedRoomState = {
   tokens: RoomToken[];
   sheets: CharacterSheet[];
   journal: JournalEntry[];
+  initiative?: InitiativeState;
 };
 
 type SavedMapPreset = {
@@ -1300,6 +1318,15 @@ function getStorageKey(roomId: string) {
   return `${STORAGE_PREFIX}${roomId}`;
 }
 
+function createEmptyInitiativeState(): InitiativeState {
+  return {
+    active: false,
+    round: 1,
+    currentTurnIndex: 0,
+    participants: [],
+  };
+}
+
 function buildSavedRoomState({
   mapName,
   mapState,
@@ -1309,6 +1336,7 @@ function buildSavedRoomState({
   tokens,
   sheets,
   journal,
+  initiative,
 }: SavedRoomState): SavedRoomState {
   return {
     mapName,
@@ -1319,6 +1347,48 @@ function buildSavedRoomState({
     tokens,
     sheets,
     journal,
+    initiative,
+  };
+}
+
+function getInitiativeModifier(token: RoomToken, sheets: CharacterSheet[]) {
+  const sheet = sheets.find((entry) => entry.tokenId === token.id || entry.id === token.sheetId);
+  if (typeof sheet?.initiative === 'number' && Number.isFinite(sheet.initiative) && sheet.initiative !== 0) {
+    return sheet.initiative;
+  }
+
+  const dex = sheet?.stats.dex;
+  if (typeof dex === 'number' && Number.isFinite(dex)) {
+    return Math.floor((dex - 10) / 2);
+  }
+
+  return 0;
+}
+
+function syncInitiativeWithTokens(initiative: InitiativeState, tokens: RoomToken[], sheets: CharacterSheet[]) {
+  const participants = initiative.participants
+    .map((participant) => {
+      const token = tokens.find((entry) => entry.id === participant.tokenId);
+      if (!token) return null;
+
+      return {
+        ...participant,
+        name: token.name,
+        kind: token.kind,
+        color: token.color,
+        hiddenFromPlayers: token.gmOnly,
+        initiativeModifier: getInitiativeModifier(token, sheets),
+      };
+    })
+    .filter(Boolean) as InitiativeParticipant[];
+
+  const currentTurnIndex = participants.length === 0 ? 0 : Math.min(initiative.currentTurnIndex, participants.length - 1);
+
+  return {
+    ...initiative,
+    active: initiative.active && participants.length > 0,
+    currentTurnIndex,
+    participants,
   };
 }
 
@@ -1401,6 +1471,7 @@ function Board({
   visibleMask,
   onBoardPointerDown,
   onTokenPointerDown,
+  activeTokenId,
 }: {
   title: string;
   subtitle: string;
@@ -1412,6 +1483,7 @@ function Board({
   visibleMask?: boolean[];
   onBoardPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onTokenPointerDown?: (tokenId: string) => (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  activeTokenId?: string | null;
 }) {
   const aspectRatio = `${cols} / ${rows}`;
   const minWidth = Math.max(600, cols * 44);
@@ -1459,12 +1531,13 @@ function Board({
           {tokens.map((token) => {
             const left = `calc(${((token.x + 0.5) / cols) * 100}% - 1.5rem)`;
             const top = `calc(${((token.y + 0.5) / rows) * 100}% - 1.5rem)`;
+            const isActive = activeTokenId === token.id;
             const style: CSSProperties = {
               left,
               top,
               borderColor: token.color,
               backgroundColor: `${token.color}33`,
-              boxShadow: `0 0 24px ${token.color}55`,
+              boxShadow: isActive ? `0 0 0 3px rgba(250, 204, 21, 0.9), 0 0 30px ${token.color}88` : `0 0 24px ${token.color}55`,
             };
             const isHiddenByMask = visibleMask ? !visibleMask[getCellIndex(token.x, token.y, cols)] : false;
             if (isHiddenByMask) return null;
@@ -1472,7 +1545,7 @@ function Board({
               <button
                 key={token.id}
                 onPointerDown={onTokenPointerDown ? onTokenPointerDown(token.id) : undefined}
-                className="absolute flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-semibold text-white shadow-lg"
+                className="absolute flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-semibold text-white shadow-lg transition"
                 style={style}
               >
                 {token.short}
@@ -1523,6 +1596,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     },
   ]);
   const [isLoadedFromStorage, setIsLoadedFromStorage] = useState(false);
+  const [initiative, setInitiative] = useState<InitiativeState>(createEmptyInitiativeState);
 
   const cols = mapState.cols;
   const rows = mapState.rows;
@@ -1561,6 +1635,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     () => tokens.filter((token) => !token.gmOnly && playerVisibilityMask[getCellIndex(token.x, token.y, cols)]),
     [cols, playerVisibilityMask, tokens],
   );
+  const visibleTokenIdsForPlayers = useMemo(() => new Set(visibleTokensForPlayers.map((token) => token.id)), [visibleTokensForPlayers]);
+  const activeInitiativeParticipant = initiative.participants[initiative.currentTurnIndex] ?? null;
+  const visibleInitiativeForPlayers = useMemo(
+    () => initiative.participants.filter((participant) => visibleTokenIdsForPlayers.has(participant.tokenId) && !participant.hiddenFromPlayers),
+    [initiative.participants, visibleTokenIdsForPlayers],
+  );
 
   useEffect(() => {
     const stored = window.localStorage.getItem(getStorageKey(roomId));
@@ -1586,6 +1666,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (parsed.tokens) setTokens(parsed.tokens);
       if (parsed.sheets) setSheets(parsed.sheets);
       if (parsed.journal) setJournal(parsed.journal);
+      if (parsed.initiative) setInitiative(syncInitiativeWithTokens(parsed.initiative as InitiativeState, parsed.tokens ?? initialTokens, parsed.sheets ?? initialSheets));
     } catch {
       // ignore corrupted local state
     }
@@ -1595,13 +1676,103 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   useEffect(() => {
     if (!isLoadedFromStorage) return;
-    const payload = buildSavedRoomState({ mapName, mapState, savedMaps, activeSavedMapId, widgetUrl, tokens, sheets, journal });
+    const payload = buildSavedRoomState({ mapName, mapState, savedMaps, activeSavedMapId, widgetUrl, tokens, sheets, journal, initiative });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
-  }, [activeSavedMapId, isLoadedFromStorage, journal, mapName, mapState, roomId, savedMaps, sheets, tokens, widgetUrl]);
+  }, [activeSavedMapId, initiative, isLoadedFromStorage, journal, mapName, mapState, roomId, savedMaps, sheets, tokens, widgetUrl]);
 
-  const addJournalEntry = (type: JournalEntry['type'], text: string) => {
+  const addJournalEntry = useCallback((type: JournalEntry['type'], text: string) => {
     setJournal((current) => [{ id: `${Date.now()}-${Math.random()}`, type, text, time: nowTime() }, ...current].slice(0, 20));
-  };
+  }, []);
+
+  const buildInitiativeParticipants = useCallback((mode: 'players' | 'visible' | 'all') => {
+    const scope = tokens.filter((token) => {
+      if (token.kind === 'object') return false;
+      if (mode === 'players') return token.kind === 'player';
+      if (mode === 'visible') return visibleTokenIdsForPlayers.has(token.id) || token.kind === 'player';
+      return true;
+    });
+
+    return scope
+      .map((token) => {
+        const modifier = getInitiativeModifier(token, sheets);
+        const roll = rollDie(20);
+        return {
+          tokenId: token.id,
+          name: token.name,
+          kind: token.kind,
+          initiative: roll + modifier,
+          initiativeModifier: modifier,
+          color: token.color,
+          hiddenFromPlayers: token.gmOnly,
+        };
+      })
+      .sort((left, right) => {
+        if (right.initiative !== left.initiative) return right.initiative - left.initiative;
+        if (right.initiativeModifier !== left.initiativeModifier) return right.initiativeModifier - left.initiativeModifier;
+        return left.name.localeCompare(right.name, 'ru');
+      });
+  }, [sheets, tokens, visibleTokenIdsForPlayers]);
+
+  const updateInitiativeParticipant = useCallback((tokenId: string, updater: (participant: InitiativeParticipant) => InitiativeParticipant) => {
+    setInitiative((current) => ({
+      ...current,
+      participants: current.participants.map((participant) => (participant.tokenId === tokenId ? updater(participant) : participant)),
+    }));
+  }, []);
+
+  const handleStartInitiative = useCallback((mode: 'players' | 'visible' | 'all') => {
+    if (role !== 'gm') return;
+    const participants = buildInitiativeParticipants(mode);
+    if (!participants.length) {
+      addJournalEntry('initiative', 'Не удалось запустить инициативу: нет подходящих участников.');
+      return;
+    }
+
+    setInitiative({
+      active: true,
+      round: 1,
+      currentTurnIndex: 0,
+      participants,
+    });
+
+    addJournalEntry('initiative', `Инициатива запущена (${mode === 'all' ? 'все токены' : mode === 'visible' ? 'видимые участники' : 'только игроки'}): ${participants.map((participant) => `${participant.name} ${participant.initiative}`).join(', ')}.`);
+  }, [addJournalEntry, buildInitiativeParticipants, role]);
+
+  const handleAdvanceTurn = useCallback(() => {
+    if (role !== 'gm') return;
+    setInitiative((current) => {
+      if (!current.active || current.participants.length === 0) return current;
+      const nextIndex = (current.currentTurnIndex + 1) % current.participants.length;
+      const nextRound = nextIndex === 0 ? current.round + 1 : current.round;
+      const nextParticipant = current.participants[nextIndex];
+      addJournalEntry('initiative', `Ход переходит к ${nextParticipant.name}. Раунд ${nextRound}.`);
+      return {
+        ...current,
+        currentTurnIndex: nextIndex,
+        round: nextRound,
+      };
+    });
+  }, [addJournalEntry, role]);
+
+  const handleStopInitiative = useCallback(() => {
+    if (role !== 'gm') return;
+    setInitiative(createEmptyInitiativeState());
+    addJournalEntry('initiative', 'Трекер инициативы очищен.');
+  }, [addJournalEntry, role]);
+
+  const handleSelectTurn = useCallback((tokenId: string) => {
+    if (role !== 'gm') return;
+    setInitiative((current) => {
+      const nextIndex = current.participants.findIndex((participant) => participant.tokenId === tokenId);
+      if (nextIndex < 0) return current;
+      return {
+        ...current,
+        active: current.participants.length > 0,
+        currentTurnIndex: nextIndex,
+      };
+    });
+  }, [role]);
+
 
   const setTilesForBoard = useCallback((board: BoardKind, nextTiles: CellData[]) => {
     setMapState((current) => ({
@@ -1709,7 +1880,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       window.removeEventListener('pointermove', handleMove);
       window.removeEventListener('pointerup', handleUp);
     };
-  }, [activeBoard, applyPointerToBoard, draggingTokenId, isPointerDown, tokens]);
+  }, [activeBoard, addJournalEntry, applyPointerToBoard, draggingTokenId, isPointerDown, tokens]);
 
   const handleBoardPointerDown = (board: BoardKind) => (event: ReactPointerEvent<HTMLDivElement>) => {
     if (joinStep !== 'ready') return;
@@ -1778,6 +1949,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         sheets,
         journal: nextJournal,
         widgetUrl,
+        initiative,
       });
       window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
     }
@@ -1808,6 +1980,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       sheets,
       journal,
       widgetUrl,
+      initiative,
     });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
     addJournalEntry('save', `Карта «${nextPreset.name}» сохранена локально для комнаты ${roomId} как новая вкладка.`);
@@ -1836,6 +2009,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       sheets,
       journal,
       widgetUrl,
+      initiative,
     });
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -1870,6 +2044,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (parsed.tokens) setTokens(parsed.tokens);
       if (parsed.sheets) setSheets(parsed.sheets);
       if (parsed.journal) setJournal(parsed.journal);
+      setInitiative(syncInitiativeWithTokens((parsed.initiative as InitiativeState | undefined) ?? createEmptyInitiativeState(), parsed.tokens ?? tokens, parsed.sheets ?? sheets));
       addJournalEntry('map', `JSON-карта «${file.name}» загружена в комнату.`);
     } catch {
       addJournalEntry('system', `Файл ${file.name} не является валидным JSON карты.`);
@@ -2147,6 +2322,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     reader.readAsDataURL(file);
     event.target.value = '';
   };
+
+  useEffect(() => {
+    setInitiative((current) => syncInitiativeWithTokens(current, tokens, sheets));
+  }, [tokens, sheets]);
 
   const paintedCells = activeTiles.filter((tile) => tile.terrain !== DEFAULT_TERRAIN).length;
   const foggedCells = activeTiles.filter((tile) => tile.fog).length;
@@ -2547,6 +2726,84 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 </div>
               </div>
 
+              <div className="card p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">Инициатива и ход боя</h2>
+                    <p className="mt-1 text-sm text-slate-400">Трекер работает поверх текущих токенов и сохраняется в JSON комнаты без обязательной миграции старых файлов.</p>
+                  </div>
+                  <span className="badge">combat</span>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2 text-sm">
+                  {role === 'gm' ? (
+                    <>
+                      <button onClick={() => handleStartInitiative('visible')} className="rounded-full bg-cyan-500 px-4 py-2 font-medium text-slate-950">Автоинициатива видимых</button>
+                      <button onClick={() => handleStartInitiative('all')} className="rounded-full border border-white/10 px-4 py-2 text-slate-200">Включить всех</button>
+                      <button onClick={handleAdvanceTurn} disabled={!initiative.active || initiative.participants.length === 0} className="rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-2 font-medium text-amber-100 disabled:cursor-not-allowed disabled:opacity-50">Следующий ход</button>
+                      <button onClick={handleStopInitiative} disabled={initiative.participants.length === 0 && !initiative.active} className="rounded-full border border-white/10 px-4 py-2 text-slate-300 disabled:cursor-not-allowed disabled:opacity-50">Сбросить</button>
+                    </>
+                  ) : null}
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-2xl border border-white/8 bg-slate-950/40 px-4 py-3">
+                    <div className="text-xs uppercase tracking-wide text-slate-500">Статус</div>
+                    <div className="mt-2 text-white">{initiative.active ? 'Бой активен' : 'Ожидает запуска'}</div>
+                  </div>
+                  <div className="rounded-2xl border border-white/8 bg-slate-950/40 px-4 py-3">
+                    <div className="text-xs uppercase tracking-wide text-slate-500">Раунд</div>
+                    <div className="mt-2 text-white">{initiative.active ? initiative.round : '—'}</div>
+                  </div>
+                  <div className="rounded-2xl border border-white/8 bg-slate-950/40 px-4 py-3">
+                    <div className="text-xs uppercase tracking-wide text-slate-500">Текущий ход</div>
+                    <div className="mt-2 text-white">{activeInitiativeParticipant ? activeInitiativeParticipant.name : '—'}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {(role === 'gm' ? initiative.participants : visibleInitiativeForPlayers).length ? (
+                    (role === 'gm' ? initiative.participants : visibleInitiativeForPlayers).map((participant, index) => {
+                      const isActive = activeInitiativeParticipant?.tokenId === participant.tokenId;
+                      return (
+                        <div key={participant.tokenId} className={`rounded-2xl border px-4 py-3 ${isActive ? 'border-amber-400/40 bg-amber-500/10' : 'border-white/8 bg-slate-950/30'}`}>
+                          <div className="flex items-center justify-between gap-3">
+                            <button
+                              onClick={() => handleSelectTurn(participant.tokenId)}
+                              disabled={role !== 'gm'}
+                              className="flex min-w-0 items-center gap-3 text-left disabled:cursor-default"
+                            >
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold text-white" style={{ borderColor: participant.color, backgroundColor: `${participant.color}33` }}>
+                                {index + 1}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium text-white">{participant.name}</span>
+                                <span className="block text-xs text-slate-400">{participant.kind}{participant.hiddenFromPlayers ? ' • скрыт от игроков' : ''}</span>
+                              </span>
+                            </button>
+                            <div className="flex items-center gap-2">
+                              {role === 'gm' ? (
+                                <input
+                                  type="number"
+                                  value={participant.initiative}
+                                  onChange={(event) => updateInitiativeParticipant(participant.tokenId, (current) => ({ ...current, initiative: Number(event.target.value) || 0 }))}
+                                  className="w-20 rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2 text-right text-white"
+                                />
+                              ) : (
+                                <div className="text-lg font-semibold text-white">{participant.initiative}</div>
+                              )}
+                              <span className="text-xs text-slate-500">mod {participant.initiativeModifier >= 0 ? '+' : ''}{participant.initiativeModifier}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-white/10 px-4 py-4 text-sm text-slate-400">Запустите автоинициативу, чтобы получить порядок ходов, следующий ход и сохранение состояния между сценами и JSON-экспортом.</div>
+                  )}
+                </div>
+              </div>
+
               {role === 'gm' ? (
                 <>
                   <div className="grid gap-4 lg:grid-cols-2">
@@ -2673,6 +2930,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   zoom={zoom}
                   onBoardPointerDown={handleBoardPointerDown('public')}
                   onTokenPointerDown={handleTokenPointerDown}
+                  activeTokenId={activeInitiativeParticipant?.tokenId}
                 />
               </div>
               <div id="battle-board-gm">
@@ -2686,6 +2944,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   zoom={zoom}
                   onBoardPointerDown={handleBoardPointerDown('gm')}
                   onTokenPointerDown={handleTokenPointerDown}
+                  activeTokenId={activeInitiativeParticipant?.tokenId}
                 />
               </div>
             </div>
@@ -2702,6 +2961,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 zoom={zoom}
                 onBoardPointerDown={handleBoardPointerDown('public')}
                 onTokenPointerDown={handleTokenPointerDown}
+                activeTokenId={activeInitiativeParticipant?.tokenId}
               />
             </div>
           )}
