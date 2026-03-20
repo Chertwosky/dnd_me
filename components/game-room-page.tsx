@@ -9,6 +9,7 @@ import {
   type ChangeEvent,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react';
 
 type RoomRole = 'gm' | 'player';
@@ -1477,6 +1478,36 @@ function resizeTiles(source: CellData[], oldCols: number, oldRows: number, newCo
   return nextTiles;
 }
 
+function CompactSection({
+  title,
+  description,
+  badge,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  description?: string;
+  badge?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details className="card group overflow-hidden" open={defaultOpen}>
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-4 marker:content-none">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-semibold text-white">{title}</h2>
+            {badge ? <span className="badge">{badge}</span> : null}
+          </div>
+          {description ? <p className="mt-1 text-sm text-slate-400">{description}</p> : null}
+        </div>
+        <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 transition group-open:rotate-180">⌄</span>
+      </summary>
+      <div className="border-t border-white/8 px-4 py-4">{children}</div>
+    </details>
+  );
+}
+
 function boardButtonClass(isActive: boolean) {
   return `rounded-full border px-3 py-2 text-sm ${isActive ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`;
 }
@@ -2738,10 +2769,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         </header>
 
         {role !== 'player' || joinStep !== 'ready' ? (
-          <section className="card p-4">
+          <CompactSection
+            title="Сохранённые сцены"
+            description="Все карты и JSON на месте, но блок теперь можно свернуть, чтобы не занимал экран."
+            badge={`${savedMaps.length || 0} сцен`}
+          >
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="text-sm text-slate-400">Сохранённые сцены</div>
                 <div className="mt-1 text-sm text-slate-300">Каждая вкладка хранит пару карт: публичную для игроков и скрытую для мастера. При переключении меняются обе карты сразу.</div>
               </div>
               <div className="flex w-full max-w-xl gap-2">
@@ -2777,7 +2811,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 <div className="text-sm text-slate-400">Пока нет сохранённых вкладок. Сохраните текущую сцену, чтобы быстро переключаться между наборами карт.</div>
               )}
             </div>
-          </section>
+          </CompactSection>
         ) : null}
 
         {joinStep !== 'ready' ? (
@@ -2845,28 +2879,34 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </section>
         ) : null}
 
-        <section className={`grid gap-4 md:grid-cols-2 ${role === 'gm' ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
-          <div className="card p-4">
-            <div className="text-sm text-slate-400">Карта</div>
-            <div className="mt-2 text-xl font-semibold text-white">{mapName}</div>
+        <section className={`grid gap-3 ${role === 'gm' ? 'md:grid-cols-3 xl:grid-cols-6' : 'md:grid-cols-2 xl:grid-cols-5'}`}>
+          <div className="card px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-slate-500">Карта</div>
+            <div className="mt-1 truncate text-base font-semibold text-white">{mapName}</div>
           </div>
-          <div className="card p-4">
-            <div className="text-sm text-slate-400">Роль</div>
-            <div className="mt-2 text-xl font-semibold text-white">{role === 'gm' ? 'Мастер' : role === 'player' ? 'Игрок' : 'Не выбрана'}</div>
+          <div className="card px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-slate-500">Роль</div>
+            <div className="mt-1 text-base font-semibold text-white">{role === 'gm' ? 'Мастер' : role === 'player' ? 'Игрок' : 'Не выбрана'}</div>
           </div>
           {role === 'gm' ? (
-            <div className="card p-4">
-              <div className="text-sm text-slate-400">Пароль комнаты</div>
-              <div className="mt-2 text-xl font-semibold text-white">{roomPassword ? '••••••••' : 'Не задан'}</div>
+            <div className="card px-4 py-3">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Пароль</div>
+              <div className="mt-1 text-base font-semibold text-white">{roomPassword ? '••••••••' : 'Не задан'}</div>
             </div>
           ) : null}
-          <div className="card p-4">
-            <div className="text-sm text-slate-400">Активный токен</div>
-            <div className="mt-2 text-xl font-semibold text-white">{selectedToken?.name ?? '—'}</div>
+          <div className="card px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-slate-500">Активный токен</div>
+            <div className="mt-1 truncate text-base font-semibold text-white">{selectedToken?.name ?? '—'}</div>
           </div>
-          <div className="card p-4">
-            <div className="text-sm text-slate-400">Масштаб карты</div>
-            <div className="mt-2 text-xl font-semibold text-white">{Math.round(zoom * 100)}%</div>
+          <div className="card px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-slate-500">Масштаб</div>
+            <div className="mt-1 text-base font-semibold text-white">{Math.round(zoom * 100)}%</div>
+          </div>
+          <div className="card px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-slate-500">Обзор</div>
+            <div className="mt-1 truncate text-sm font-medium text-slate-200">
+              {playerTokens.map((token) => `${token.name} ${token.visionRadius ?? 3}`).join(' • ') || 'нет игроков'}
+            </div>
           </div>
         </section>
 
@@ -2874,11 +2914,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           <div className="grid gap-4 xl:grid-cols-2">
             {role === 'gm' ? (
               <div className="space-y-4">
-                <div className="card p-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-white">Админ-панель мастера</h2>
-                    <span className="badge">master only</span>
-                  </div>
+                <CompactSection title="Админ-панель мастера" description="Кисти, палитры и размер карты убраны в сворачиваемый блок." badge="master only" defaultOpen>
                   <div className="mt-4 flex flex-wrap gap-2 text-sm">
                     <button className={boardButtonClass(activeBoard === 'public')} onClick={() => setActiveBoard('public')}>
                       Публичная карта
@@ -2948,10 +2984,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   >
                     Очистить активную карту
                   </button>
-                </div>
+                </CompactSection>
 
-                <div className="card p-4">
-                  <h2 className="text-lg font-semibold text-white">Токены</h2>
+                <CompactSection title="Токены" description="Полный список токенов со статусами и обзором игроков." badge={`${tokens.length} шт.`}>
                   <div className="mt-4 space-y-3 text-sm">
                     {tokens.map((token) => (
                       <div key={token.id} className={`rounded-2xl border px-3 py-3 ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}>
@@ -3003,19 +3038,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       </div>
                     ))}
                   </div>
-                </div>
+                </CompactSection>
               </div>
             ) : null}
 
             <div className="space-y-4 xl:col-span-1">
-              <div className="card p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-white">Панель персонажей группы</h2>
-                    <p className="mt-1 text-sm text-slate-400">Отдельно от админки: и игроки, и мастер могут загружать и просматривать карточки всей группы.</p>
-                  </div>
-                  <span className="badge">party roster</span>
-                </div>
+              <CompactSection title="Панель персонажей группы" description="И игроки, и мастер могут загружать и просматривать карточки всей группы." badge="party roster" defaultOpen>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button onClick={createPlayerCharacter} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-white">
                     Добавить пустую карточку
@@ -3226,16 +3254,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     )}
                   </div>
                 </div>
-              </div>
+              </CompactSection>
 
-              <div className="card p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-semibold text-white">Инициатива и ход боя</h2>
-                    <p className="mt-1 text-sm text-slate-400">Трекер работает поверх текущих токенов и сохраняется в JSON комнаты без обязательной миграции старых файлов.</p>
-                  </div>
-                  <span className="badge">combat</span>
-                </div>
+              <CompactSection title="Инициатива и ход боя" description="Трекер работает поверх текущих токенов и сохраняется в JSON комнаты." badge="combat">
 
                 <div className="mt-4 flex flex-wrap gap-2 text-sm">
                   {role === 'gm' ? (
@@ -3348,16 +3369,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     <div className="rounded-2xl border border-dashed border-white/10 px-4 py-4 text-sm text-slate-400">Запустите автоинициативу, чтобы получить порядок ходов, следующий ход и сохранение состояния между сценами и JSON-экспортом.</div>
                   )}
                 </div>
-              </div>
+              </CompactSection>
 
               {role === 'gm' ? (
                 <>
                   <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="card p-4">
-                      <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-white">Инструменты мастера</h2>
-                        <span className="badge">dnd.su only</span>
-                      </div>
+                    <CompactSection title="Инструменты мастера" description="Лут, события, заметка и броски спрятаны в один блок." badge="dnd.su only">
                       <div className="mt-4 space-y-3 text-sm text-slate-300">
                         <div className="rounded-2xl border border-white/8 px-4 py-3">
                           <div className="font-medium text-white">Последний лут</div>
@@ -3393,7 +3410,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         </div>
                         <button onClick={handleRandomEvent} className="w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">Случайное событие</button>
                       </div>
-                    </div>
+                    </CompactSection>
 
                     <div className="space-y-4">
                       <div className="card p-4">
@@ -3420,11 +3437,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     </div>
                   </div>
 
-                  <div className="card p-4">
-                    <div className="mb-4 flex items-center justify-between">
-                      <h2 className="text-lg font-semibold text-white">Журнал действий</h2>
-                      <span className="badge">последние 20 событий</span>
-                    </div>
+                  <CompactSection title="Журнал действий" description="Лента событий осталась полностью доступной, но больше не отвлекает постоянно." badge="последние 20 событий">
                     <div className="space-y-3 text-sm">
                       {journal.map((entry) => (
                         <div key={entry.id} className="rounded-2xl border border-white/8 px-4 py-3">
@@ -3436,13 +3449,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </CompactSection>
 
-                  <div className="card p-4">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-lg font-semibold text-white">Виджет местности</h2>
-                      <span className="badge">regional map</span>
-                    </div>
+                  <CompactSection title="Виджет местности" description="Региональная карта вынесена в отдельный раскрывающийся блок." badge="regional map">
                     <p className="mt-3 text-sm text-slate-300">Сюда можно подставить внешний URL с региональной картой. Для удобства я сразу поставил Waterdeep с tychmaps.com.</p>
                     <div className="mt-4 flex flex-col gap-3">
                       <input value={widgetUrl} onChange={(event) => setWidgetUrl(event.target.value)} placeholder="https://tychmaps.com/waterdeep/" className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white" />
@@ -3451,12 +3460,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       </div>
                     </div>
                     <div className="mt-3 text-xs text-slate-400">Если конкретный сайт запрещает открытие внутри iframe, карта не покажется внутри виджета — в таком случае откройте её отдельно: <a href={widgetUrl} target="_blank" rel="noreferrer" className="text-emerald-300 underline underline-offset-4">открыть карту в новой вкладке</a>.</div>
-                  </div>
+                  </CompactSection>
                 </>
               ) : null}
             </div>
           </div>
-          <div className="card flex flex-wrap items-center gap-3 px-4 py-3 text-sm text-slate-200">
+          <div className="card sticky top-3 z-10 flex flex-wrap items-center gap-2 px-4 py-3 text-sm text-slate-200">
             <span className="badge">Инструмент: {tool}</span>
             <span className="badge">Редактируется: {activeBoard === 'public' ? 'публичная карта' : 'скрытая карта'}</span>
             <span className="badge">Видимость игроков: {playerTokens.map((token) => `${token.name} ${token.visionRadius ?? 3}`).join(' • ') || 'нет'}</span>
