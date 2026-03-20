@@ -90,6 +90,7 @@ export type FeatureGrant = {
 export type SpellRef = {
   id: string;
   name: string;
+  href: string;
   level: number;
   school: string;
   classes: string[];
@@ -104,6 +105,7 @@ export type SpellRef = {
 export type FeatRef = {
   id: string;
   name: string;
+  href: string;
   prerequisites: Array<
     | { type: 'ability'; ability: AbilityKey; min: number }
     | { type: 'spellcasting' }
@@ -130,6 +132,7 @@ export type ClassLevelRef = {
 export type ClassRef = {
   id: string;
   name: string;
+  href: string;
   primaryAbilities: AbilityKey[];
   spellcastingAbility?: AbilityKey;
   subclassChoiceLevel?: number;
@@ -140,6 +143,7 @@ export type SubclassRef = {
   id: string;
   classId: string;
   name: string;
+  href: string;
   featuresByLevel: Record<number, string[]>;
 };
 
@@ -192,6 +196,7 @@ export const classes: ClassRef[] = [
   {
     id: 'Wizard',
     name: 'Wizard',
+    href: 'https://next.dnd.su/class/wizard/',
     primaryAbilities: ['int'],
     spellcastingAbility: 'int',
     subclassChoiceLevel: 2,
@@ -206,6 +211,7 @@ export const classes: ClassRef[] = [
   {
     id: 'Fighter',
     name: 'Fighter',
+    href: 'https://next.dnd.su/class/fighter/',
     primaryAbilities: ['str', 'dex'],
     classLevels: [
       { level: 1, features: ['fighter-style', 'fighter-second-wind'] },
@@ -218,6 +224,7 @@ export const classes: ClassRef[] = [
   {
     id: 'Cleric',
     name: 'Cleric',
+    href: 'https://next.dnd.su/class/cleric/',
     primaryAbilities: ['wis'],
     spellcastingAbility: 'wis',
     subclassChoiceLevel: 1,
@@ -231,33 +238,33 @@ export const classes: ClassRef[] = [
 ];
 
 export const subclasses: SubclassRef[] = [
-  { id: 'evocation', classId: 'Wizard', name: 'School of Evocation', featuresByLevel: { 2: ['Evocation Savant'], 5: ['Potent Cantrip'] } },
-  { id: 'illusion', classId: 'Wizard', name: 'School of Illusion', featuresByLevel: { 2: ['Improved Minor Illusion'], 5: ['Malleable Illusions'] } },
-  { id: 'champion', classId: 'Fighter', name: 'Champion', featuresByLevel: { 3: ['Improved Critical'] } },
-  { id: 'battle-master', classId: 'Fighter', name: 'Battle Master', featuresByLevel: { 3: ['Combat Superiority', 'Student of War'] } },
-  { id: 'life-domain', classId: 'Cleric', name: 'Life Domain', featuresByLevel: { 1: ['Disciple of Life'], 2: ['Channel Divinity: Preserve Life'] } },
+  { id: 'evocation', classId: 'Wizard', name: 'School of Evocation', href: 'https://next.dnd.su/class/wizard/', featuresByLevel: { 2: ['Evocation Savant'], 5: ['Potent Cantrip'] } },
+  { id: 'illusion', classId: 'Wizard', name: 'School of Illusion', href: 'https://next.dnd.su/class/wizard/', featuresByLevel: { 2: ['Improved Minor Illusion'], 5: ['Malleable Illusions'] } },
+  { id: 'champion', classId: 'Fighter', name: 'Champion', href: 'https://next.dnd.su/class/fighter/', featuresByLevel: { 3: ['Improved Critical'] } },
+  { id: 'battle-master', classId: 'Fighter', name: 'Battle Master', href: 'https://next.dnd.su/class/fighter/', featuresByLevel: { 3: ['Combat Superiority', 'Student of War'] } },
+  { id: 'life-domain', classId: 'Cleric', name: 'Life Domain', href: 'https://next.dnd.su/class/cleric/', featuresByLevel: { 1: ['Disciple of Life'], 2: ['Channel Divinity: Preserve Life'] } },
 ];
 
 export const spells: SpellRef[] = [
-  { id: 'magic-missile', name: 'Magic Missile', level: 1, school: 'Evocation', classes: ['Wizard'], source: 'SRD', edition: '5e14' },
-  { id: 'shield', name: 'Shield', level: 1, school: 'Abjuration', classes: ['Wizard'], source: 'SRD', edition: '5e14' },
-  { id: 'misty-step', name: 'Misty Step', level: 2, school: 'Conjuration', classes: ['Wizard'], source: 'SRD', edition: '5e14' },
-  { id: 'fireball', name: 'Fireball', level: 3, school: 'Evocation', classes: ['Wizard'], source: 'SRD', edition: '5e14' },
-  { id: 'counterspell', name: 'Counterspell', level: 3, school: 'Abjuration', classes: ['Wizard'], source: 'SRD', edition: '5e14' },
-  { id: 'cure-wounds', name: 'Cure Wounds', level: 1, school: 'Evocation', classes: ['Cleric'], source: 'SRD', edition: '5e14' },
-  { id: 'bless', name: 'Bless', level: 1, school: 'Enchantment', classes: ['Cleric'], source: 'SRD', edition: '5e14' },
-  { id: 'spare-the-dying', name: 'Spare the Dying', level: 0, school: 'Necromancy', classes: ['Cleric'], source: 'SRD', edition: '5e14' },
+  { id: 'magic-missile', name: 'Magic Missile', href: 'https://next.dnd.su/spells/10567-magic-missile/', level: 1, school: 'Evocation', classes: ['Wizard'], source: 'SRD', edition: '5e14' },
+  { id: 'shield', name: 'Shield', href: 'https://next.dnd.su/spells/10638-shield/', level: 1, school: 'Abjuration', classes: ['Wizard'], source: 'SRD', edition: '5e14' },
+  { id: 'misty-step', name: 'Misty Step', href: 'https://next.dnd.su/spells/10251-misty-step/', level: 2, school: 'Conjuration', classes: ['Wizard'], source: 'SRD', edition: '5e14' },
+  { id: 'fireball', name: 'Fireball', href: 'https://next.dnd.su/spells/10514-fireball/', level: 3, school: 'Evocation', classes: ['Wizard'], source: 'SRD', edition: '5e14' },
+  { id: 'counterspell', name: 'Counterspell', href: 'https://next.dnd.su/spells/10219-counterspell/', level: 3, school: 'Abjuration', classes: ['Wizard'], source: 'SRD', edition: '5e14' },
+  { id: 'cure-wounds', name: 'Cure Wounds', href: 'https://next.dnd.su/spells/10270-cure-wounds/', level: 1, school: 'Evocation', classes: ['Cleric'], source: 'SRD', edition: '5e14' },
+  { id: 'bless', name: 'Bless', href: 'https://next.dnd.su/spells/10445-bless/', level: 1, school: 'Enchantment', classes: ['Cleric'], source: 'SRD', edition: '5e14' },
+  { id: 'spare-the-dying', name: 'Spare the Dying', href: 'https://next.dnd.su/spells/10648-spare-the-dying/', level: 0, school: 'Necromancy', classes: ['Cleric'], source: 'SRD', edition: '5e14' },
 ];
 
 export const feats: FeatRef[] = [
-  { id: 'war-caster', name: 'War Caster', prerequisites: [{ type: 'spellcasting' }], grants: ['advantage on concentration saves'], source: 'PHB', edition: '5e14' },
-  { id: 'observant', name: 'Observant', prerequisites: [{ type: 'ability', ability: 'int', min: 13 }], grants: ['+1 INT/WIS', 'lip reading'], isHalfFeat: true, source: 'PHB', edition: '5e14' },
-  { id: 'resilient-con', name: 'Resilient (CON)', prerequisites: [], grants: ['+1 CON', 'CON saving throw proficiency'], isHalfFeat: true, source: 'PHB', edition: '5e14' },
-  { id: 'ritual-caster', name: 'Ritual Caster', prerequisites: [{ type: 'ability', ability: 'wis', min: 13 }], grants: ['ritual book'], source: 'PHB', edition: '5e14' },
-  { id: 'sharpshooter', name: 'Sharpshooter', prerequisites: [], grants: ['ranged attack benefits'], source: 'PHB', edition: '5e14' },
-  { id: 'spell-sniper', name: 'Spell Sniper', prerequisites: [{ type: 'spellcasting' }], grants: ['doubles spell range'], source: 'PHB', edition: '5e14' },
-  { id: 'heavy-armor-master', name: 'Heavy Armor Master', prerequisites: [{ type: 'ability', ability: 'str', min: 13 }], grants: ['+1 STR', 'damage reduction'], isHalfFeat: true, source: 'PHB', edition: '5e14' },
-  { id: 'keen-mind-homebrew', name: 'Keen Mind+', prerequisites: [{ type: 'ability', ability: 'int', min: 13 }], grants: ['homebrew memory feature'], source: 'Homebrew', edition: '5e24', isHomebrew: true },
+  { id: 'war-caster', name: 'War Caster', href: 'https://next.dnd.su/feats/361-war-caster/', prerequisites: [{ type: 'spellcasting' }], grants: ['advantage on concentration saves'], source: 'PHB', edition: '5e14' },
+  { id: 'observant', name: 'Observant', href: 'https://next.dnd.su/feats/344-observant/', prerequisites: [{ type: 'ability', ability: 'int', min: 13 }], grants: ['+1 INT/WIS', 'lip reading'], isHalfFeat: true, source: 'PHB', edition: '5e14' },
+  { id: 'resilient-con', name: 'Resilient (CON)', href: 'https://next.dnd.su/feats/348-resilient/', prerequisites: [], grants: ['+1 CON', 'CON saving throw proficiency'], isHalfFeat: true, source: 'PHB', edition: '5e14' },
+  { id: 'ritual-caster', name: 'Ritual Caster', href: 'https://next.dnd.su/feats/349-ritual-caster/', prerequisites: [{ type: 'ability', ability: 'wis', min: 13 }], grants: ['ritual book'], source: 'PHB', edition: '5e14' },
+  { id: 'sharpshooter', name: 'Sharpshooter', href: 'https://next.dnd.su/feats/352-sharpshooter/', prerequisites: [], grants: ['ranged attack benefits'], source: 'PHB', edition: '5e14' },
+  { id: 'spell-sniper', name: 'Spell Sniper', href: 'https://next.dnd.su/feats/358-spell-sniper/', prerequisites: [{ type: 'spellcasting' }], grants: ['doubles spell range'], source: 'PHB', edition: '5e14' },
+  { id: 'heavy-armor-master', name: 'Heavy Armor Master', href: 'https://next.dnd.su/feats/335-heavy-armor-master/', prerequisites: [{ type: 'ability', ability: 'str', min: 13 }], grants: ['+1 STR', 'damage reduction'], isHalfFeat: true, source: 'PHB', edition: '5e14' },
+  { id: 'keen-mind-homebrew', name: 'Keen Mind+', href: 'https://www.dnd.su/articles/homebrew/', prerequisites: [{ type: 'ability', ability: 'int', min: 13 }], grants: ['homebrew memory feature'], source: 'Homebrew', edition: '5e24', isHomebrew: true },
 ];
 
 export const multiclassRules: MulticlassRuleRef[] = [

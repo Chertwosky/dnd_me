@@ -2,6 +2,20 @@ import type { LevelUpDraft, LevelUpPreview } from '@/lib/level-up';
 import { classes, subclasses } from '@/lib/level-up';
 import { LevelUpSummary } from './level-up-summary';
 
+function ExternalRuleLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="text-xs text-cyan-300 underline underline-offset-4"
+      onClick={(event) => event.stopPropagation()}
+    >
+      {label}
+    </a>
+  );
+}
+
 function AvailabilityBadge({ available, reasons }: { available: boolean; reasons: string[] }) {
   return (
     <span className={`rounded-full border px-2 py-1 text-[11px] ${available ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100' : 'border-rose-400/30 bg-rose-500/10 text-rose-100'}`}>
@@ -55,6 +69,9 @@ export function LevelUpDrawer({
                       <AvailabilityBadge available={Boolean(available)} reasons={reasons} />
                     </div>
                     <div className="mt-2 text-xs text-slate-400">{classRef.id === draft.targetClassId && !draft.isMulticlass ? 'Продолжить текущий класс' : 'Взять уровень в другой класс'}</div>
+                    <div className="mt-2">
+                      <ExternalRuleLink href={classRef.href} label="Открыть описание класса" />
+                    </div>
                   </button>
                 );
               })}
@@ -74,6 +91,9 @@ export function LevelUpDrawer({
                       <button key={subclass.id} type="button" onClick={() => onChange({ selectedSubclassId: subclass.id })} className={`rounded-2xl border px-3 py-3 text-left ${draft.selectedSubclassId === subclass.id ? 'border-fuchsia-400/40 bg-fuchsia-500/10' : 'border-white/8 bg-slate-900/40'}`}>
                         <div className="font-medium text-white">{subclass.name}</div>
                         <div className="mt-1 text-xs text-slate-400">{Object.values(subclass.featuresByLevel).flat().slice(0, 2).join(', ')}</div>
+                        <div className="mt-2">
+                          <ExternalRuleLink href={subclass.href} label="Открыть описание класса / подкласса" />
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -89,6 +109,11 @@ export function LevelUpDrawer({
                       <button key={feat.item.id} type="button" onClick={() => feat.available && onChange({ selectedFeatId: feat.item.id, selectedAbilityIncrease: undefined })} className={`rounded-full border px-3 py-2 text-sm ${draft.selectedFeatId === feat.item.id ? 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100' : 'border-white/10 text-slate-200'} ${!feat.available ? 'opacity-60' : ''}`}>
                         {feat.item.name} · {feat.available ? 'Доступно' : feat.reasons[0]?.message}
                       </button>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {preview.feats.map((feat) => (
+                      <ExternalRuleLink key={`${feat.item.id}-link`} href={feat.item.href} label={`Ссылка: ${feat.item.name}`} />
                     ))}
                   </div>
                 </div>
@@ -107,6 +132,9 @@ export function LevelUpDrawer({
                             <span className="text-xs text-slate-400">{spell.item.level === 0 ? 'Cantrip' : `${spell.item.level} круг`}</span>
                           </div>
                           <div className="mt-1 text-xs text-slate-400">{spell.item.school}</div>
+                          <div className="mt-2">
+                            <ExternalRuleLink href={spell.item.href} label="Открыть заклинание" />
+                          </div>
                         </button>
                       );
                     })}

@@ -17,6 +17,7 @@ import { LevelUpDrawer } from '@/components/level-up-drawer';
 import {
   applyXp,
   buildLevelUpPreview,
+  classes as levelUpClasses,
   deriveCharacterProgression,
   getProgressionOptions,
   startLevelUp,
@@ -3242,7 +3243,18 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                     </div>
                                     <div className="rounded-2xl border border-white/8 px-3 py-3">
                                       <div className="text-xs uppercase tracking-wide text-slate-500">Multiclass preview</div>
-                                      <div className="mt-2 text-sm text-slate-200">{selectedProgressionOptions.multiclassOptions.filter((item) => item.available).map((item) => item.item.classId).join(', ') || 'Нет доступных мультиклассов'}</div>
+                                      <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-200">
+                                        {selectedProgressionOptions.multiclassOptions.filter((item) => item.available).length ? selectedProgressionOptions.multiclassOptions.filter((item) => item.available).map((item) => {
+                                          const classRef = levelUpClasses.find((entry) => entry.id === item.item.classId);
+                                          return classRef ? (
+                                            <a key={item.item.classId} href={classRef.href} target="_blank" rel="noreferrer" className="text-cyan-300 underline underline-offset-4">
+                                              {item.item.classId}
+                                            </a>
+                                          ) : (
+                                            <span key={item.item.classId}>{item.item.classId}</span>
+                                          );
+                                        }) : <span>Нет доступных мультиклассов</span>}
+                                      </div>
                                     </div>
                                   </div>
                                 ) : null}
