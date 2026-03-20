@@ -1854,9 +1854,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [customXpInput, setCustomXpInput] = useState('0');
   const [levelRollbackSnapshots, setLevelRollbackSnapshots] = useState<Record<string, CharacterSheet[]>>({});
   const [gmPanelOrder, setGmPanelOrder] = useState<Array<'admin' | 'tokens'>>(['admin', 'tokens']);
-  const [gmPanelWidths, setGmPanelWidths] = useState<Record<'admin' | 'tokens' | 'tools', number>>({
+  const [gmRightPanelOrder, setGmRightPanelOrder] = useState<Array<'party' | 'initiative' | 'tools'>>(['party', 'initiative', 'tools']);
+  const [gmPanelWidths, setGmPanelWidths] = useState<Record<'admin' | 'tokens' | 'party' | 'initiative' | 'tools', number>>({
     admin: 440,
     tokens: 440,
+    party: 999,
+    initiative: 999,
     tools: 320,
   });
 
@@ -2791,7 +2794,19 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     });
   }, []);
 
-  const handleGmPanelWidthChange = useCallback((panelId: 'admin' | 'tokens' | 'tools', width: number) => {
+  const handleMoveGmRightPanel = useCallback((panelId: 'party' | 'initiative' | 'tools', direction: 'up' | 'down') => {
+    setGmRightPanelOrder((current) => {
+      const index = current.indexOf(panelId);
+      if (index === -1) return current;
+      const nextIndex = direction === 'up' ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+  }, []);
+
+  const handleGmPanelWidthChange = useCallback((panelId: 'admin' | 'tokens' | 'party' | 'initiative' | 'tools', width: number) => {
     setGmPanelWidths((current) => ({ ...current, [panelId]: width }));
   }, []);
 
@@ -3223,8 +3238,18 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               </div>
             ) : null}
 
-            <div className="min-w-0 space-y-4 xl:col-span-1">
-              <CompactSection title="Панель персонажей группы" description="И игроки, и мастер могут загружать и просматривать карточки всей группы." badge="party roster" defaultOpen>
+            <div className="min-w-0 flex flex-col gap-4 xl:col-span-1">
+              <div style={role === 'gm' ? { order: gmRightPanelOrder.indexOf('party'), width: `min(100%, ${gmPanelWidths.party}px)` } : undefined} className="space-y-2">
+                {role === 'gm' ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+                    <span className="font-medium text-white">Панель мастера: персонажи</span>
+                    <button type="button" onClick={() => handleMoveGmRightPanel('party', 'up')} disabled={gmRightPanelOrder.indexOf('party') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
+                    <button type="button" onClick={() => handleMoveGmRightPanel('party', 'down')} disabled={gmRightPanelOrder.indexOf('party') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
+                    <span className="text-slate-500">Ширина</span>
+                    <input type="range" min="320" max="1100" value={gmPanelWidths.party} onChange={(event) => handleGmPanelWidthChange('party', Number(event.target.value))} />
+                  </div>
+                ) : null}
+                <CompactSection title="Панель персонажей группы" description="И игроки, и мастер могут загружать и просматривать карточки всей группы." badge="party roster" defaultOpen>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button onClick={createPlayerCharacter} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-white">
                     Добавить пустую карточку
@@ -3512,8 +3537,19 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   </div>
                 </div>
               </CompactSection>
+              </div>
 
-              <CompactSection title="Инициатива и ход боя" description="Трекер работает поверх текущих токенов и сохраняется в JSON комнаты." badge="combat">
+              <div style={role === 'gm' ? { order: gmRightPanelOrder.indexOf('initiative'), width: `min(100%, ${gmPanelWidths.initiative}px)` } : undefined} className="space-y-2">
+                {role === 'gm' ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+                    <span className="font-medium text-white">Панель мастера: инициатива</span>
+                    <button type="button" onClick={() => handleMoveGmRightPanel('initiative', 'up')} disabled={gmRightPanelOrder.indexOf('initiative') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
+                    <button type="button" onClick={() => handleMoveGmRightPanel('initiative', 'down')} disabled={gmRightPanelOrder.indexOf('initiative') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
+                    <span className="text-slate-500">Ширина</span>
+                    <input type="range" min="320" max="1100" value={gmPanelWidths.initiative} onChange={(event) => handleGmPanelWidthChange('initiative', Number(event.target.value))} />
+                  </div>
+                ) : null}
+                <CompactSection title="Инициатива и ход боя" description="Трекер работает поверх текущих токенов и сохраняется в JSON комнаты." badge="combat">
 
                 <div className="mt-4 flex flex-wrap gap-2 text-sm">
                   {role === 'gm' ? (
@@ -3627,13 +3663,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   )}
                 </div>
               </CompactSection>
+              </div>
 
               {role === 'gm' ? (
-                <>
+                <div style={{ order: gmRightPanelOrder.indexOf('tools') }} className="space-y-2">
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                     <div style={{ width: `min(100%, ${gmPanelWidths.tools}px)` }} className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
                         <span className="font-medium text-white">Панель мастера: инструменты</span>
+                        <button type="button" onClick={() => handleMoveGmRightPanel('tools', 'up')} disabled={gmRightPanelOrder.indexOf('tools') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
+                        <button type="button" onClick={() => handleMoveGmRightPanel('tools', 'down')} disabled={gmRightPanelOrder.indexOf('tools') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
                         <span className="text-slate-500">Ширина</span>
                         <input type="range" min="260" max="520" value={gmPanelWidths.tools} onChange={(event) => handleGmPanelWidthChange('tools', Number(event.target.value))} />
                       </div>
@@ -3727,7 +3766,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     </div>
                     <div className="mt-3 text-xs text-slate-400">Если конкретный сайт запрещает открытие внутри iframe, карта не покажется внутри виджета — в таком случае откройте её отдельно: <a href={widgetUrl} target="_blank" rel="noreferrer" className="text-emerald-300 underline underline-offset-4">открыть карту в новой вкладке</a>.</div>
                   </CompactSection>
-                </>
+                </div>
               ) : null}
             </div>
           </div>
