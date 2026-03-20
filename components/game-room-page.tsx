@@ -133,6 +133,21 @@ type CharacterSheet = {
   knownSpellIds?: string[];
 };
 
+type CharacterCardExport = {
+  format: 'dnd-me-character-card';
+  version: 1;
+  exportedAt: string;
+  sheet: CharacterSheet;
+  token?: RoomToken | null;
+};
+
+type PanelWidth = 'compact' | 'medium' | 'wide' | 'full';
+type MasterPanelId = 'admin' | 'tokens' | 'initiative' | 'master-tools' | 'quick-actions' | 'journal' | 'widget';
+type MasterPanelConfig = {
+  id: MasterPanelId;
+  width: PanelWidth;
+};
+
 type JournalEntry = {
   id: string;
   type: 'system' | 'move' | 'dice' | 'loot' | 'event' | 'sheet' | 'map' | 'room' | 'save' | 'initiative';
@@ -1540,6 +1555,56 @@ function CompactSection({
   );
 }
 
+function getPanelWidthClass(width: PanelWidth) {
+  switch (width) {
+    case 'compact':
+      return 'xl:basis-[280px]';
+    case 'medium':
+      return 'xl:basis-[380px]';
+    case 'wide':
+      return 'xl:basis-[520px]';
+    case 'full':
+      return 'basis-full';
+    default:
+      return 'xl:basis-[380px]';
+  }
+}
+
+function MasterPanelShell({
+  title,
+  width,
+  onMoveUp,
+  onMoveDown,
+  onWidthChange,
+  children,
+}: {
+  title: string;
+  width: PanelWidth;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onWidthChange: (width: PanelWidth) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className={`min-w-0 flex-1 ${getPanelWidthClass(width)}`}>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/8 bg-slate-950/30 px-3 py-2 text-xs text-slate-300">
+        <span className="font-medium text-white">{title}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={onMoveUp} className="rounded-full border border-white/10 px-2 py-1">↑</button>
+          <button type="button" onClick={onMoveDown} className="rounded-full border border-white/10 px-2 py-1">↓</button>
+          <select value={width} onChange={(event) => onWidthChange(event.target.value as PanelWidth)} className="rounded-full border border-white/10 bg-slate-900 px-3 py-1 text-xs text-slate-200">
+            <option value="compact">Узкая</option>
+            <option value="medium">Средняя</option>
+            <option value="wide">Широкая</option>
+            <option value="full">Во всю ширину</option>
+          </select>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function boardButtonClass(isActive: boolean) {
   return `rounded-full border px-3 py-2 text-sm ${isActive ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`;
 }
@@ -1828,6 +1893,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   ]);
   const [isLoadedFromStorage, setIsLoadedFromStorage] = useState(false);
   const [initiative, setInitiative] = useState<InitiativeState>(createEmptyInitiativeState);
+  const [customXpInput, setCustomXpInput] = useState('300');
+  const [levelUpHistory, setLevelUpHistory] = useState<Record<string, CharacterSheet[]>>({});
+  const [masterPanels, setMasterPanels] = useState<MasterPanelConfig[]>([
+    { id: 'admin', width: 'wide' },
+    { id: 'tokens', width: 'wide' },
+    { id: 'initiative', width: 'wide' },
+    { id: 'master-tools', width: 'medium' },
+    { id: 'quick-actions', width: 'medium' },
+    { id: 'journal', width: 'wide' },
+    { id: 'widget', width: 'wide' },
+  ]);
   const [campaignConfig, setCampaignConfig] = useState<CampaignConfig>({
     id: 'room-campaign',
     name: 'Руины старой башни',
@@ -1886,6 +1962,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const selectedProgressionOptions = useMemo(
     () => (selectedSheet ? getProgressionOptions(selectedSheet, campaignConfig) : null),
     [campaignConfig, selectedSheet],
+  );
+  const masterPanelMap = useMemo(
+    () => new Map(masterPanels.map((panel, index) => [panel.id, { ...panel, index }])),
+    [masterPanels],
   );
 
   const activePalette = useMemo(() => {
@@ -2632,6 +2712,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const handleConfirmLevelUp = useCallback(() => {
     if (!selectedSheet || !selectedLevelUpDraft) return;
     try {
+      setLevelUpHistory((current) => ({
+        ...current,
+        [selectedSheet.id]: [...(current[selectedSheet.id] ?? []), structuredClone(selectedSheet)],
+      }));
       const nextSheet = confirmLevelUp(selectedSheet, campaignConfig, selectedLevelUpDraft);
       setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? { ...sheet, ...nextSheet } : sheet)));
       setLevelUpDrafts((current) => ({ ...current, [selectedSheet.id]: undefined }));
@@ -2644,6 +2728,48 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       addJournalEntry('system', error instanceof Error ? error.message : 'Не удалось подтвердить level up.');
     }
   }, [addJournalEntry, campaignConfig, selectedLevelUpDraft, selectedSheet]);
+
+  const handleRollbackLevelUp = useCallback(() => {
+    if (!selectedSheet) return;
+    const history = levelUpHistory[selectedSheet.id] ?? [];
+    const previousSnapshot = history[history.length - 1];
+    if (!previousSnapshot) {
+      addJournalEntry('system', `Для ${selectedSheet.name} нет сохранённого снимка для отката level up.`);
+      return;
+    }
+    setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? previousSnapshot : sheet)));
+    setTokens((current) => current.map((token) => token.sheetId === selectedSheet.id ? {
+      ...token,
+      name: previousSnapshot.name,
+      short: getTokenInitial(previousSnapshot.name),
+      hp: previousSnapshot.hp,
+      maxHp: previousSnapshot.maxHp,
+      ac: previousSnapshot.ac,
+      speed: previousSnapshot.speed,
+    } : token));
+    setLevelUpHistory((current) => ({
+      ...current,
+      [selectedSheet.id]: history.slice(0, -1),
+    }));
+    addJournalEntry('sheet', `${selectedSheet.name}: последнее улучшение уровня откатили до сохранённого снимка.`);
+  }, [addJournalEntry, levelUpHistory, selectedSheet]);
+
+  const moveMasterPanel = useCallback((panelId: MasterPanelId, direction: 'up' | 'down') => {
+    setMasterPanels((current) => {
+      const index = current.findIndex((panel) => panel.id === panelId);
+      if (index < 0) return current;
+      const targetIndex = direction === 'up' ? Math.max(0, index - 1) : Math.min(current.length - 1, index + 1);
+      if (targetIndex === index) return current;
+      const next = [...current];
+      const [panel] = next.splice(index, 1);
+      next.splice(targetIndex, 0, panel);
+      return next;
+    });
+  }, []);
+
+  const setMasterPanelWidth = useCallback((panelId: MasterPanelId, width: PanelWidth) => {
+    setMasterPanels((current) => current.map((panel) => panel.id === panelId ? { ...panel, width } : panel));
+  }, []);
 
   const handleRoomAuth = () => {
     const name = displayName.trim() || 'Без имени';
@@ -2714,12 +2840,77 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     addJournalEntry('sheet', `${displayName} создал новый лист персонажа.`);
   };
 
+  const handleExportCharacterCard = useCallback(() => {
+    if (!selectedSheet) return;
+    const token = tokens.find((entry) => entry.sheetId === selectedSheet.id) ?? null;
+    const payload: CharacterCardExport = {
+      format: 'dnd-me-character-card',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      sheet: selectedSheet,
+      token,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${selectedSheet.name.toLowerCase().replace(/\s+/g, '-') || 'character'}.dndme.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    addJournalEntry('sheet', `${selectedSheet.name}: карточка экспортирована в отдельный JSON.`);
+  }, [addJournalEntry, selectedSheet, tokens]);
+
   const handleImportCharacterJson = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     try {
       const parsed = JSON.parse(await file.text()) as unknown;
+      if (parsed && typeof parsed === 'object' && 'format' in parsed && (parsed as CharacterCardExport).format === 'dnd-me-character-card') {
+        const exported = parsed as CharacterCardExport;
+        const nextIndex = playerTokens.length + 1;
+        const tokenId = `player-${nextIndex}`;
+        const sheetId = `sheet-${tokenId}`;
+        const sheet = {
+          ...createEmptyCharacterSheet(sheetId, tokenId, exported.sheet.name),
+          ...exported.sheet,
+          id: sheetId,
+          tokenId,
+        };
+        const token: RoomToken = exported.token ? {
+          ...exported.token,
+          id: tokenId,
+          sheetId,
+          owner: displayName,
+          roleOwner: 'player',
+          x: clamp(exported.token.x, 0, cols - 1),
+          y: clamp(exported.token.y, 0, rows - 1),
+        } : {
+          id: tokenId,
+          name: sheet.name,
+          short: getTokenInitial(sheet.name),
+          kind: 'player',
+          color: 'rgb(34 197 94)',
+          x: clamp(1 + (nextIndex % 4), 0, cols - 1),
+          y: clamp(1 + (nextIndex % 5), 0, rows - 1),
+          hp: sheet.hp,
+          maxHp: sheet.maxHp,
+          ac: sheet.ac,
+          speed: sheet.speed,
+          owner: displayName,
+          roleOwner: 'player',
+          sheetId,
+          visionRadius: 3,
+          statuses: [],
+        };
+        setTokens((current) => [...current, token]);
+        setSheets((current) => [...current, sheet]);
+        setSelectedTokenId(tokenId);
+        setJoinStep('ready');
+        addJournalEntry('sheet', `${displayName} импортировал карточку персонажа dnd-me (${file.name}).`);
+        event.target.value = '';
+        return;
+      }
       const imported = parseLongStoryShortCharacter(parsed);
       if (!imported) {
         addJournalEntry('system', 'Не удалось прочитать JSON персонажа.');
@@ -3020,7 +3211,15 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         <section className="space-y-4">
           <div className={`grid gap-4 ${role === 'gm' ? 'xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]' : 'xl:grid-cols-1'}`}>
             {role === 'gm' ? (
-              <div className="min-w-0 space-y-4">
+              <div className="min-w-0 flex flex-col gap-4">
+                <div style={{ order: masterPanelMap.get('admin')?.index ?? 0 }}>
+                  <MasterPanelShell
+                    title="Админ-панель мастера"
+                    width={masterPanelMap.get('admin')?.width ?? 'wide'}
+                    onMoveUp={() => moveMasterPanel('admin', 'up')}
+                    onMoveDown={() => moveMasterPanel('admin', 'down')}
+                    onWidthChange={(width) => setMasterPanelWidth('admin', width)}
+                  >
                 <CompactSection title="Админ-панель мастера" description="Кисти, палитры и размер карты убраны в сворачиваемый блок." badge="master only" defaultOpen className="xl:sticky xl:top-20">
                   <div className="mt-4 flex flex-wrap gap-2 text-sm">
                     <button className={boardButtonClass(activeBoard === 'public')} onClick={() => setActiveBoard('public')}>
@@ -3092,7 +3291,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     Очистить активную карту
                   </button>
                 </CompactSection>
+                  </MasterPanelShell>
+                </div>
 
+                <div style={{ order: masterPanelMap.get('tokens')?.index ?? 1 }}>
+                  <MasterPanelShell
+                    title="Токены"
+                    width={masterPanelMap.get('tokens')?.width ?? 'wide'}
+                    onMoveUp={() => moveMasterPanel('tokens', 'up')}
+                    onMoveDown={() => moveMasterPanel('tokens', 'down')}
+                    onWidthChange={(width) => setMasterPanelWidth('tokens', width)}
+                  >
                 <CompactSection title="Токены" description="Полный список токенов со статусами и обзором игроков." badge={`${tokens.length} шт.`}>
                   <div className="mt-4 max-h-[680px] space-y-3 overflow-y-auto pr-1 text-sm">
                     {tokens.map((token) => (
@@ -3146,6 +3355,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     ))}
                   </div>
                 </CompactSection>
+                  </MasterPanelShell>
+                </div>
               </div>
             ) : null}
 
@@ -3163,8 +3374,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     Загрузить фото персонажа
                     <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={!selectedSheet || !canEditSheet(selectedSheet)} />
                   </label>
+                  <button onClick={handleExportCharacterCard} disabled={!selectedSheet} className="rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-100 disabled:opacity-50">
+                    Скачать карточку
+                  </button>
                 </div>
-                <div className="mt-2 text-xs text-slate-400">Поддержан JSON в формате longstoryshort.app, включая вложенный блок `data`, характеристики, биографию, черты, инвентарь и ссылки на аватар.</div>
+                <div className="mt-2 text-xs text-slate-400">Поддержан JSON в формате longstoryshort.app, а также собственный экспорт dnd-me, чтобы скачать карточку и позже загрузить её в новой партии.</div>
 
                 <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
                   <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
@@ -3228,6 +3442,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                   <button type="button" onClick={handleToggleMilestoneReady} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200" disabled={campaignConfig.progressionMode !== 'milestone'}>Открыть level up вручную</button>
                                   <button type="button" onClick={() => handleAddXp(300)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100" disabled={campaignConfig.progressionMode !== 'xp'}>+300 XP</button>
                                   <button type="button" onClick={() => handleAddXp(1200)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100" disabled={campaignConfig.progressionMode !== 'xp'}>+1200 XP</button>
+                                  <input value={customXpInput} onChange={(event) => setCustomXpInput(event.target.value)} className="w-28 rounded-full border border-white/10 bg-slate-900/80 px-3 py-1 text-xs text-white" placeholder="XP ±" />
+                                  <button type="button" onClick={() => handleAddXp(Number(customXpInput) || 0)} className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-xs text-cyan-100" disabled={campaignConfig.progressionMode !== 'xp'}>Применить XP</button>
+                                  <button type="button" onClick={handleRollbackLevelUp} className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100" disabled={!selectedSheet || !(levelUpHistory[selectedSheet.id]?.length)}>Откатить level up</button>
                                 </div>
                                 <CharacterXpCard progression={selectedProgression} mode={campaignConfig.progressionMode} />
                                 <LevelUpBanner progression={selectedProgression} onOpen={handleStartLevelUp} />
