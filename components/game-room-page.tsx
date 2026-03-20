@@ -4812,22 +4812,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
         <section className="space-y-4">
           <div
-            className={`grid gap-4 ${role === "gm" ? "xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]" : "xl:grid-cols-1"}`}
+            className={`grid items-start gap-4 ${role === "gm" ? "xl:grid-cols-2" : "xl:grid-cols-1"}`}
           >
             {role === "gm" ? (
-              <div
-                className={`min-w-0 space-y-4 ${activeDropRail === "left" ? "rounded-3xl ring-2 ring-cyan-400/40" : ""}`}
-                style={
-                  role === "gm" ? { order: gmRailsSwapped ? 2 : 1 } : undefined
-                }
-                onDragOver={(event) =>
-                  role === "gm" && handleRailDragOver("left", event)
-                }
-                onDragLeave={() =>
-                  activeDropRail === "left" && setActiveDropRail(null)
-                }
-                onDrop={() => role === "gm" && handleRailDrop("left")}
-              >
+              <div className="contents">
                 {gmPanelOrder.map((panelId, index) => (
                   <div
                     key={panelId}
@@ -4839,7 +4827,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       setDraggedMasterPanel(null);
                       setActiveDropRail(null);
                     }}
-                    style={{ width: `min(100%, ${gmPanelWidths[panelId]}px)` }}
+                    style={{
+                      width: `min(100%, ${gmPanelWidths[panelId]}px)`,
+                      order: panelId === "admin" ? (gmRailsSwapped ? 2 : 1) : 3,
+                    }}
                     className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""}`}
                   >
                     <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
@@ -5148,19 +5139,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               </div>
             ) : null}
 
-            <div
-              className={`min-w-0 flex flex-col gap-4 xl:col-span-1 ${activeDropRail === "right" ? "rounded-3xl ring-2 ring-cyan-400/40" : ""}`}
-              style={
-                role === "gm" ? { order: gmRailsSwapped ? 1 : 2 } : undefined
-              }
-              onDragOver={(event) =>
-                role === "gm" && handleRailDragOver("right", event)
-              }
-              onDragLeave={() =>
-                activeDropRail === "right" && setActiveDropRail(null)
-              }
-              onDrop={() => role === "gm" && handleRailDrop("right")}
-            >
+            <div className="contents">
               <div
                 draggable={role === "gm"}
                 onDragStart={() =>
@@ -5177,7 +5156,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 style={
                   role === "gm"
                     ? {
-                        order: gmRightPanelOrder.indexOf("party"),
+                        order: gmRailsSwapped ? 1 : 2,
                         width: `min(100%, ${gmPanelWidths.party}px)`,
                       }
                     : undefined
@@ -6345,7 +6324,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 style={
                   role === "gm"
                     ? {
-                        order: gmRightPanelOrder.indexOf("initiative"),
+                        order: 4,
                         width: `min(100%, ${gmPanelWidths.initiative}px)`,
                       }
                     : undefined
@@ -6691,7 +6670,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     setDraggedMasterPanel(null);
                     setActiveDropRail(null);
                   }}
-                  style={{ order: gmRightPanelOrder.indexOf("tools") }}
+                  style={{ order: 5 }}
                   className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""}`}
                 >
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
