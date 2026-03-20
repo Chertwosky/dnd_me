@@ -11,6 +11,21 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
+import { CharacterXpCard } from '@/components/character-xp-card';
+import { LevelUpBanner } from '@/components/level-up-banner';
+import { LevelUpDrawer } from '@/components/level-up-drawer';
+import {
+  applyXp,
+  buildLevelUpPreview,
+  classes as levelUpClasses,
+  deriveCharacterProgression,
+  getProgressionOptions,
+  startLevelUp,
+  confirmLevelUp,
+  type CampaignConfig,
+  type CharacterClassLevel,
+  type LevelUpDraft,
+} from '@/lib/level-up';
 
 type RoomRole = 'gm' | 'player';
 type JoinStep = 'auth' | 'player-sheet' | 'ready';
@@ -112,6 +127,10 @@ type CharacterSheet = {
   feats?: string;
   features?: string;
   resources?: CharacterResources;
+  classLevels?: CharacterClassLevel[];
+  takenFeatIds?: string[];
+  selectedSubclassId?: string;
+  knownSpellIds?: string[];
 };
 
 type JournalEntry = {
@@ -190,6 +209,13 @@ type SavedMapPreset = {
   mapState: MapState;
 };
 
+type SavedCharacterPreset = {
+  id: string;
+  name: string;
+  savedAt: string;
+  sheet: CharacterSheet;
+};
+
 const DEFAULT_COLS = 16;
 const DEFAULT_ROWS = 10;
 const MIN_GRID = 4;
@@ -198,6 +224,7 @@ const DEFAULT_TERRAIN = '#0f172a';
 const roomAccessRegistry = new Map<string, RoomAccessState>();
 
 const STORAGE_PREFIX = 'dnd-me-room:';
+const CHARACTER_LIBRARY_PREFIX = 'dnd-me-character-library:';
 const DEFAULT_WIDGET_URL = 'https://tychmaps.com/waterdeep/';
 
 const layerPalette: Record<LayerKind, string[]> = {
@@ -986,7 +1013,9 @@ const initialSheets: CharacterSheet[] = [
     name: 'Элира Найтбриз',
     race: 'Эльф',
     heroClass: 'Wizard',
+    subclass: 'School of Evocation',
     level: 4,
+    experience: 6200,
     hp: 28,
     maxHp: 32,
     ac: 15,
@@ -995,6 +1024,10 @@ const initialSheets: CharacterSheet[] = [
     notes: 'Ищет скрытый архив башни и избегает ближнего боя.',
     inventory: 'Arcane focus, Potion of Healing, Explorer pack',
     spells: 'Magic Missile, Shield, Misty Step',
+    classLevels: [{ classId: 'Wizard', level: 4 }],
+    selectedSubclassId: 'evocation',
+    knownSpellIds: ['magic-missile', 'shield', 'misty-step'],
+    takenFeatIds: ['observant'],
     resources: {
       spellSlots: [{ current: 4, max: 4 }, { current: 3, max: 3 }, { current: 2, max: 2 }],
       hitDice: { current: 4, max: 4 },
@@ -1011,7 +1044,9 @@ const initialSheets: CharacterSheet[] = [
     name: 'Борин Стоунхарт',
     race: 'Дварф',
     heroClass: 'Fighter',
+    subclass: 'Champion',
     level: 4,
+    experience: 6600,
     hp: 41,
     maxHp: 41,
     ac: 18,
@@ -1020,6 +1055,9 @@ const initialSheets: CharacterSheet[] = [
     notes: 'Держит переднюю линию и прикрывает Элиру щитом.',
     inventory: 'Battleaxe, Shield, Rope 50 ft',
     spells: '',
+    classLevels: [{ classId: 'Fighter', level: 4 }],
+    selectedSubclassId: 'champion',
+    takenFeatIds: ['heavy-armor-master'],
     resources: {
       spellSlots: [{ current: 0, max: 0 }, { current: 0, max: 0 }, { current: 0, max: 0 }],
       hitDice: { current: 4, max: 4 },
@@ -1379,6 +1417,10 @@ function isCellVisibleToPlayers(x: number, y: number, tokens: RoomToken[]) {
 
 function getStorageKey(roomId: string) {
   return `${STORAGE_PREFIX}${roomId}`;
+}
+
+function getCharacterLibraryKey(roomId: string) {
+  return `${CHARACTER_LIBRARY_PREFIX}${roomId}`;
 }
 
 function createEmptyInitiativeState(): InitiativeState {
@@ -1798,6 +1840,25 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   ]);
   const [isLoadedFromStorage, setIsLoadedFromStorage] = useState(false);
   const [initiative, setInitiative] = useState<InitiativeState>(createEmptyInitiativeState);
+  const [campaignConfig, setCampaignConfig] = useState<CampaignConfig>({
+    id: 'room-campaign',
+    name: 'Руины старой башни',
+    progressionMode: 'xp',
+    edition: '5e14',
+    includeHomebrew: false,
+    manualLevelUpUnlocked: false,
+  });
+  const [levelUpDrafts, setLevelUpDrafts] = useState<Record<string, LevelUpDraft | undefined>>({});
+  const [isLevelUpOpen, setIsLevelUpOpen] = useState(false);
+  const [savedCharacters, setSavedCharacters] = useState<SavedCharacterPreset[]>([]);
+  const [customXpInput, setCustomXpInput] = useState('0');
+  const [levelRollbackSnapshots, setLevelRollbackSnapshots] = useState<Record<string, CharacterSheet[]>>({});
+  const [gmPanelOrder, setGmPanelOrder] = useState<Array<'admin' | 'tokens'>>(['admin', 'tokens']);
+  const [gmPanelWidths, setGmPanelWidths] = useState<Record<'admin' | 'tokens' | 'tools', number>>({
+    admin: 440,
+    tokens: 440,
+    tools: 320,
+  });
 
   const cols = mapState.cols;
   const rows = mapState.rows;
@@ -1833,6 +1894,19 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const selectedSheetInitiativeModifier = useMemo(
     () => (selectedSheetToken ? getInitiativeModifier(selectedSheetToken, sheets) : 0),
     [selectedSheetToken, sheets],
+  );
+  const selectedProgression = useMemo(
+    () => (selectedSheet ? deriveCharacterProgression(selectedSheet, campaignConfig, levelUpDrafts[selectedSheet.id]) : null),
+    [campaignConfig, levelUpDrafts, selectedSheet],
+  );
+  const selectedLevelUpDraft = selectedSheet ? levelUpDrafts[selectedSheet.id] ?? null : null;
+  const selectedLevelUpPreview = useMemo(
+    () => (selectedSheet && selectedLevelUpDraft ? buildLevelUpPreview(selectedSheet, campaignConfig, selectedLevelUpDraft) : null),
+    [campaignConfig, selectedLevelUpDraft, selectedSheet],
+  );
+  const selectedProgressionOptions = useMemo(
+    () => (selectedSheet ? getProgressionOptions(selectedSheet, campaignConfig) : null),
+    [campaignConfig, selectedSheet],
   );
 
   const activePalette = useMemo(() => {
@@ -1896,6 +1970,20 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     const payload = buildSavedRoomState({ mapName, mapState, savedMaps, activeSavedMapId, widgetUrl, tokens: tokens.map(normalizeToken), sheets, journal, initiative });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
   }, [activeSavedMapId, initiative, isLoadedFromStorage, journal, mapName, mapState, roomId, savedMaps, sheets, tokens, widgetUrl]);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(getCharacterLibraryKey(roomId));
+    if (!stored) return;
+    try {
+      setSavedCharacters(JSON.parse(stored) as SavedCharacterPreset[]);
+    } catch {
+      // ignore corrupted character library
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    window.localStorage.setItem(getCharacterLibraryKey(roomId), JSON.stringify(savedCharacters));
+  }, [roomId, savedCharacters]);
 
   const addJournalEntry = useCallback((type: JournalEntry['type'], text: string) => {
     setJournal((current) => [{ id: `${Date.now()}-${Math.random()}`, type, text, time: nowTime() }, ...current].slice(0, 20));
@@ -2540,6 +2628,173 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     }
   };
 
+  const handleProgressionModeChange = useCallback((mode: CampaignConfig['progressionMode']) => {
+    setCampaignConfig((current) => ({
+      ...current,
+      progressionMode: mode,
+      manualLevelUpUnlocked: mode === 'milestone' ? current.manualLevelUpUnlocked : false,
+    }));
+  }, []);
+
+  const handleAddXp = useCallback((xpDelta: number) => {
+    if (!selectedSheet) return;
+    const result = applyXp(selectedSheet, campaignConfig, xpDelta);
+    setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? { ...sheet, experience: result.character.experience } : sheet)));
+    addJournalEntry('sheet', `${selectedSheet.name}: мастер добавил ${xpDelta} XP.${result.progression.canLevelUp ? ' Персонаж готов к повышению уровня.' : ''}`);
+  }, [addJournalEntry, campaignConfig, selectedSheet]);
+
+  const handleToggleMilestoneReady = useCallback(() => {
+    setCampaignConfig((current) => ({ ...current, manualLevelUpUnlocked: !current.manualLevelUpUnlocked }));
+  }, []);
+
+  const handleStartLevelUp = useCallback(() => {
+    if (!selectedSheet) return;
+    const draft = levelUpDrafts[selectedSheet.id] ?? startLevelUp(selectedSheet, campaignConfig);
+    setLevelUpDrafts((current) => ({ ...current, [selectedSheet.id]: draft }));
+    setIsLevelUpOpen(true);
+  }, [campaignConfig, levelUpDrafts, selectedSheet]);
+
+  const handlePatchLevelUpDraft = useCallback((patch: Partial<LevelUpDraft>) => {
+    if (!selectedSheet) return;
+    setLevelUpDrafts((current) => {
+      const existing = current[selectedSheet.id] ?? startLevelUp(selectedSheet, campaignConfig);
+      const nextDraft = { ...existing, ...patch };
+      nextDraft.previewSnapshot = buildLevelUpPreview(selectedSheet, campaignConfig, nextDraft);
+      return { ...current, [selectedSheet.id]: nextDraft };
+    });
+  }, [campaignConfig, selectedSheet]);
+
+  const handleConfirmLevelUp = useCallback(() => {
+    if (!selectedSheet || !selectedLevelUpDraft) return;
+    try {
+      setLevelRollbackSnapshots((current) => ({
+        ...current,
+        [selectedSheet.id]: [...(current[selectedSheet.id] ?? []), JSON.parse(JSON.stringify(selectedSheet)) as CharacterSheet],
+      }));
+      const nextSheet = confirmLevelUp(selectedSheet, campaignConfig, selectedLevelUpDraft);
+      setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? { ...sheet, ...nextSheet } : sheet)));
+      setLevelUpDrafts((current) => ({ ...current, [selectedSheet.id]: undefined }));
+      if (campaignConfig.progressionMode === 'milestone') {
+        setCampaignConfig((current) => ({ ...current, manualLevelUpUnlocked: false }));
+      }
+      setIsLevelUpOpen(false);
+      addJournalEntry('sheet', `${selectedSheet.name}: повышение уровня подтверждено. Теперь уровень ${nextSheet.level}.`);
+    } catch (error) {
+      addJournalEntry('system', error instanceof Error ? error.message : 'Не удалось подтвердить level up.');
+    }
+  }, [addJournalEntry, campaignConfig, selectedLevelUpDraft, selectedSheet]);
+
+  const handleRollbackLastLevelUp = useCallback(() => {
+    if (!selectedSheet) return;
+    const snapshots = levelRollbackSnapshots[selectedSheet.id] ?? [];
+    const previousSnapshot = snapshots[snapshots.length - 1];
+    if (!previousSnapshot) return;
+    setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? previousSnapshot : sheet)));
+    setTokens((current) =>
+      current.map((token) =>
+        token.sheetId === selectedSheet.id
+          ? {
+              ...token,
+              name: previousSnapshot.name,
+              short: getTokenInitial(previousSnapshot.name),
+              hp: previousSnapshot.hp,
+              maxHp: previousSnapshot.maxHp,
+              ac: previousSnapshot.ac,
+              speed: previousSnapshot.speed,
+            }
+          : token,
+      ),
+    );
+    setLevelRollbackSnapshots((current) => ({
+      ...current,
+      [selectedSheet.id]: snapshots.slice(0, -1),
+    }));
+    addJournalEntry('sheet', `${selectedSheet.name}: последний подтверждённый level up откатан.`);
+  }, [addJournalEntry, levelRollbackSnapshots, selectedSheet]);
+
+  const handleApplyCustomXp = useCallback(() => {
+    const parsed = Number(customXpInput);
+    if (!Number.isFinite(parsed) || parsed === 0) return;
+    handleAddXp(parsed);
+    setCustomXpInput('0');
+  }, [customXpInput, handleAddXp]);
+
+  const downloadJsonFile = useCallback((filename: string, payload: unknown) => {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleDownloadCharacterCard = useCallback(() => {
+    if (!selectedSheet) return;
+    downloadJsonFile(`${selectedSheet.name.toLowerCase().replace(/\s+/g, '-') || 'character'}.json`, selectedSheet);
+    addJournalEntry('sheet', `${selectedSheet.name}: карточка скачана в JSON.`);
+  }, [addJournalEntry, downloadJsonFile, selectedSheet]);
+
+  const handleSaveCharacterPreset = useCallback(() => {
+    if (!selectedSheet) return;
+    setSavedCharacters((current) => {
+      const nextPreset: SavedCharacterPreset = {
+        id: selectedSheet.id,
+        name: selectedSheet.name,
+        savedAt: new Date().toISOString(),
+        sheet: JSON.parse(JSON.stringify(selectedSheet)) as CharacterSheet,
+      };
+      return [nextPreset, ...current.filter((item) => item.id !== selectedSheet.id)];
+    });
+    addJournalEntry('sheet', `${selectedSheet.name}: карточка сохранена в библиотеку комнаты.`);
+  }, [addJournalEntry, selectedSheet]);
+
+  const handleLoadCharacterPreset = useCallback((preset: SavedCharacterPreset) => {
+    const nextIndex = playerTokens.length + 1;
+    const tokenId = `player-${nextIndex}`;
+    const sheetId = `sheet-${tokenId}`;
+    const sheet = { ...JSON.parse(JSON.stringify(preset.sheet)) as CharacterSheet, id: sheetId, tokenId };
+    const nextToken: RoomToken = {
+      id: tokenId,
+      name: sheet.name,
+      short: getTokenInitial(sheet.name),
+      kind: 'player',
+      color: 'rgb(34 197 94)',
+      x: clamp(1 + (nextIndex % 4), 0, cols - 1),
+      y: clamp(1 + (nextIndex % 5), 0, rows - 1),
+      hp: sheet.hp,
+      maxHp: sheet.maxHp,
+      ac: sheet.ac,
+      speed: sheet.speed,
+      owner: displayName,
+      roleOwner: 'player',
+      sheetId,
+      visionRadius: 3,
+      statuses: [],
+    };
+    setTokens((current) => [...current, nextToken]);
+    setSheets((current) => [...current, sheet]);
+    setSelectedTokenId(tokenId);
+    setJoinStep('ready');
+    addJournalEntry('sheet', `${preset.name}: карточка загружена из библиотеки в новую партию.`);
+  }, [addJournalEntry, cols, displayName, playerTokens.length, rows]);
+
+  const handleMoveGmPanel = useCallback((panelId: 'admin' | 'tokens', direction: 'up' | 'down') => {
+    setGmPanelOrder((current) => {
+      const index = current.indexOf(panelId);
+      if (index === -1) return current;
+      const nextIndex = direction === 'up' ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+  }, []);
+
+  const handleGmPanelWidthChange = useCallback((panelId: 'admin' | 'tokens' | 'tools', width: number) => {
+    setGmPanelWidths((current) => ({ ...current, [panelId]: width }));
+  }, []);
+
   const handleRoomAuth = () => {
     const name = displayName.trim() || 'Без имени';
     const pass = passwordInput.trim();
@@ -2615,7 +2870,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
     try {
       const parsed = JSON.parse(await file.text()) as unknown;
-      const imported = parseLongStoryShortCharacter(parsed);
+      const importedSheet = (() => {
+        if (parsed && typeof parsed === 'object' && 'stats' in parsed && 'heroClass' in parsed && 'name' in parsed) {
+          return parsed as Partial<CharacterSheet>;
+        }
+        return parseLongStoryShortCharacter(parsed);
+      })();
+      const imported = importedSheet;
       if (!imported) {
         addJournalEntry('system', 'Не удалось прочитать JSON персонажа.');
         return;
@@ -2669,7 +2930,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setSheets((current) => [...current, nextSheet]);
       setSelectedTokenId(tokenId);
       setJoinStep('ready');
-      addJournalEntry('sheet', `${displayName} импортировал персонажа из JSON Long Story Short (${file.name}).`);
+      addJournalEntry('sheet', `${displayName} импортировал персонажа из JSON (${file.name}).`);
     } catch {
       addJournalEntry('system', `Файл ${file.name} не является валидным JSON.`);
     }
@@ -2916,131 +3177,49 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           <div className={`grid gap-4 ${role === 'gm' ? 'xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]' : 'xl:grid-cols-1'}`}>
             {role === 'gm' ? (
               <div className="min-w-0 space-y-4">
-                <CompactSection title="Админ-панель мастера" description="Кисти, палитры и размер карты убраны в сворачиваемый блок." badge="master only" defaultOpen className="xl:sticky xl:top-20">
-                  <div className="mt-4 flex flex-wrap gap-2 text-sm">
-                    <button className={boardButtonClass(activeBoard === 'public')} onClick={() => setActiveBoard('public')}>
-                      Публичная карта
-                    </button>
-                    <button className={boardButtonClass(activeBoard === 'gm')} onClick={() => setActiveBoard('gm')}>
-                      Скрытая карта мастера
-                    </button>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                    {toolMeta.map((item) => (
-                      <button
-                        key={item.value}
-                        onClick={() => {
-                          setTool(item.value);
-                          if (item.layer) setSelectedColor(layerPalette[item.layer][0]);
-                        }}
-                        className={`rounded-2xl border px-3 py-2 ${tool === item.value ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-4">
-                    <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Палитра активного слоя</div>
-                    <div className="flex flex-wrap gap-2">
-                      {activePalette.map((color) => (
-                        <button
-                          key={`${tool}-${color}`}
-                          onClick={() => setSelectedColor(color)}
-                          className={`h-9 w-9 rounded-full border ${selectedColor === color ? 'border-white' : 'border-white/20'}`}
-                          style={{ backgroundColor: color }}
-                          aria-label={`Выбрать цвет ${color}`}
-                        />
-                      ))}
+                {gmPanelOrder.map((panelId, index) => (
+                  <div key={panelId} style={{ width: `min(100%, ${gmPanelWidths[panelId]}px)` }} className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+                      <span className="font-medium text-white">Панель мастера: {panelId === 'admin' ? 'админка' : 'токены'}</span>
+                      <button type="button" onClick={() => handleMoveGmPanel(panelId, 'up')} disabled={index === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
+                      <button type="button" onClick={() => handleMoveGmPanel(panelId, 'down')} disabled={index === gmPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
+                      <span className="text-slate-500">Ширина</span>
+                      <input type="range" min="280" max="680" value={gmPanelWidths[panelId]} onChange={(event) => handleGmPanelWidthChange(panelId, Number(event.target.value))} />
                     </div>
-                  </div>
-                  <div className="mt-4 space-y-3 text-sm text-slate-300">
-                    <label className="block">
-                      <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Zoom</div>
-                      <input type="range" min="60" max="180" value={Math.round(zoom * 100)} onChange={(event) => setZoom(Number(event.target.value) / 100)} className="w-full" />
-                    </label>
-                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
-                      <div>Покрытие: {paintedCells}</div>
-                      <div>Fog: {foggedCells}</div>
-                      <div>Препятствия: {obstacleCells}</div>
-                      <div>Текстуры: {textureCells}</div>
-                      <div>Мебель: {furnitureCells}</div>
-                    </div>
-                  </div>
-                  <div className="mt-4 rounded-2xl border border-white/10 p-3 text-sm text-slate-300">
-                    <div className="mb-3 text-xs uppercase tracking-wide text-slate-400">Размер поля</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input value={gridColsInput} onChange={(event) => setGridColsInput(event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white" placeholder="Колонки" />
-                      <input value={gridRowsInput} onChange={(event) => setGridRowsInput(event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white" placeholder="Строки" />
-                    </div>
-                    <button onClick={handleResizeMap} className="mt-3 w-full rounded-full bg-cyan-500 px-4 py-3 font-medium text-slate-950">
-                      Применить размер
-                    </button>
-                    <div className="mt-2 text-xs text-slate-400">Любой формат в диапазоне от {MIN_GRID}×{MIN_GRID} до {MAX_GRID}×{MAX_GRID}.</div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setTilesForBoard(activeBoard, createEmptyMap(cols, rows));
-                      addJournalEntry('map', `Карта ${activeBoard === 'public' ? 'игроков' : 'мастера'} очищена до базовой сетки.`);
-                    }}
-                    className="mt-4 w-full rounded-full border border-white/10 px-4 py-3 text-sm text-slate-200"
-                  >
-                    Очистить активную карту
-                  </button>
-                </CompactSection>
-
-                <CompactSection title="Токены" description="Полный список токенов со статусами и обзором игроков." badge={`${tokens.length} шт.`}>
-                  <div className="mt-4 max-h-[680px] space-y-3 overflow-y-auto pr-1 text-sm">
-                    {tokens.map((token) => (
-                      <div key={token.id} className={`overflow-hidden rounded-2xl border px-3 py-3 ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}>
-                        <button onClick={() => setSelectedTokenId(token.id)} className="w-full text-left">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="truncate font-medium text-white">{token.name}</div>
-                              <div className="truncate text-slate-400">{token.kind} • {cellCoordinate(token.x, token.y)}</div>
-                            </div>
-                            <span className="shrink-0 text-xs text-slate-300">HP {token.hp}/{token.maxHp}</span>
-                          </div>
-                        </button>
-                        <div className="mt-3 grid gap-2 text-xs text-slate-300">
-                          <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2">
-                            <span>Скрыт от игроков</span>
-                            <input type="checkbox" checked={Boolean(token.gmOnly)} onChange={(event) => handleTokenSetting(token.id, 'gmOnly', event.target.checked)} />
-                          </label>
-                          {token.kind === 'player' ? (
-                            <label className="rounded-xl border border-white/10 px-3 py-2">
-                              <div className="mb-2">Обзор игрока: {token.visionRadius ?? 3} клетки</div>
-                              <input type="range" min="1" max="8" value={token.visionRadius ?? 3} onChange={(event) => handleTokenSetting(token.id, 'visionRadius', Number(event.target.value))} className="w-full" />
-                            </label>
-                          ) : null}
-                          {token.kind !== 'object' ? (
-                            <div className="rounded-xl border border-white/10 px-3 py-3">
-                              <div className="mb-2 flex items-center justify-between gap-2">
-                                <span>Статусы и эффекты</span>
-                                <span className="text-[11px] text-slate-500">{(token.statuses ?? []).length ? `${(token.statuses ?? []).length} active` : 'нет активных'}</span>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {tokenStatusCatalog.map((status) => {
-                                  const isActive = (token.statuses ?? []).includes(status.key);
-                                  return (
-                                    <button
-                                      key={`${token.id}-${status.key}`}
-                                      type="button"
-                                      onClick={() => handleToggleTokenStatus(token.id, status.key)}
-                                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${isActive ? status.colorClass : 'border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200'}`}
-                                      title={status.description}
-                                    >
-                                      {status.short}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ) : null}
+                    {panelId === 'admin' ? (
+                      <CompactSection title="Админ-панель мастера" description="Кисти, палитры и размер карты убраны в сворачиваемый блок." badge="master only" defaultOpen className="xl:sticky xl:top-20">
+                        <div className="mt-4 flex flex-wrap gap-2 text-sm">
+                          <button className={boardButtonClass(activeBoard === 'public')} onClick={() => setActiveBoard('public')}>Публичная карта</button>
+                          <button className={boardButtonClass(activeBoard === 'gm')} onClick={() => setActiveBoard('gm')}>Скрытая карта мастера</button>
                         </div>
-                      </div>
-                    ))}
+                        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                          {toolMeta.map((item) => (
+                            <button key={item.value} onClick={() => { setTool(item.value); if (item.layer) setSelectedColor(layerPalette[item.layer][0]); }} className={`rounded-2xl border px-3 py-2 ${tool === item.value ? 'border-fuchsia-400 bg-fuchsia-500/15 text-white' : 'border-white/10 text-slate-300'}`}>{item.label}</button>
+                          ))}
+                        </div>
+                        <div className="mt-4"><div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Палитра активного слоя</div><div className="flex flex-wrap gap-2">{activePalette.map((color) => <button key={`${tool}-${color}`} onClick={() => setSelectedColor(color)} className={`h-9 w-9 rounded-full border ${selectedColor === color ? 'border-white' : 'border-white/20'}`} style={{ backgroundColor: color }} aria-label={`Выбрать цвет ${color}`} />)}</div></div>
+                        <div className="mt-4 space-y-3 text-sm text-slate-300"><label className="block"><div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Zoom</div><input type="range" min="60" max="180" value={Math.round(zoom * 100)} onChange={(event) => setZoom(Number(event.target.value) / 100)} className="w-full" /></label><div className="grid grid-cols-2 gap-2 text-xs text-slate-400"><div>Покрытие: {paintedCells}</div><div>Fog: {foggedCells}</div><div>Препятствия: {obstacleCells}</div><div>Текстуры: {textureCells}</div><div>Мебель: {furnitureCells}</div></div></div>
+                        <div className="mt-4 rounded-2xl border border-white/10 p-3 text-sm text-slate-300"><div className="mb-3 text-xs uppercase tracking-wide text-slate-400">Размер поля</div><div className="grid grid-cols-2 gap-2"><input value={gridColsInput} onChange={(event) => setGridColsInput(event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white" placeholder="Колонки" /><input value={gridRowsInput} onChange={(event) => setGridRowsInput(event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-white" placeholder="Строки" /></div><button onClick={handleResizeMap} className="mt-3 w-full rounded-full bg-cyan-500 px-4 py-3 font-medium text-slate-950">Применить размер</button><div className="mt-2 text-xs text-slate-400">Любой формат в диапазоне от {MIN_GRID}×{MIN_GRID} до {MAX_GRID}×{MAX_GRID}.</div></div>
+                        <button onClick={() => { setTilesForBoard(activeBoard, createEmptyMap(cols, rows)); addJournalEntry('map', `Карта ${activeBoard === 'public' ? 'игроков' : 'мастера'} очищена до базовой сетки.`); }} className="mt-4 w-full rounded-full border border-white/10 px-4 py-3 text-sm text-slate-200">Очистить активную карту</button>
+                      </CompactSection>
+                    ) : (
+                      <CompactSection title="Токены" description="Полный список токенов со статусами и обзором игроков." badge={`${tokens.length} шт.`}>
+                        <div className="mt-4 max-h-[680px] space-y-3 overflow-y-auto pr-1 text-sm">
+                          {tokens.map((token) => (
+                            <div key={token.id} className={`overflow-hidden rounded-2xl border px-3 py-3 ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}>
+                              <button onClick={() => setSelectedTokenId(token.id)} className="w-full text-left"><div className="flex items-center justify-between gap-3"><div className="min-w-0"><div className="truncate font-medium text-white">{token.name}</div><div className="truncate text-slate-400">{token.kind} • {cellCoordinate(token.x, token.y)}</div></div><span className="shrink-0 text-xs text-slate-300">HP {token.hp}/{token.maxHp}</span></div></button>
+                              <div className="mt-3 grid gap-2 text-xs text-slate-300">
+                                <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2"><span>Скрыт от игроков</span><input type="checkbox" checked={Boolean(token.gmOnly)} onChange={(event) => handleTokenSetting(token.id, 'gmOnly', event.target.checked)} /></label>
+                                {token.kind === 'player' ? <label className="rounded-xl border border-white/10 px-3 py-2"><div className="mb-2">Обзор игрока: {token.visionRadius ?? 3} клетки</div><input type="range" min="1" max="8" value={token.visionRadius ?? 3} onChange={(event) => handleTokenSetting(token.id, 'visionRadius', Number(event.target.value))} className="w-full" /></label> : null}
+                                {token.kind !== 'object' ? <div className="rounded-xl border border-white/10 px-3 py-3"><div className="mb-2 flex items-center justify-between gap-2"><span>Статусы и эффекты</span><span className="text-[11px] text-slate-500">{(token.statuses ?? []).length ? `${(token.statuses ?? []).length} active` : 'нет активных'}</span></div><div className="flex flex-wrap gap-2">{tokenStatusCatalog.map((status) => { const isActive = (token.statuses ?? []).includes(status.key); return <button key={`${token.id}-${status.key}`} type="button" onClick={() => handleToggleTokenStatus(token.id, status.key)} className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${isActive ? status.colorClass : 'border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200'}`} title={status.description}>{status.short}</button>; })}</div></div> : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CompactSection>
+                    )}
                   </div>
-                </CompactSection>
+                ))}
               </div>
             ) : null}
 
@@ -3058,8 +3237,30 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     Загрузить фото персонажа
                     <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={!selectedSheet || !canEditSheet(selectedSheet)} />
                   </label>
+                  <button onClick={handleSaveCharacterPreset} disabled={!selectedSheet} className="rounded-full border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-sm text-violet-100 disabled:opacity-50">
+                    Сохранить карточку
+                  </button>
+                  <button onClick={handleDownloadCharacterCard} disabled={!selectedSheet} className="rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-100 disabled:opacity-50">
+                    Скачать JSON
+                  </button>
                 </div>
                 <div className="mt-2 text-xs text-slate-400">Поддержан JSON в формате longstoryshort.app, включая вложенный блок `data`, характеристики, биографию, черты, инвентарь и ссылки на аватар.</div>
+                {savedCharacters.length ? (
+                  <div className="mt-4 rounded-2xl border border-white/8 bg-slate-950/40 p-4">
+                    <div className="text-xs uppercase tracking-wide text-slate-500">Библиотека карточек для новых партий</div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {savedCharacters.map((preset) => (
+                        <div key={preset.id} className="rounded-2xl border border-white/8 px-3 py-3">
+                          <div className="font-medium text-white">{preset.name}</div>
+                          <div className="mt-1 text-xs text-slate-400">Сохранено: {new Date(preset.savedAt).toLocaleString('ru-RU')}</div>
+                          <button onClick={() => handleLoadCharacterPreset(preset)} className="mt-3 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100">
+                            Подгрузить в партию
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
                   <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
@@ -3114,6 +3315,60 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               <input value={selectedSheet.playerName ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('playerName', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" placeholder="Игрок" />
                               <input type="number" value={selectedSheet.experience ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('experience', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" placeholder="XP" />
                             </div>
+                            {selectedProgression ? (
+                              <div className="space-y-3 rounded-3xl border border-white/10 bg-slate-950/40 p-4">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-xs uppercase tracking-wide text-slate-500">Campaign progression</span>
+                                  <button type="button" onClick={() => handleProgressionModeChange('xp')} className={`rounded-full px-3 py-1 text-xs ${campaignConfig.progressionMode === 'xp' ? 'bg-cyan-500 text-slate-950' : 'border border-white/10 text-slate-200'}`}>XP mode</button>
+                                  <button type="button" onClick={() => handleProgressionModeChange('milestone')} className={`rounded-full px-3 py-1 text-xs ${campaignConfig.progressionMode === 'milestone' ? 'bg-fuchsia-500 text-white' : 'border border-white/10 text-slate-200'}`}>Milestone mode</button>
+                                  <button type="button" onClick={handleToggleMilestoneReady} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200" disabled={campaignConfig.progressionMode !== 'milestone'}>Открыть level up вручную</button>
+                                  <button type="button" onClick={() => handleAddXp(300)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100" disabled={campaignConfig.progressionMode !== 'xp'}>+300 XP</button>
+                                  <button type="button" onClick={() => handleAddXp(1200)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100" disabled={campaignConfig.progressionMode !== 'xp'}>+1200 XP</button>
+                                  <button type="button" onClick={handleRollbackLastLevelUp} className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100 disabled:opacity-50" disabled={(levelRollbackSnapshots[selectedSheet.id] ?? []).length === 0}>Откатить level up</button>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <input
+                                    type="number"
+                                    value={customXpInput}
+                                    onChange={(event) => setCustomXpInput(event.target.value)}
+                                    className="w-40 rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white"
+                                    placeholder="XP delta"
+                                  />
+                                  <button type="button" onClick={handleApplyCustomXp} className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100" disabled={campaignConfig.progressionMode !== 'xp'}>
+                                    Применить кастомный XP
+                                  </button>
+                                </div>
+                                <CharacterXpCard progression={selectedProgression} mode={campaignConfig.progressionMode} />
+                                <LevelUpBanner progression={selectedProgression} onOpen={handleStartLevelUp} />
+                                {selectedProgressionOptions ? (
+                                  <div className="grid gap-3 md:grid-cols-3">
+                                    <div className="rounded-2xl border border-white/8 px-3 py-3">
+                                      <div className="text-xs uppercase tracking-wide text-slate-500">Class features</div>
+                                      <div className="mt-2 text-sm text-slate-200">{selectedProgressionOptions.continueClass.classFeatures.map((item) => item.name).join(', ') || 'Нет новых особенностей'}</div>
+                                    </div>
+                                    <div className="rounded-2xl border border-white/8 px-3 py-3">
+                                      <div className="text-xs uppercase tracking-wide text-slate-500">Spells / ASI</div>
+                                      <div className="mt-2 text-sm text-slate-200">{selectedProgressionOptions.continueClass.spells.length ? `Заклинаний: ${selectedProgressionOptions.continueClass.spells.length}` : 'Новых заклинаний нет'} · {selectedProgressionOptions.continueClass.asi.available ? 'Есть окно ASI/feat' : 'ASI нет'}</div>
+                                    </div>
+                                    <div className="rounded-2xl border border-white/8 px-3 py-3">
+                                      <div className="text-xs uppercase tracking-wide text-slate-500">Multiclass preview</div>
+                                      <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-200">
+                                        {selectedProgressionOptions.multiclassOptions.filter((item) => item.available).length ? selectedProgressionOptions.multiclassOptions.filter((item) => item.available).map((item) => {
+                                          const classRef = levelUpClasses.find((entry) => entry.id === item.item.classId);
+                                          return classRef ? (
+                                            <a key={item.item.classId} href={classRef.href} target="_blank" rel="noreferrer" className="text-cyan-300 underline underline-offset-4">
+                                              {item.item.classId}
+                                            </a>
+                                          ) : (
+                                            <span key={item.item.classId}>{item.item.classId}</span>
+                                          );
+                                        }) : <span>Нет доступных мультиклассов</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
 
@@ -3376,7 +3631,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               {role === 'gm' ? (
                 <>
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                    <CompactSection title="Инструменты мастера" description="Лут, события, заметка и броски спрятаны в один блок." badge="dnd.su only">
+                    <div style={{ width: `min(100%, ${gmPanelWidths.tools}px)` }} className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+                        <span className="font-medium text-white">Панель мастера: инструменты</span>
+                        <span className="text-slate-500">Ширина</span>
+                        <input type="range" min="260" max="520" value={gmPanelWidths.tools} onChange={(event) => handleGmPanelWidthChange('tools', Number(event.target.value))} />
+                      </div>
+                      <CompactSection title="Инструменты мастера" description="Лут, события, заметка и броски спрятаны в один блок." badge="dnd.su only">
                       <div className="mt-4 space-y-3 text-sm text-slate-300">
                         <div className="overflow-hidden rounded-2xl border border-white/8 px-4 py-3">
                           <div className="font-medium text-white">Последний лут</div>
@@ -3412,7 +3673,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         </div>
                         <button onClick={handleRandomEvent} className="w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">Случайное событие</button>
                       </div>
-                    </CompactSection>
+                      </CompactSection>
+                    </div>
 
                     <CompactSection title="Быстрые действия" description="Чат и кубы собраны в один компактный вертикальный стек." badge="utility" defaultOpen className="h-fit">
                       <div className="space-y-4">
@@ -3526,6 +3788,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           )}
         </section>
       </div>
+      <LevelUpDrawer
+        open={isLevelUpOpen}
+        draft={selectedLevelUpDraft}
+        preview={selectedLevelUpPreview}
+        onClose={() => setIsLevelUpOpen(false)}
+        onChange={handlePatchLevelUpDraft}
+        onConfirm={handleConfirmLevelUp}
+      />
     </div>
   );
 }
