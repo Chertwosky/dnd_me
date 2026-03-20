@@ -2727,6 +2727,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [draggedMasterPanel, setDraggedMasterPanel] = useState<string | null>(
     null,
   );
+  const [gmRailsSwapped, setGmRailsSwapped] = useState(false);
   const [gmPanelWidths, setGmPanelWidths] = useState<
     Record<"admin" | "tokens" | "party" | "initiative" | "tools", number>
   >({
@@ -4205,29 +4206,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               "admin" | "tokens"
             >,
         );
-      } else if (
-        gmRightPanelOrder.includes(
-          draggedMasterPanel as "party" | "initiative" | "tools",
-        )
-      ) {
-        setGmRightPanelOrder(
-          (current) =>
-            current.filter((item) => item !== draggedMasterPanel) as Array<
-              "party" | "initiative" | "tools"
-            >,
-        );
-        setGmPanelOrder(
-          (current) =>
-            movePanelInOrder(
-              [...current, draggedMasterPanel],
-              draggedMasterPanel,
-              targetId,
-            ) as Array<"admin" | "tokens">,
-        );
+      } else {
+        setGmRailsSwapped(false);
       }
       setDraggedMasterPanel(null);
     },
-    [draggedMasterPanel, gmPanelOrder, gmRightPanelOrder, movePanelInOrder],
+    [draggedMasterPanel, gmPanelOrder, movePanelInOrder],
   );
 
   const handleDropRightMasterPanel = useCallback(
@@ -4244,27 +4228,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               "party" | "initiative" | "tools"
             >,
         );
-      } else if (
-        gmPanelOrder.includes(draggedMasterPanel as "admin" | "tokens")
-      ) {
-        setGmPanelOrder(
-          (current) =>
-            current.filter((item) => item !== draggedMasterPanel) as Array<
-              "admin" | "tokens"
-            >,
-        );
-        setGmRightPanelOrder(
-          (current) =>
-            movePanelInOrder(
-              [...current, draggedMasterPanel],
-              draggedMasterPanel,
-              targetId,
-            ) as Array<"party" | "initiative" | "tools">,
-        );
+      } else {
+        setGmRailsSwapped(true);
       }
       setDraggedMasterPanel(null);
     },
-    [draggedMasterPanel, gmPanelOrder, gmRightPanelOrder, movePanelInOrder],
+    [draggedMasterPanel, gmRightPanelOrder, movePanelInOrder],
   );
 
   const handleGmPanelWidthChange = useCallback(
@@ -4809,7 +4778,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             className={`grid gap-4 ${role === "gm" ? "xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]" : "xl:grid-cols-1"}`}
           >
             {role === "gm" ? (
-              <div className="min-w-0 space-y-4">
+              <div
+                className="min-w-0 space-y-4"
+                style={
+                  role === "gm" ? { order: gmRailsSwapped ? 2 : 1 } : undefined
+                }
+              >
                 {gmPanelOrder.map((panelId, index) => (
                   <div
                     key={panelId}
@@ -5119,7 +5093,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               </div>
             ) : null}
 
-            <div className="min-w-0 flex flex-col gap-4 xl:col-span-1">
+            <div
+              className="min-w-0 flex flex-col gap-4 xl:col-span-1"
+              style={
+                role === "gm" ? { order: gmRailsSwapped ? 1 : 2 } : undefined
+              }
+            >
               <div
                 draggable={role === "gm"}
                 onDragStart={() =>
