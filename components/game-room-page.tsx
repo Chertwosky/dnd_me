@@ -1855,6 +1855,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [levelRollbackSnapshots, setLevelRollbackSnapshots] = useState<Record<string, CharacterSheet[]>>({});
   const [gmPanelOrder, setGmPanelOrder] = useState<Array<'admin' | 'tokens'>>(['admin', 'tokens']);
   const [gmRightPanelOrder, setGmRightPanelOrder] = useState<Array<'party' | 'initiative' | 'tools'>>(['party', 'initiative', 'tools']);
+  const [draggedMasterPanel, setDraggedMasterPanel] = useState<string | null>(null);
   const [gmPanelWidths, setGmPanelWidths] = useState<Record<'admin' | 'tokens' | 'party' | 'initiative' | 'tools', number>>({
     admin: 440,
     tokens: 440,
@@ -2806,6 +2807,31 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     });
   }, []);
 
+  const movePanelInOrder = useCallback((current: string[], draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return current;
+    const next = current.filter((item) => item !== draggedId);
+    const targetIndex = next.indexOf(targetId);
+    if (targetIndex === -1) return current;
+    next.splice(targetIndex, 0, draggedId);
+    return next;
+  }, []);
+
+  const handleDragStartMasterPanel = useCallback((panelId: string) => {
+    setDraggedMasterPanel(panelId);
+  }, []);
+
+  const handleDropLeftMasterPanel = useCallback((targetId: 'admin' | 'tokens') => {
+    if (!draggedMasterPanel || !gmPanelOrder.includes(draggedMasterPanel as 'admin' | 'tokens')) return;
+    setGmPanelOrder((current) => movePanelInOrder(current, draggedMasterPanel, targetId) as Array<'admin' | 'tokens'>);
+    setDraggedMasterPanel(null);
+  }, [draggedMasterPanel, gmPanelOrder, movePanelInOrder]);
+
+  const handleDropRightMasterPanel = useCallback((targetId: 'party' | 'initiative' | 'tools') => {
+    if (!draggedMasterPanel || !gmRightPanelOrder.includes(draggedMasterPanel as 'party' | 'initiative' | 'tools')) return;
+    setGmRightPanelOrder((current) => movePanelInOrder(current, draggedMasterPanel, targetId) as Array<'party' | 'initiative' | 'tools'>);
+    setDraggedMasterPanel(null);
+  }, [draggedMasterPanel, gmRightPanelOrder, movePanelInOrder]);
+
   const handleGmPanelWidthChange = useCallback((panelId: 'admin' | 'tokens' | 'party' | 'initiative' | 'tools', width: number) => {
     setGmPanelWidths((current) => ({ ...current, [panelId]: width }));
   }, []);
@@ -3193,8 +3219,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             {role === 'gm' ? (
               <div className="min-w-0 space-y-4">
                 {gmPanelOrder.map((panelId, index) => (
-                  <div key={panelId} style={{ width: `min(100%, ${gmPanelWidths[panelId]}px)` }} className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+                  <div
+                    key={panelId}
+                    draggable
+                    onDragStart={() => handleDragStartMasterPanel(panelId)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => handleDropLeftMasterPanel(panelId)}
+                    onDragEnd={() => setDraggedMasterPanel(null)}
+                    style={{ width: `min(100%, ${gmPanelWidths[panelId]}px)` }}
+                    className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? 'ring-2 ring-cyan-400/50' : ''}`}
+                  >
+                    <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
                       <span className="font-medium text-white">Панель мастера: {panelId === 'admin' ? 'админка' : 'токены'}</span>
                       <button type="button" onClick={() => handleMoveGmPanel(panelId, 'up')} disabled={index === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
                       <button type="button" onClick={() => handleMoveGmPanel(panelId, 'down')} disabled={index === gmPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
@@ -3239,9 +3274,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             ) : null}
 
             <div className="min-w-0 flex flex-col gap-4 xl:col-span-1">
-              <div style={role === 'gm' ? { order: gmRightPanelOrder.indexOf('party'), width: `min(100%, ${gmPanelWidths.party}px)` } : undefined} className="space-y-2">
+              <div
+                draggable={role === 'gm'}
+                onDragStart={() => role === 'gm' && handleDragStartMasterPanel('party')}
+                onDragOver={(event) => role === 'gm' && event.preventDefault()}
+                onDrop={() => role === 'gm' && handleDropRightMasterPanel('party')}
+                onDragEnd={() => setDraggedMasterPanel(null)}
+                style={role === 'gm' ? { order: gmRightPanelOrder.indexOf('party'), width: `min(100%, ${gmPanelWidths.party}px)` } : undefined}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === 'party' ? 'ring-2 ring-cyan-400/50' : ''}`}
+              >
                 {role === 'gm' ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+                  <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
                     <span className="font-medium text-white">Панель мастера: персонажи</span>
                     <button type="button" onClick={() => handleMoveGmRightPanel('party', 'up')} disabled={gmRightPanelOrder.indexOf('party') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
                     <button type="button" onClick={() => handleMoveGmRightPanel('party', 'down')} disabled={gmRightPanelOrder.indexOf('party') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
@@ -3539,9 +3582,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               </CompactSection>
               </div>
 
-              <div style={role === 'gm' ? { order: gmRightPanelOrder.indexOf('initiative'), width: `min(100%, ${gmPanelWidths.initiative}px)` } : undefined} className="space-y-2">
+              <div
+                draggable={role === 'gm'}
+                onDragStart={() => role === 'gm' && handleDragStartMasterPanel('initiative')}
+                onDragOver={(event) => role === 'gm' && event.preventDefault()}
+                onDrop={() => role === 'gm' && handleDropRightMasterPanel('initiative')}
+                onDragEnd={() => setDraggedMasterPanel(null)}
+                style={role === 'gm' ? { order: gmRightPanelOrder.indexOf('initiative'), width: `min(100%, ${gmPanelWidths.initiative}px)` } : undefined}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === 'initiative' ? 'ring-2 ring-cyan-400/50' : ''}`}
+              >
                 {role === 'gm' ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+                  <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
                     <span className="font-medium text-white">Панель мастера: инициатива</span>
                     <button type="button" onClick={() => handleMoveGmRightPanel('initiative', 'up')} disabled={gmRightPanelOrder.indexOf('initiative') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
                     <button type="button" onClick={() => handleMoveGmRightPanel('initiative', 'down')} disabled={gmRightPanelOrder.indexOf('initiative') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
@@ -3666,10 +3717,18 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               </div>
 
               {role === 'gm' ? (
-                <div style={{ order: gmRightPanelOrder.indexOf('tools') }} className="space-y-2">
+                <div
+                  draggable
+                  onDragStart={() => handleDragStartMasterPanel('tools')}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => handleDropRightMasterPanel('tools')}
+                  onDragEnd={() => setDraggedMasterPanel(null)}
+                  style={{ order: gmRightPanelOrder.indexOf('tools') }}
+                  className={`space-y-2 rounded-3xl ${draggedMasterPanel === 'tools' ? 'ring-2 ring-cyan-400/50' : ''}`}
+                >
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                     <div style={{ width: `min(100%, ${gmPanelWidths.tools}px)` }} className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+                      <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
                         <span className="font-medium text-white">Панель мастера: инструменты</span>
                         <button type="button" onClick={() => handleMoveGmRightPanel('tools', 'up')} disabled={gmRightPanelOrder.indexOf('tools') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
                         <button type="button" onClick={() => handleMoveGmRightPanel('tools', 'down')} disabled={gmRightPanelOrder.indexOf('tools') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
