@@ -4236,6 +4236,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     [draggedMasterPanel, gmRightPanelOrder, movePanelInOrder],
   );
 
+  const handleSwapGmRails = useCallback(() => {
+    setGmRailsSwapped((current) => !current);
+  }, []);
+
   const handleGmPanelWidthChange = useCallback(
     (
       panelId: "admin" | "tokens" | "party" | "initiative" | "tools",
@@ -4832,6 +4836,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           )
                         }
                       />
+                      <button
+                        type="button"
+                        onClick={handleSwapGmRails}
+                        className="rounded-full border border-cyan-400/30 px-2 py-1 text-cyan-100"
+                        title="Поменять местами мастерские колонки"
+                      >
+                        ⇄
+                      </button>
                     </div>
                     {panelId === "admin" ? (
                       <CompactSection
@@ -5160,6 +5172,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         )
                       }
                     />
+                    <button
+                      type="button"
+                      onClick={handleSwapGmRails}
+                      className="rounded-full border border-cyan-400/30 px-2 py-1 text-cyan-100"
+                      title="Поменять местами мастерские колонки"
+                    >
+                      ⇄
+                    </button>
                   </div>
                 ) : null}
                 <CompactSection
