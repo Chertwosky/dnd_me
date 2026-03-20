@@ -49,6 +49,26 @@ type CharacterStats = {
   cha: number;
 };
 
+type CharacterResourceTrack = {
+  current: number;
+  max: number;
+};
+
+type CharacterDeathSaves = {
+  successes: number;
+  failures: number;
+};
+
+type CharacterResources = {
+  spellSlots?: CharacterResourceTrack[];
+  hitDice?: CharacterResourceTrack;
+  rage?: CharacterResourceTrack;
+  ki?: CharacterResourceTrack;
+  sorceryPoints?: CharacterResourceTrack;
+  deathSaves?: CharacterDeathSaves;
+  exhaustion?: number;
+};
+
 type CharacterSheet = {
   id: string;
   tokenId: string;
@@ -90,6 +110,7 @@ type CharacterSheet = {
   attacks?: string;
   feats?: string;
   features?: string;
+  resources?: CharacterResources;
 };
 
 type JournalEntry = {
@@ -973,6 +994,15 @@ const initialSheets: CharacterSheet[] = [
     notes: 'Ищет скрытый архив башни и избегает ближнего боя.',
     inventory: 'Arcane focus, Potion of Healing, Explorer pack',
     spells: 'Magic Missile, Shield, Misty Step',
+    resources: {
+      spellSlots: [{ current: 4, max: 4 }, { current: 3, max: 3 }, { current: 2, max: 2 }],
+      hitDice: { current: 4, max: 4 },
+      sorceryPoints: { current: 0, max: 0 },
+      rage: { current: 0, max: 0 },
+      ki: { current: 0, max: 0 },
+      deathSaves: { successes: 0, failures: 0 },
+      exhaustion: 0,
+    },
   },
   {
     id: 'sheet-borin',
@@ -989,6 +1019,15 @@ const initialSheets: CharacterSheet[] = [
     notes: 'Держит переднюю линию и прикрывает Элиру щитом.',
     inventory: 'Battleaxe, Shield, Rope 50 ft',
     spells: '',
+    resources: {
+      spellSlots: [{ current: 0, max: 0 }, { current: 0, max: 0 }, { current: 0, max: 0 }],
+      hitDice: { current: 4, max: 4 },
+      rage: { current: 0, max: 0 },
+      ki: { current: 0, max: 0 },
+      sorceryPoints: { current: 0, max: 0 },
+      deathSaves: { successes: 0, failures: 0 },
+      exhaustion: 0,
+    },
   },
 ];
 
@@ -1455,6 +1494,84 @@ function createDefaultStats(): CharacterStats {
   return { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
 }
 
+function createDefaultResources(): CharacterResources {
+  return {
+    spellSlots: [
+      { current: 2, max: 2 },
+      { current: 0, max: 0 },
+      { current: 0, max: 0 },
+    ],
+    hitDice: { current: 1, max: 1 },
+    rage: { current: 0, max: 0 },
+    ki: { current: 0, max: 0 },
+    sorceryPoints: { current: 0, max: 0 },
+    deathSaves: { successes: 0, failures: 0 },
+    exhaustion: 0,
+  };
+}
+
+function normalizeResources(resources?: CharacterResources): CharacterResources {
+  const defaults = createDefaultResources();
+  const slots = Array.from({ length: 3 }, (_, index) => {
+    const current = resources?.spellSlots?.[index];
+    const fallback = defaults.spellSlots?.[index] ?? { current: 0, max: 0 };
+    return {
+      current: Number.isFinite(current?.current) ? Number(current?.current) : fallback.current,
+      max: Number.isFinite(current?.max) ? Number(current?.max) : fallback.max,
+    };
+  });
+
+  return {
+    spellSlots: slots,
+    hitDice: {
+      current: Number.isFinite(resources?.hitDice?.current) ? Number(resources?.hitDice?.current) : defaults.hitDice!.current,
+      max: Number.isFinite(resources?.hitDice?.max) ? Number(resources?.hitDice?.max) : defaults.hitDice!.max,
+    },
+    rage: {
+      current: Number.isFinite(resources?.rage?.current) ? Number(resources?.rage?.current) : defaults.rage!.current,
+      max: Number.isFinite(resources?.rage?.max) ? Number(resources?.rage?.max) : defaults.rage!.max,
+    },
+    ki: {
+      current: Number.isFinite(resources?.ki?.current) ? Number(resources?.ki?.current) : defaults.ki!.current,
+      max: Number.isFinite(resources?.ki?.max) ? Number(resources?.ki?.max) : defaults.ki!.max,
+    },
+    sorceryPoints: {
+      current: Number.isFinite(resources?.sorceryPoints?.current) ? Number(resources?.sorceryPoints?.current) : defaults.sorceryPoints!.current,
+      max: Number.isFinite(resources?.sorceryPoints?.max) ? Number(resources?.sorceryPoints?.max) : defaults.sorceryPoints!.max,
+    },
+    deathSaves: {
+      successes: Number.isFinite(resources?.deathSaves?.successes) ? Number(resources?.deathSaves?.successes) : defaults.deathSaves!.successes,
+      failures: Number.isFinite(resources?.deathSaves?.failures) ? Number(resources?.deathSaves?.failures) : defaults.deathSaves!.failures,
+    },
+    exhaustion: Number.isFinite(resources?.exhaustion) ? Number(resources?.exhaustion) : defaults.exhaustion!,
+  };
+}
+
+function getAbilityModifier(score: number) {
+  return Math.floor((score - 10) / 2);
+}
+
+function formatSignedModifier(modifier: number) {
+  return `${modifier >= 0 ? '+' : ''}${modifier}`;
+}
+
+function getSpellcastingAbility(sheet: CharacterSheet): keyof CharacterStats {
+  const heroClass = sheet.heroClass.toLowerCase();
+  if (['wizard', 'artificer'].some((name) => heroClass.includes(name))) return 'int';
+  if (['cleric', 'druid', 'ranger', 'monk'].some((name) => heroClass.includes(name))) return 'wis';
+  if (['bard', 'paladin', 'sorcerer', 'warlock'].some((name) => heroClass.includes(name))) return 'cha';
+  return 'int';
+}
+
+function getResourceLabel(resourceKey: 'hitDice' | 'rage' | 'ki' | 'sorceryPoints') {
+  return {
+    hitDice: 'кости хитов',
+    rage: 'ярость',
+    ki: 'ки',
+    sorceryPoints: 'очки чародейства',
+  }[resourceKey];
+}
+
 function createEmptyCharacterSheet(id: string, tokenId: string, name: string): CharacterSheet {
   return {
     id,
@@ -1471,6 +1588,7 @@ function createEmptyCharacterSheet(id: string, tokenId: string, name: string): C
     notes: 'Создано игроком в комнате.',
     inventory: '',
     spells: '',
+    resources: createDefaultResources(),
   };
 }
 
@@ -1671,6 +1789,19 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     const ownerToken = tokens.find((token) => token.sheetId === sheet.id);
     return ownerToken?.owner === displayName;
   }, [displayName, role, tokens]);
+  const selectedSheetToken = useMemo(
+    () => (selectedSheet ? tokens.find((token) => token.sheetId === selectedSheet.id || token.id === selectedSheet.tokenId) ?? null : null),
+    [selectedSheet, tokens],
+  );
+  const selectedSheetResources = useMemo(
+    () => (selectedSheet ? normalizeResources(selectedSheet.resources) : createDefaultResources()),
+    [selectedSheet],
+  );
+  const selectedSheetInitiativeModifier = useMemo(
+    () => (selectedSheetToken ? getInitiativeModifier(selectedSheetToken, sheets) : 0),
+    [selectedSheetToken, sheets],
+  );
+
   const activePalette = useMemo(() => {
     const toolConfig = toolMeta.find((item) => item.value === tool);
     return toolConfig?.layer ? layerPalette[toolConfig.layer] : layerPalette.terrain;
@@ -1691,6 +1822,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     () => initiative.participants.filter((participant) => visibleTokenIdsForPlayers.has(participant.tokenId) && !participant.hiddenFromPlayers),
     [initiative.participants, visibleTokenIdsForPlayers],
   );
+  const initiativeParticipantsForView = role === 'gm' ? initiative.participants : visibleInitiativeForPlayers;
+  const initiativePortraits = useMemo(() => new Map(sheets.map((sheet) => [sheet.tokenId, sheet.avatarUrl ?? null])), [sheets]);
+
 
   useEffect(() => {
     const stored = window.localStorage.getItem(getStorageKey(roomId));
@@ -1714,7 +1848,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (parsed.activeSavedMapId) setActiveSavedMapId(parsed.activeSavedMapId);
       if (parsed.widgetUrl) setWidgetUrl(parsed.widgetUrl);
       if (parsed.tokens) setTokens(parsed.tokens.map(normalizeToken));
-      if (parsed.sheets) setSheets(parsed.sheets);
+      if (parsed.sheets) setSheets(parsed.sheets.map((sheet) => ({ ...sheet, resources: normalizeResources(sheet.resources) })));
       if (parsed.journal) setJournal(parsed.journal);
       if (parsed.initiative) setInitiative(syncInitiativeWithTokens(parsed.initiative as InitiativeState, (parsed.tokens ?? initialTokens).map(normalizeToken), parsed.sheets ?? initialSheets));
     } catch {
@@ -1823,6 +1957,31 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     });
   }, [role]);
 
+  const handleMoveInitiativeParticipant = useCallback((tokenId: string, direction: 'up' | 'down') => {
+    if (role !== 'gm') return;
+    setInitiative((current) => {
+      const index = current.participants.findIndex((participant) => participant.tokenId === tokenId);
+      if (index < 0) return current;
+      const swapIndex = direction === 'up' ? index - 1 : index + 1;
+      if (swapIndex < 0 || swapIndex >= current.participants.length) return current;
+
+      const participants = [...current.participants];
+      [participants[index], participants[swapIndex]] = [participants[swapIndex], participants[index]];
+
+      let currentTurnIndex = current.currentTurnIndex;
+      if (currentTurnIndex === index) currentTurnIndex = swapIndex;
+      else if (currentTurnIndex === swapIndex) currentTurnIndex = index;
+
+      return {
+        ...current,
+        participants,
+        currentTurnIndex,
+      };
+    });
+
+    const participant = initiative.participants.find((entry) => entry.tokenId === tokenId);
+    if (participant) addJournalEntry('initiative', `${participant.name}: порядок ходов изменён вручную (${direction === 'up' ? 'выше' : 'ниже'}).`);
+  }, [addJournalEntry, initiative.participants, role]);
 
   const setTilesForBoard = useCallback((board: BoardKind, nextTiles: CellData[]) => {
     setMapState((current) => ({
@@ -2092,7 +2251,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setActiveSavedMapId(parsed.activeSavedMapId ?? null);
       setWidgetUrl(parsed.widgetUrl ?? DEFAULT_WIDGET_URL);
       if (parsed.tokens) setTokens(parsed.tokens.map(normalizeToken));
-      if (parsed.sheets) setSheets(parsed.sheets);
+      if (parsed.sheets) setSheets(parsed.sheets.map((sheet) => ({ ...sheet, resources: normalizeResources(sheet.resources) })));
       if (parsed.journal) setJournal(parsed.journal);
       setInitiative(syncInitiativeWithTokens((parsed.initiative as InitiativeState | undefined) ?? createEmptyInitiativeState(), (parsed.tokens ?? tokens).map(normalizeToken), parsed.sheets ?? sheets));
       addJournalEntry('map', `JSON-карта «${file.name}» загружена в комнату.`);
@@ -2186,6 +2345,143 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setEventResult(nextEvent);
     addJournalEntry('event', `Событие из dnd.su: ${nextEvent.title}. Ссылка: ${nextEvent.link}`);
   };
+
+  const updateSelectedSheet = useCallback((updater: (sheet: CharacterSheet) => CharacterSheet) => {
+    if (!selectedSheet || !canEditSheet(selectedSheet)) return;
+    setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? updater(sheet) : sheet)));
+  }, [canEditSheet, selectedSheet]);
+
+  const handleQuickRoll = useCallback((sheet: CharacterSheet, label: string, formula: string) => {
+    const result = rollFormula(formula);
+    if (!result) {
+      addJournalEntry('system', `Не удалось выполнить бросок ${label} (${formula}).`);
+      return;
+    }
+
+    setDiceFormula(formula);
+    addJournalEntry('dice', `${sheet.name}: ${label} ${formula} → ${result.total} (${result.rolls.join(', ')}${result.modifier ? ` ${result.modifier > 0 ? '+' : '-'} ${Math.abs(result.modifier)}` : ''})`);
+  }, [addJournalEntry]);
+
+  const handleAdjustResourceTrack = useCallback((resourceKey: 'hitDice' | 'rage' | 'ki' | 'sorceryPoints', delta: number) => {
+    if (!selectedSheet) return;
+
+    updateSelectedSheet((sheet) => {
+      const resources = normalizeResources(sheet.resources);
+      const track = resources[resourceKey]!;
+      const nextCurrent = clamp(track.current + delta, 0, Math.max(track.max, 0));
+      return {
+        ...sheet,
+        resources: {
+          ...resources,
+          [resourceKey]: {
+            ...track,
+            current: nextCurrent,
+          },
+        },
+      };
+    });
+
+    addJournalEntry('sheet', `${selectedSheet.name}: ${delta > 0 ? 'восстановлен' : 'потрачен'} ресурс «${getResourceLabel(resourceKey)}» (${delta > 0 ? '+' : ''}${delta}).`);
+  }, [addJournalEntry, selectedSheet, updateSelectedSheet]);
+
+  const handleResourceTrackLimitChange = useCallback((resourceKey: 'hitDice' | 'rage' | 'ki' | 'sorceryPoints', field: 'current' | 'max', value: number) => {
+    updateSelectedSheet((sheet) => {
+      const resources = normalizeResources(sheet.resources);
+      const track = resources[resourceKey]!;
+      const normalizedValue = Math.max(0, value);
+      const nextTrack = field === 'max'
+        ? { ...track, max: normalizedValue, current: Math.min(track.current, normalizedValue) }
+        : { ...track, current: clamp(normalizedValue, 0, track.max) };
+      return { ...sheet, resources: { ...resources, [resourceKey]: nextTrack } };
+    });
+  }, [updateSelectedSheet]);
+
+  const handleAdjustSpellSlot = useCallback((index: number, delta: number) => {
+    if (!selectedSheet) return;
+
+    updateSelectedSheet((sheet) => {
+      const resources = normalizeResources(sheet.resources);
+      const spellSlots = [...(resources.spellSlots ?? [])];
+      const slot = spellSlots[index] ?? { current: 0, max: 0 };
+      spellSlots[index] = { ...slot, current: clamp(slot.current + delta, 0, Math.max(slot.max, 0)) };
+      return { ...sheet, resources: { ...resources, spellSlots } };
+    });
+
+    addJournalEntry('sheet', `${selectedSheet.name}: ${delta > 0 ? 'восстановлен' : 'потрачен'} слот ${index + 1} круга (${delta > 0 ? '+' : ''}${delta}).`);
+  }, [addJournalEntry, selectedSheet, updateSelectedSheet]);
+
+  const handleSpellSlotLimitChange = useCallback((index: number, field: 'current' | 'max', value: number) => {
+    updateSelectedSheet((sheet) => {
+      const resources = normalizeResources(sheet.resources);
+      const spellSlots = [...(resources.spellSlots ?? [])];
+      const slot = spellSlots[index] ?? { current: 0, max: 0 };
+      const normalizedValue = Math.max(0, value);
+      spellSlots[index] = field === 'max'
+        ? { ...slot, max: normalizedValue, current: Math.min(slot.current, normalizedValue) }
+        : { ...slot, current: clamp(normalizedValue, 0, slot.max) };
+      return { ...sheet, resources: { ...resources, spellSlots } };
+    });
+  }, [updateSelectedSheet]);
+
+  const handleDeathSaveChange = useCallback((field: 'successes' | 'failures', value: number) => {
+    updateSelectedSheet((sheet) => {
+      const resources = normalizeResources(sheet.resources);
+      return {
+        ...sheet,
+        resources: {
+          ...resources,
+          deathSaves: {
+            ...resources.deathSaves!,
+            [field]: clamp(value, 0, 3),
+          },
+        },
+      };
+    });
+  }, [updateSelectedSheet]);
+
+  const handleAdjustDeathSave = useCallback((field: 'successes' | 'failures', delta: number) => {
+    if (!selectedSheet) return;
+    const resources = normalizeResources(selectedSheet.resources);
+    const currentValue = resources.deathSaves?.[field] ?? 0;
+    const nextValue = clamp(currentValue + delta, 0, 3);
+    handleDeathSaveChange(field, nextValue);
+    addJournalEntry('sheet', `${selectedSheet.name}: ${field === 'successes' ? 'успехов' : 'провалов'} death save теперь ${nextValue}.`);
+  }, [addJournalEntry, handleDeathSaveChange, selectedSheet]);
+
+  const handleExhaustionChange = useCallback((value: number) => {
+    updateSelectedSheet((sheet) => {
+      const resources = normalizeResources(sheet.resources);
+      return { ...sheet, resources: { ...resources, exhaustion: clamp(value, 0, 6) } };
+    });
+  }, [updateSelectedSheet]);
+
+  const handleAdjustExhaustion = useCallback((delta: number) => {
+    if (!selectedSheet) return;
+    const resources = normalizeResources(selectedSheet.resources);
+    const nextValue = clamp((resources.exhaustion ?? 0) + delta, 0, 6);
+    handleExhaustionChange(nextValue);
+    addJournalEntry('sheet', `${selectedSheet.name}: уровень истощения ${nextValue}.`);
+  }, [addJournalEntry, handleExhaustionChange, selectedSheet]);
+
+  const handleApplyRest = useCallback((mode: 'short' | 'long') => {
+    if (!selectedSheet) return;
+    updateSelectedSheet((sheet) => {
+      const resources = normalizeResources(sheet.resources);
+      return {
+        ...sheet,
+        resources: {
+          ...resources,
+          spellSlots: (resources.spellSlots ?? []).map((slot) => (mode === 'long' ? { ...slot, current: slot.max } : slot)),
+          hitDice: mode === 'long' ? { ...resources.hitDice!, current: resources.hitDice!.max } : resources.hitDice,
+          rage: { ...resources.rage!, current: resources.rage!.max },
+          ki: { ...resources.ki!, current: resources.ki!.max },
+          sorceryPoints: { ...resources.sorceryPoints!, current: resources.sorceryPoints!.max },
+          deathSaves: { successes: 0, failures: 0 },
+        },
+      };
+    });
+    addJournalEntry('sheet', `${selectedSheet.name}: применён ${mode === 'long' ? 'long rest' : 'short rest'} к ресурсам персонажа.`);
+  }, [addJournalEntry, selectedSheet, updateSelectedSheet]);
 
   const handleSheetChange = <K extends keyof CharacterSheet>(key: K, value: CharacterSheet[K]) => {
     if (!selectedSheet || !canEditSheet(selectedSheet)) return;
@@ -2791,13 +3087,120 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           </div>
                         </div>
 
-                        <div className="grid gap-3 md:grid-cols-6">
-                          {statLabels.map((stat) => (
-                            <div key={stat.key} className="rounded-2xl border border-white/8 bg-slate-950/50 px-3 py-3 text-center">
-                              <div className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</div>
-                              <div className="mt-2 text-xl font-semibold text-white">{selectedSheet.stats[stat.key]}</div>
+                        <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+                          <div>
+                            <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">Характеристики и быстрые броски</div>
+                            <div className="grid gap-3 md:grid-cols-6">
+                              {statLabels.map((stat) => {
+                                const modifier = getAbilityModifier(selectedSheet.stats[stat.key]);
+                                return (
+                                  <div key={stat.key} className="rounded-2xl border border-white/8 bg-slate-950/50 px-3 py-3 text-center">
+                                    <div className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</div>
+                                    <div className="mt-2 text-xl font-semibold text-white">{selectedSheet.stats[stat.key]}</div>
+                                    <div className="mt-1 text-xs text-slate-400">mod {formatSignedModifier(modifier)}</div>
+                                    <div className="mt-3 grid gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuickRoll(selectedSheet, `${stat.label} check`, `1d20${formatSignedModifier(modifier)}`)}
+                                        className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[11px] font-medium text-cyan-100"
+                                      >
+                                        Check
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuickRoll(selectedSheet, `${stat.label} save`, `1d20${formatSignedModifier(modifier)}`)}
+                                        className="rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-2 py-1 text-[11px] font-medium text-fuchsia-100"
+                                      >
+                                        Save
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ))}
+                          </div>
+
+                          <div className="rounded-3xl border border-white/8 bg-slate-950/40 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-xs uppercase tracking-wide text-slate-500">Быстрые действия боя</div>
+                              <div className="text-xs text-slate-500">PB {formatSignedModifier(selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1))}</div>
+                            </div>
+                            <div className="mt-3 grid gap-2">
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Initiative', `1d20${formatSignedModifier(selectedSheetInitiativeModifier)}`)} className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-100">Бросить инициативу</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Melee attack', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.str) + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`)} className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-left text-sm text-emerald-100">Атака оружием (СИЛ + PB)</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Ranged / finesse attack', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.dex) + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`)} className="rounded-2xl border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-left text-sm text-sky-100">Атака оружием (ЛОВ + PB)</button>
+                              <button type="button" onClick={() => { const spellAbility = getSpellcastingAbility(selectedSheet); const spellMod = getAbilityModifier(selectedSheet.stats[spellAbility]); handleQuickRoll(selectedSheet, `Spell attack (${String(spellAbility).toUpperCase()})`, `1d20${formatSignedModifier(spellMod + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`); }} className="rounded-2xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-left text-sm text-violet-100">Заклинательная атака</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Concentration', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.con))}`)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2 text-left text-sm text-slate-200">Проверка концентрации</button>
+                            </div>
+                            <div className="mt-3 text-xs leading-5 text-slate-400">Кнопки сразу бросают d20 по реальным модификаторам, подставляют формулу в общий dice roller и пишут результат в журнал.</div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-3xl border border-white/8 bg-slate-950/40 p-4">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-xs uppercase tracking-wide text-slate-500">Ресурсы персонажа v1</div>
+                              <div className="mt-1 text-sm text-slate-300">Spell slots, hit dice, rage, ki, sorcery points, death saves и exhaustion сохраняются в JSON комнаты.</div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button type="button" onClick={() => handleApplyRest('short')} disabled={!canEditSheet(selectedSheet)} className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100 disabled:opacity-50">Short rest</button>
+                              <button type="button" onClick={() => handleApplyRest('long')} disabled={!canEditSheet(selectedSheet)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-100 disabled:opacity-50">Long rest</button>
+                            </div>
+                          </div>
+                          {(() => { const resources = selectedSheetResources; return (
+                            <div className="space-y-4">
+                              <div className="grid gap-3 md:grid-cols-3">
+                                {(resources.spellSlots ?? []).map((slot, index) => (
+                                  <div key={`slot-${index}`} className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                    <div className="text-xs uppercase tracking-wide text-slate-500">Spell slot {index + 1}</div>
+                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                      <input type="number" min={0} value={slot.current} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSpellSlotLimitChange(index, 'current', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Текущие" />
+                                      <input type="number" min={0} value={slot.max} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSpellSlotLimitChange(index, 'max', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Макс" />
+                                    </div>
+                                    <div className="mt-3 flex gap-2">
+                                      <button type="button" onClick={() => handleAdjustSpellSlot(index, -1)} disabled={!canEditSheet(selectedSheet) || slot.current <= 0} className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100 disabled:opacity-50">Потратить</button>
+                                      <button type="button" onClick={() => handleAdjustSpellSlot(index, 1)} disabled={!canEditSheet(selectedSheet) || slot.current >= slot.max} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100 disabled:opacity-50">Вернуть</button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                {([['hitDice', 'Hit dice'], ['rage', 'Rage'], ['ki', 'Ki'], ['sorceryPoints', 'Sorcery']] as const).map(([key, label]) => {
+                                  const track = resources[key];
+                                  return (
+                                    <div key={key} className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+                                      <div className="mt-3 grid grid-cols-2 gap-2">
+                                        <input type="number" min={0} value={track?.current ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleResourceTrackLimitChange(key, 'current', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Текущие" />
+                                        <input type="number" min={0} value={track?.max ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleResourceTrackLimitChange(key, 'max', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Макс" />
+                                      </div>
+                                      <div className="mt-3 flex gap-2">
+                                        <button type="button" onClick={() => handleAdjustResourceTrack(key, -1)} disabled={!canEditSheet(selectedSheet) || (track?.current ?? 0) <= 0} className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100 disabled:opacity-50">Потратить</button>
+                                        <button type="button" onClick={() => handleAdjustResourceTrack(key, 1)} disabled={!canEditSheet(selectedSheet) || (track?.current ?? 0) >= (track?.max ?? 0)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100 disabled:opacity-50">Вернуть</button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="grid gap-3 md:grid-cols-3">
+                                <div className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                  <div className="text-xs uppercase tracking-wide text-slate-500">Death saves</div>
+                                  <div className="mt-3 grid grid-cols-2 gap-2">
+                                    <input type="number" min={0} max={3} value={resources.deathSaves?.successes ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleDeathSaveChange('successes', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Успехи" />
+                                    <input type="number" min={0} max={3} value={resources.deathSaves?.failures ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleDeathSaveChange('failures', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Провалы" />
+                                  </div>
+                                  <div className="mt-3 flex gap-2">
+                                    <button type="button" onClick={() => handleAdjustDeathSave('successes', 1)} disabled={!canEditSheet(selectedSheet) || (resources.deathSaves?.successes ?? 0) >= 3} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100 disabled:opacity-50">+ успех</button>
+                                    <button type="button" onClick={() => handleAdjustDeathSave('failures', 1)} disabled={!canEditSheet(selectedSheet) || (resources.deathSaves?.failures ?? 0) >= 3} className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100 disabled:opacity-50">+ провал</button>
+                                  </div>
+                                </div>
+                                <div className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                  <div className="text-xs uppercase tracking-wide text-slate-500">Exhaustion</div>
+                                  <input type="number" min={0} max={6} value={resources.exhaustion ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleExhaustionChange(Number(event.target.value))} className="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" /><div className="mt-3 flex gap-2"><button type="button" onClick={() => handleAdjustExhaustion(-1)} disabled={!canEditSheet(selectedSheet) || (resources.exhaustion ?? 0) <= 0} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100 disabled:opacity-50">Снизить</button><button type="button" onClick={() => handleAdjustExhaustion(1)} disabled={!canEditSheet(selectedSheet) || (resources.exhaustion ?? 0) >= 6} className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs text-amber-100 disabled:opacity-50">Повысить</button></div>
+                                </div>
+                              </div>
+                            </div>
+                          ); })()}
                         </div>
 
                         <div className="grid gap-2 md:grid-cols-3">
@@ -2837,8 +3240,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 <div className="mt-4 flex flex-wrap gap-2 text-sm">
                   {role === 'gm' ? (
                     <>
-                      <button onClick={() => handleStartInitiative('visible')} className="rounded-full bg-cyan-500 px-4 py-2 font-medium text-slate-950">Автоинициатива видимых</button>
-                      <button onClick={() => handleStartInitiative('all')} className="rounded-full border border-white/10 px-4 py-2 text-slate-200">Включить всех</button>
+                      <button onClick={() => handleStartInitiative('visible')} className="rounded-full bg-cyan-500 px-4 py-2 font-medium text-slate-950">Прокинуть инициативу всем, кто виден врагам</button>
+                      <button onClick={() => handleStartInitiative('all')} className="rounded-full border border-white/10 px-4 py-2 text-slate-200">Прокинуть за всех</button>
                       <button onClick={handleAdvanceTurn} disabled={!initiative.active || initiative.participants.length === 0} className="rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-2 font-medium text-amber-100 disabled:cursor-not-allowed disabled:opacity-50">Следующий ход</button>
                       <button onClick={handleStopInitiative} disabled={initiative.participants.length === 0 && !initiative.active} className="rounded-full border border-white/10 px-4 py-2 text-slate-300 disabled:cursor-not-allowed disabled:opacity-50">Сбросить</button>
                     </>
@@ -2860,9 +3263,53 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   </div>
                 </div>
 
+                <div className="mt-4 rounded-3xl border border-white/8 bg-slate-950/40 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Порядок ходов</div>
+                      <div className="mt-1 text-sm text-slate-400">Отдельное поле с портретами персонажей и NPC. Мастер может руками переставлять участников вверх/вниз.</div>
+                    </div>
+                    <span className="badge">turn order</span>
+                  </div>
+
+                  {initiativeParticipantsForView.length ? (
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {initiativeParticipantsForView.map((participant, index) => {
+                        const isActive = activeInitiativeParticipant?.tokenId === participant.tokenId;
+                        const avatarUrl = initiativePortraits.get(participant.tokenId);
+                        return (
+                          <div key={`order-${participant.tokenId}`} className={`rounded-2xl border p-3 ${isActive ? 'border-amber-400/40 bg-amber-500/10' : 'border-white/8 bg-slate-900/40'}`}>
+                            <div className="flex items-center gap-3">
+                              <button onClick={() => handleSelectTurn(participant.tokenId)} disabled={role !== 'gm'} className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default">
+                                <div className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white/10 text-lg font-semibold text-white" style={{ backgroundColor: `${participant.color}33`, borderColor: participant.color }}>
+                                  {avatarUrl ? <img src={avatarUrl} alt={participant.name} className="h-full w-full object-cover" /> : <span>{getTokenInitial(participant.name)}</span>}
+                                  <span className="absolute -left-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-slate-950 text-[11px] font-semibold text-white">{index + 1}</span>
+                                </div>
+                                <span className="min-w-0">
+                                  <span className="block truncate font-medium text-white">{participant.name}</span>
+                                  <span className="block text-xs text-slate-400">{participant.kind}{participant.hiddenFromPlayers ? ' • скрыт от игроков' : ''}</span>
+                                  <span className="mt-1 block text-sm text-slate-200">Init {participant.initiative} · mod {formatSignedModifier(participant.initiativeModifier)}</span>
+                                </span>
+                              </button>
+                              {role === 'gm' ? (
+                                <div className="flex flex-col gap-2">
+                                  <button type="button" onClick={() => handleMoveInitiativeParticipant(participant.tokenId, 'up')} disabled={index === 0} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200 disabled:opacity-40">↑</button>
+                                  <button type="button" onClick={() => handleMoveInitiativeParticipant(participant.tokenId, 'down')} disabled={index === initiativeParticipantsForView.length - 1} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200 disabled:opacity-40">↓</button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-2xl border border-dashed border-white/10 px-4 py-4 text-sm text-slate-400">Запустите инициативу, чтобы увидеть порядок ходов отдельным полем с портретами.</div>
+                  )}
+                </div>
+
                 <div className="mt-4 space-y-3">
-                  {(role === 'gm' ? initiative.participants : visibleInitiativeForPlayers).length ? (
-                    (role === 'gm' ? initiative.participants : visibleInitiativeForPlayers).map((participant, index) => {
+                  {initiativeParticipantsForView.length ? (
+                    initiativeParticipantsForView.map((participant, index) => {
                       const isActive = activeInitiativeParticipant?.tokenId === participant.tokenId;
                       return (
                         <div key={participant.tokenId} className={`rounded-2xl border px-4 py-3 ${isActive ? 'border-amber-400/40 bg-amber-500/10' : 'border-white/8 bg-slate-950/30'}`}>
@@ -2891,7 +3338,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               ) : (
                                 <div className="text-lg font-semibold text-white">{participant.initiative}</div>
                               )}
-                              <span className="text-xs text-slate-500">mod {participant.initiativeModifier >= 0 ? '+' : ''}{participant.initiativeModifier}</span>
+                              <span className="text-xs text-slate-500">mod {formatSignedModifier(participant.initiativeModifier)}</span>
                             </div>
                           </div>
                         </div>
