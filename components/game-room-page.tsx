@@ -1822,6 +1822,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     () => initiative.participants.filter((participant) => visibleTokenIdsForPlayers.has(participant.tokenId) && !participant.hiddenFromPlayers),
     [initiative.participants, visibleTokenIdsForPlayers],
   );
+  const initiativeParticipantsForView = role === 'gm' ? initiative.participants : visibleInitiativeForPlayers;
+  const initiativePortraits = useMemo(() => new Map(sheets.map((sheet) => [sheet.tokenId, sheet.avatarUrl ?? null])), [sheets]);
+
 
   useEffect(() => {
     const stored = window.localStorage.getItem(getStorageKey(roomId));
@@ -1954,6 +1957,31 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     });
   }, [role]);
 
+  const handleMoveInitiativeParticipant = useCallback((tokenId: string, direction: 'up' | 'down') => {
+    if (role !== 'gm') return;
+    setInitiative((current) => {
+      const index = current.participants.findIndex((participant) => participant.tokenId === tokenId);
+      if (index < 0) return current;
+      const swapIndex = direction === 'up' ? index - 1 : index + 1;
+      if (swapIndex < 0 || swapIndex >= current.participants.length) return current;
+
+      const participants = [...current.participants];
+      [participants[index], participants[swapIndex]] = [participants[swapIndex], participants[index]];
+
+      let currentTurnIndex = current.currentTurnIndex;
+      if (currentTurnIndex === index) currentTurnIndex = swapIndex;
+      else if (currentTurnIndex === swapIndex) currentTurnIndex = index;
+
+      return {
+        ...current,
+        participants,
+        currentTurnIndex,
+      };
+    });
+
+    const participant = initiative.participants.find((entry) => entry.tokenId === tokenId);
+    if (participant) addJournalEntry('initiative', `${participant.name}: порядок ходов изменён вручную (${direction === 'up' ? 'выше' : 'ниже'}).`);
+  }, [addJournalEntry, initiative.participants, role]);
 
   const setTilesForBoard = useCallback((board: BoardKind, nextTiles: CellData[]) => {
     setMapState((current) => ({
@@ -3212,8 +3240,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 <div className="mt-4 flex flex-wrap gap-2 text-sm">
                   {role === 'gm' ? (
                     <>
-                      <button onClick={() => handleStartInitiative('visible')} className="rounded-full bg-cyan-500 px-4 py-2 font-medium text-slate-950">Автоинициатива видимых</button>
-                      <button onClick={() => handleStartInitiative('all')} className="rounded-full border border-white/10 px-4 py-2 text-slate-200">Включить всех</button>
+                      <button onClick={() => handleStartInitiative('visible')} className="rounded-full bg-cyan-500 px-4 py-2 font-medium text-slate-950">Прокинуть инициативу всем, кто виден врагам</button>
+                      <button onClick={() => handleStartInitiative('all')} className="rounded-full border border-white/10 px-4 py-2 text-slate-200">Прокинуть за всех</button>
                       <button onClick={handleAdvanceTurn} disabled={!initiative.active || initiative.participants.length === 0} className="rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-2 font-medium text-amber-100 disabled:cursor-not-allowed disabled:opacity-50">Следующий ход</button>
                       <button onClick={handleStopInitiative} disabled={initiative.participants.length === 0 && !initiative.active} className="rounded-full border border-white/10 px-4 py-2 text-slate-300 disabled:cursor-not-allowed disabled:opacity-50">Сбросить</button>
                     </>
@@ -3235,9 +3263,53 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   </div>
                 </div>
 
+                <div className="mt-4 rounded-3xl border border-white/8 bg-slate-950/40 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Порядок ходов</div>
+                      <div className="mt-1 text-sm text-slate-400">Отдельное поле с портретами персонажей и NPC. Мастер может руками переставлять участников вверх/вниз.</div>
+                    </div>
+                    <span className="badge">turn order</span>
+                  </div>
+
+                  {initiativeParticipantsForView.length ? (
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {initiativeParticipantsForView.map((participant, index) => {
+                        const isActive = activeInitiativeParticipant?.tokenId === participant.tokenId;
+                        const avatarUrl = initiativePortraits.get(participant.tokenId);
+                        return (
+                          <div key={`order-${participant.tokenId}`} className={`rounded-2xl border p-3 ${isActive ? 'border-amber-400/40 bg-amber-500/10' : 'border-white/8 bg-slate-900/40'}`}>
+                            <div className="flex items-center gap-3">
+                              <button onClick={() => handleSelectTurn(participant.tokenId)} disabled={role !== 'gm'} className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default">
+                                <div className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white/10 text-lg font-semibold text-white" style={{ backgroundColor: `${participant.color}33`, borderColor: participant.color }}>
+                                  {avatarUrl ? <img src={avatarUrl} alt={participant.name} className="h-full w-full object-cover" /> : <span>{getTokenInitial(participant.name)}</span>}
+                                  <span className="absolute -left-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-slate-950 text-[11px] font-semibold text-white">{index + 1}</span>
+                                </div>
+                                <span className="min-w-0">
+                                  <span className="block truncate font-medium text-white">{participant.name}</span>
+                                  <span className="block text-xs text-slate-400">{participant.kind}{participant.hiddenFromPlayers ? ' • скрыт от игроков' : ''}</span>
+                                  <span className="mt-1 block text-sm text-slate-200">Init {participant.initiative} · mod {formatSignedModifier(participant.initiativeModifier)}</span>
+                                </span>
+                              </button>
+                              {role === 'gm' ? (
+                                <div className="flex flex-col gap-2">
+                                  <button type="button" onClick={() => handleMoveInitiativeParticipant(participant.tokenId, 'up')} disabled={index === 0} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200 disabled:opacity-40">↑</button>
+                                  <button type="button" onClick={() => handleMoveInitiativeParticipant(participant.tokenId, 'down')} disabled={index === initiativeParticipantsForView.length - 1} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200 disabled:opacity-40">↓</button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-2xl border border-dashed border-white/10 px-4 py-4 text-sm text-slate-400">Запустите инициативу, чтобы увидеть порядок ходов отдельным полем с портретами.</div>
+                  )}
+                </div>
+
                 <div className="mt-4 space-y-3">
-                  {(role === 'gm' ? initiative.participants : visibleInitiativeForPlayers).length ? (
-                    (role === 'gm' ? initiative.participants : visibleInitiativeForPlayers).map((participant, index) => {
+                  {initiativeParticipantsForView.length ? (
+                    initiativeParticipantsForView.map((participant, index) => {
                       const isActive = activeInitiativeParticipant?.tokenId === participant.tokenId;
                       return (
                         <div key={participant.tokenId} className={`rounded-2xl border px-4 py-3 ${isActive ? 'border-amber-400/40 bg-amber-500/10' : 'border-white/8 bg-slate-950/30'}`}>
@@ -3266,7 +3338,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               ) : (
                                 <div className="text-lg font-semibold text-white">{participant.initiative}</div>
                               )}
-                              <span className="text-xs text-slate-500">mod {participant.initiativeModifier >= 0 ? '+' : ''}{participant.initiativeModifier}</span>
+                              <span className="text-xs text-slate-500">mod {formatSignedModifier(participant.initiativeModifier)}</span>
                             </div>
                           </div>
                         </div>
