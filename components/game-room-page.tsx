@@ -49,6 +49,26 @@ type CharacterStats = {
   cha: number;
 };
 
+type CharacterResourceTrack = {
+  current: number;
+  max: number;
+};
+
+type CharacterDeathSaves = {
+  successes: number;
+  failures: number;
+};
+
+type CharacterResources = {
+  spellSlots?: CharacterResourceTrack[];
+  hitDice?: CharacterResourceTrack;
+  rage?: CharacterResourceTrack;
+  ki?: CharacterResourceTrack;
+  sorceryPoints?: CharacterResourceTrack;
+  deathSaves?: CharacterDeathSaves;
+  exhaustion?: number;
+};
+
 type CharacterSheet = {
   id: string;
   tokenId: string;
@@ -90,6 +110,7 @@ type CharacterSheet = {
   attacks?: string;
   feats?: string;
   features?: string;
+  resources?: CharacterResources;
 };
 
 type JournalEntry = {
@@ -973,6 +994,15 @@ const initialSheets: CharacterSheet[] = [
     notes: 'Ищет скрытый архив башни и избегает ближнего боя.',
     inventory: 'Arcane focus, Potion of Healing, Explorer pack',
     spells: 'Magic Missile, Shield, Misty Step',
+    resources: {
+      spellSlots: [{ current: 4, max: 4 }, { current: 3, max: 3 }, { current: 2, max: 2 }],
+      hitDice: { current: 4, max: 4 },
+      sorceryPoints: { current: 0, max: 0 },
+      rage: { current: 0, max: 0 },
+      ki: { current: 0, max: 0 },
+      deathSaves: { successes: 0, failures: 0 },
+      exhaustion: 0,
+    },
   },
   {
     id: 'sheet-borin',
@@ -989,6 +1019,15 @@ const initialSheets: CharacterSheet[] = [
     notes: 'Держит переднюю линию и прикрывает Элиру щитом.',
     inventory: 'Battleaxe, Shield, Rope 50 ft',
     spells: '',
+    resources: {
+      spellSlots: [{ current: 0, max: 0 }, { current: 0, max: 0 }, { current: 0, max: 0 }],
+      hitDice: { current: 4, max: 4 },
+      rage: { current: 0, max: 0 },
+      ki: { current: 0, max: 0 },
+      sorceryPoints: { current: 0, max: 0 },
+      deathSaves: { successes: 0, failures: 0 },
+      exhaustion: 0,
+    },
   },
 ];
 
@@ -1455,6 +1494,63 @@ function createDefaultStats(): CharacterStats {
   return { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
 }
 
+function createDefaultResources(): CharacterResources {
+  return {
+    spellSlots: [
+      { current: 2, max: 2 },
+      { current: 0, max: 0 },
+      { current: 0, max: 0 },
+    ],
+    hitDice: { current: 1, max: 1 },
+    rage: { current: 0, max: 0 },
+    ki: { current: 0, max: 0 },
+    sorceryPoints: { current: 0, max: 0 },
+    deathSaves: { successes: 0, failures: 0 },
+    exhaustion: 0,
+  };
+}
+
+function normalizeResources(resources?: CharacterResources): CharacterResources {
+  const defaults = createDefaultResources();
+  const slots = Array.from({ length: 3 }, (_, index) => {
+    const current = resources?.spellSlots?.[index];
+    const fallback = defaults.spellSlots?.[index] ?? { current: 0, max: 0 };
+    return {
+      current: Number.isFinite(current?.current) ? Number(current?.current) : fallback.current,
+      max: Number.isFinite(current?.max) ? Number(current?.max) : fallback.max,
+    };
+  });
+
+  return {
+    spellSlots: slots,
+    hitDice: {
+      current: Number.isFinite(resources?.hitDice?.current) ? Number(resources?.hitDice?.current) : defaults.hitDice!.current,
+      max: Number.isFinite(resources?.hitDice?.max) ? Number(resources?.hitDice?.max) : defaults.hitDice!.max,
+    },
+    rage: {
+      current: Number.isFinite(resources?.rage?.current) ? Number(resources?.rage?.current) : defaults.rage!.current,
+      max: Number.isFinite(resources?.rage?.max) ? Number(resources?.rage?.max) : defaults.rage!.max,
+    },
+    ki: {
+      current: Number.isFinite(resources?.ki?.current) ? Number(resources?.ki?.current) : defaults.ki!.current,
+      max: Number.isFinite(resources?.ki?.max) ? Number(resources?.ki?.max) : defaults.ki!.max,
+    },
+    sorceryPoints: {
+      current: Number.isFinite(resources?.sorceryPoints?.current) ? Number(resources?.sorceryPoints?.current) : defaults.sorceryPoints!.current,
+      max: Number.isFinite(resources?.sorceryPoints?.max) ? Number(resources?.sorceryPoints?.max) : defaults.sorceryPoints!.max,
+    },
+    deathSaves: {
+      successes: Number.isFinite(resources?.deathSaves?.successes) ? Number(resources?.deathSaves?.successes) : defaults.deathSaves!.successes,
+      failures: Number.isFinite(resources?.deathSaves?.failures) ? Number(resources?.deathSaves?.failures) : defaults.deathSaves!.failures,
+    },
+    exhaustion: Number.isFinite(resources?.exhaustion) ? Number(resources?.exhaustion) : defaults.exhaustion!,
+  };
+}
+
+function getAbilityModifier(score: number) {
+  return Math.floor((score - 10) / 2);
+}
+
 function createEmptyCharacterSheet(id: string, tokenId: string, name: string): CharacterSheet {
   return {
     id,
@@ -1471,6 +1567,7 @@ function createEmptyCharacterSheet(id: string, tokenId: string, name: string): C
     notes: 'Создано игроком в комнате.',
     inventory: '',
     spells: '',
+    resources: createDefaultResources(),
   };
 }
 
@@ -1671,6 +1768,19 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     const ownerToken = tokens.find((token) => token.sheetId === sheet.id);
     return ownerToken?.owner === displayName;
   }, [displayName, role, tokens]);
+  const selectedSheetToken = useMemo(
+    () => (selectedSheet ? tokens.find((token) => token.sheetId === selectedSheet.id || token.id === selectedSheet.tokenId) ?? null : null),
+    [selectedSheet, tokens],
+  );
+  const selectedSheetResources = useMemo(
+    () => (selectedSheet ? normalizeResources(selectedSheet.resources) : createDefaultResources()),
+    [selectedSheet],
+  );
+  const selectedSheetInitiativeModifier = useMemo(
+    () => (selectedSheetToken ? getInitiativeModifier(selectedSheetToken, sheets) : 0),
+    [selectedSheetToken, sheets],
+  );
+
   const activePalette = useMemo(() => {
     const toolConfig = toolMeta.find((item) => item.value === tool);
     return toolConfig?.layer ? layerPalette[toolConfig.layer] : layerPalette.terrain;
@@ -1714,7 +1824,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (parsed.activeSavedMapId) setActiveSavedMapId(parsed.activeSavedMapId);
       if (parsed.widgetUrl) setWidgetUrl(parsed.widgetUrl);
       if (parsed.tokens) setTokens(parsed.tokens.map(normalizeToken));
-      if (parsed.sheets) setSheets(parsed.sheets);
+      if (parsed.sheets) setSheets(parsed.sheets.map((sheet) => ({ ...sheet, resources: normalizeResources(sheet.resources) })));
       if (parsed.journal) setJournal(parsed.journal);
       if (parsed.initiative) setInitiative(syncInitiativeWithTokens(parsed.initiative as InitiativeState, (parsed.tokens ?? initialTokens).map(normalizeToken), parsed.sheets ?? initialSheets));
     } catch {
@@ -2092,7 +2202,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setActiveSavedMapId(parsed.activeSavedMapId ?? null);
       setWidgetUrl(parsed.widgetUrl ?? DEFAULT_WIDGET_URL);
       if (parsed.tokens) setTokens(parsed.tokens.map(normalizeToken));
-      if (parsed.sheets) setSheets(parsed.sheets);
+      if (parsed.sheets) setSheets(parsed.sheets.map((sheet) => ({ ...sheet, resources: normalizeResources(sheet.resources) })));
       if (parsed.journal) setJournal(parsed.journal);
       setInitiative(syncInitiativeWithTokens((parsed.initiative as InitiativeState | undefined) ?? createEmptyInitiativeState(), (parsed.tokens ?? tokens).map(normalizeToken), parsed.sheets ?? sheets));
       addJournalEntry('map', `JSON-карта «${file.name}» загружена в комнату.`);
@@ -2186,6 +2296,66 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setEventResult(nextEvent);
     addJournalEntry('event', `Событие из dnd.su: ${nextEvent.title}. Ссылка: ${nextEvent.link}`);
   };
+
+  const updateSelectedSheet = useCallback((updater: (sheet: CharacterSheet) => CharacterSheet) => {
+    if (!selectedSheet || !canEditSheet(selectedSheet)) return;
+    setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? updater(sheet) : sheet)));
+  }, [canEditSheet, selectedSheet]);
+
+  const handleQuickRoll = useCallback((sheet: CharacterSheet, label: string, formula: string) => {
+    const result = rollFormula(formula);
+    if (!result) {
+      addJournalEntry('system', `Не удалось выполнить бросок ${label} (${formula}).`);
+      return;
+    }
+
+    addJournalEntry('dice', `${sheet.name}: ${label} ${formula} → ${result.total} (${result.rolls.join(', ')}${result.modifier ? ` ${result.modifier > 0 ? '+' : '-'} ${Math.abs(result.modifier)}` : ''})`);
+  }, [addJournalEntry]);
+
+  const handleResourceTrackChange = useCallback((resourceKey: 'hitDice' | 'rage' | 'ki' | 'sorceryPoints', field: 'current' | 'max', value: number) => {
+    updateSelectedSheet((sheet) => ({
+      ...sheet,
+      resources: {
+        ...normalizeResources(sheet.resources),
+        [resourceKey]: {
+          ...normalizeResources(sheet.resources)[resourceKey]!,
+          [field]: Math.max(0, value),
+        },
+      },
+    }));
+  }, [updateSelectedSheet]);
+
+  const handleSpellSlotChange = useCallback((index: number, field: 'current' | 'max', value: number) => {
+    updateSelectedSheet((sheet) => {
+      const resources = normalizeResources(sheet.resources);
+      const spellSlots = [...(resources.spellSlots ?? [])];
+      spellSlots[index] = { ...spellSlots[index], [field]: Math.max(0, value) };
+      return { ...sheet, resources: { ...resources, spellSlots } };
+    });
+  }, [updateSelectedSheet]);
+
+  const handleDeathSaveChange = useCallback((field: 'successes' | 'failures', value: number) => {
+    updateSelectedSheet((sheet) => {
+      const resources = normalizeResources(sheet.resources);
+      return {
+        ...sheet,
+        resources: {
+          ...resources,
+          deathSaves: {
+            ...resources.deathSaves!,
+            [field]: clamp(value, 0, 3),
+          },
+        },
+      };
+    });
+  }, [updateSelectedSheet]);
+
+  const handleExhaustionChange = useCallback((value: number) => {
+    updateSelectedSheet((sheet) => {
+      const resources = normalizeResources(sheet.resources);
+      return { ...sheet, resources: { ...resources, exhaustion: clamp(value, 0, 6) } };
+    });
+  }, [updateSelectedSheet]);
 
   const handleSheetChange = <K extends keyof CharacterSheet>(key: K, value: CharacterSheet[K]) => {
     if (!selectedSheet || !canEditSheet(selectedSheet)) return;
@@ -2791,13 +2961,100 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           </div>
                         </div>
 
-                        <div className="grid gap-3 md:grid-cols-6">
-                          {statLabels.map((stat) => (
-                            <div key={stat.key} className="rounded-2xl border border-white/8 bg-slate-950/50 px-3 py-3 text-center">
-                              <div className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</div>
-                              <div className="mt-2 text-xl font-semibold text-white">{selectedSheet.stats[stat.key]}</div>
+                        <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+                          <div>
+                            <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">Характеристики и быстрые броски</div>
+                            <div className="grid gap-3 md:grid-cols-6">
+                              {statLabels.map((stat) => {
+                                const modifier = getAbilityModifier(selectedSheet.stats[stat.key]);
+                                return (
+                                  <div key={stat.key} className="rounded-2xl border border-white/8 bg-slate-950/50 px-3 py-3 text-center">
+                                    <div className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</div>
+                                    <div className="mt-2 text-xl font-semibold text-white">{selectedSheet.stats[stat.key]}</div>
+                                    <div className="mt-1 text-xs text-slate-400">mod {modifier >= 0 ? '+' : ''}{modifier}</div>
+                                    <div className="mt-3 grid gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuickRoll(selectedSheet, `${stat.label} check`, `1d20${modifier >= 0 ? '+' : ''}${modifier}`)}
+                                        className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[11px] font-medium text-cyan-100"
+                                      >
+                                        Check
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuickRoll(selectedSheet, `${stat.label} save`, `1d20${modifier >= 0 ? '+' : ''}${modifier}`)}
+                                        className="rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-2 py-1 text-[11px] font-medium text-fuchsia-100"
+                                      >
+                                        Save
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ))}
+                          </div>
+
+                          <div className="rounded-3xl border border-white/8 bg-slate-950/40 p-4">
+                            <div className="text-xs uppercase tracking-wide text-slate-500">Быстрые действия боя</div>
+                            <div className="mt-3 grid gap-2">
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Initiative', `1d20${selectedSheetInitiativeModifier >= 0 ? '+' : ''}${selectedSheetInitiativeModifier}`)} className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-100">Бросить инициативу</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Attack', `1d20${getAbilityModifier(selectedSheet.stats.str) >= 0 ? '+' : ''}${getAbilityModifier(selectedSheet.stats.str)}`)} className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-left text-sm text-emerald-100">Атака от СИЛ</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Spell attack', `1d20${getAbilityModifier(selectedSheet.stats.int) >= 0 ? '+' : ''}${getAbilityModifier(selectedSheet.stats.int)}`)} className="rounded-2xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-left text-sm text-violet-100">Заклинательная атака</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Concentration', `1d20${getAbilityModifier(selectedSheet.stats.con) >= 0 ? '+' : ''}${getAbilityModifier(selectedSheet.stats.con)}`)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2 text-left text-sm text-slate-200">Проверка концентрации</button>
+                            </div>
+                            <div className="mt-3 text-xs leading-5 text-slate-400">Кнопки пишут результат в существующий журнал и используют текущие характеристики листа без новой боевой подсистемы.</div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-3xl border border-white/8 bg-slate-950/40 p-4">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-xs uppercase tracking-wide text-slate-500">Ресурсы персонажа v1</div>
+                              <div className="mt-1 text-sm text-slate-300">Spell slots, hit dice, rage, ki, sorcery points, death saves и exhaustion сохраняются в JSON комнаты.</div>
+                            </div>
+                          </div>
+                          {(() => { const resources = selectedSheetResources; return (
+                            <div className="space-y-4">
+                              <div className="grid gap-3 md:grid-cols-3">
+                                {(resources.spellSlots ?? []).map((slot, index) => (
+                                  <div key={`slot-${index}`} className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                    <div className="text-xs uppercase tracking-wide text-slate-500">Spell slot {index + 1}</div>
+                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                      <input type="number" min={0} value={slot.current} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSpellSlotChange(index, 'current', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Текущие" />
+                                      <input type="number" min={0} value={slot.max} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSpellSlotChange(index, 'max', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Макс" />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                {([['hitDice', 'Hit dice'], ['rage', 'Rage'], ['ki', 'Ki'], ['sorceryPoints', 'Sorcery']] as const).map(([key, label]) => {
+                                  const track = resources[key];
+                                  return (
+                                    <div key={key} className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+                                      <div className="mt-3 grid grid-cols-2 gap-2">
+                                        <input type="number" min={0} value={track?.current ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleResourceTrackChange(key, 'current', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Текущие" />
+                                        <input type="number" min={0} value={track?.max ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleResourceTrackChange(key, 'max', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Макс" />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="grid gap-3 md:grid-cols-3">
+                                <div className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                  <div className="text-xs uppercase tracking-wide text-slate-500">Death saves</div>
+                                  <div className="mt-3 grid grid-cols-2 gap-2">
+                                    <input type="number" min={0} max={3} value={resources.deathSaves?.successes ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleDeathSaveChange('successes', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Успехи" />
+                                    <input type="number" min={0} max={3} value={resources.deathSaves?.failures ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleDeathSaveChange('failures', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Провалы" />
+                                  </div>
+                                </div>
+                                <div className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                  <div className="text-xs uppercase tracking-wide text-slate-500">Exhaustion</div>
+                                  <input type="number" min={0} max={6} value={resources.exhaustion ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleExhaustionChange(Number(event.target.value))} className="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" />
+                                </div>
+                              </div>
+                            </div>
+                          ); })()}
                         </div>
 
                         <div className="grid gap-2 md:grid-cols-3">
