@@ -3215,7 +3215,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         </section>
 
         <section className="space-y-4">
-          <div className={`grid gap-4 ${role === 'gm' ? 'xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]' : 'xl:grid-cols-1'}`}>
+          <div className={`grid gap-4 ${role === 'gm' ? 'xl:grid-cols-[minmax(280px,440px)_minmax(0,1fr)]' : 'xl:grid-cols-1'}`}>
             {role === 'gm' ? (
               <div className="min-w-0 space-y-4">
                 {gmPanelOrder.map((panelId, index) => (
@@ -3479,11 +3479,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               <div className="text-xs text-slate-500">PB {formatSignedModifier(selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1))}</div>
                             </div>
                             <div className="mt-3 grid gap-2">
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Initiative', `1d20${formatSignedModifier(selectedSheetInitiativeModifier)}`)} className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-100">Бросить инициативу</button>
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Melee attack', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.str) + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`)} className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-left text-sm text-emerald-100">Атака оружием (СИЛ + PB)</button>
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Ranged / finesse attack', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.dex) + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`)} className="rounded-2xl border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-left text-sm text-sky-100">Атака оружием (ЛОВ + PB)</button>
-                              <button type="button" onClick={() => { const spellAbility = getSpellcastingAbility(selectedSheet); const spellMod = getAbilityModifier(selectedSheet.stats[spellAbility]); handleQuickRoll(selectedSheet, `Spell attack (${String(spellAbility).toUpperCase()})`, `1d20${formatSignedModifier(spellMod + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`); }} className="rounded-2xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-left text-sm text-violet-100">Заклинательная атака</button>
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Concentration', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.con))}`)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2 text-left text-sm text-slate-200">Проверка концентрации</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Initiative', `1d20${formatSignedModifier(selectedSheetInitiativeModifier)}`)} title="Бросить инициативу" className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-100">Init</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Melee attack', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.str) + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`)} title="Атака оружием (СИЛ + PB)" className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-left text-sm text-emerald-100">Melee · СИЛ</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Ranged / finesse attack', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.dex) + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`)} title="Атака оружием (ЛОВ + PB)" className="rounded-2xl border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-left text-sm text-sky-100">Range · ЛОВ</button>
+                              <button type="button" onClick={() => { const spellAbility = getSpellcastingAbility(selectedSheet); const spellMod = getAbilityModifier(selectedSheet.stats[spellAbility]); handleQuickRoll(selectedSheet, `Spell attack (${String(spellAbility).toUpperCase()})`, `1d20${formatSignedModifier(spellMod + (selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1)))}`); }} title="Заклинательная атака" className="rounded-2xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-left text-sm text-violet-100">Spell atk</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Concentration', `1d20${formatSignedModifier(getAbilityModifier(selectedSheet.stats.con))}`)} title="Проверка концентрации" className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2 text-left text-sm text-slate-200">Con save</button>
                             </div>
                             <div className="mt-3 text-xs leading-5 text-slate-400">Кнопки сразу бросают d20 по реальным модификаторам, подставляют формулу в общий dice roller и пишут результат в журнал.</div>
                           </div>
@@ -3496,8 +3496,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               <div className="mt-1 text-sm text-slate-300">Spell slots, hit dice, rage, ki, sorcery points, death saves и exhaustion сохраняются в JSON комнаты.</div>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              <button type="button" onClick={() => handleApplyRest('short')} disabled={!canEditSheet(selectedSheet)} className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100 disabled:opacity-50">Short rest</button>
-                              <button type="button" onClick={() => handleApplyRest('long')} disabled={!canEditSheet(selectedSheet)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-100 disabled:opacity-50">Long rest</button>
+                              <button type="button" onClick={() => handleApplyRest('short')} disabled={!canEditSheet(selectedSheet)} title="Короткий отдых" className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100 disabled:opacity-50">S rest</button>
+                              <button type="button" onClick={() => handleApplyRest('long')} disabled={!canEditSheet(selectedSheet)} title="Долгий отдых" className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-100 disabled:opacity-50">L rest</button>
                             </div>
                           </div>
                           {(() => { const resources = selectedSheetResources; return (
@@ -3511,8 +3511,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                       <input type="number" min={0} value={slot.max} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSpellSlotLimitChange(index, 'max', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Макс" />
                                     </div>
                                     <div className="mt-3 flex gap-2">
-                                      <button type="button" onClick={() => handleAdjustSpellSlot(index, -1)} disabled={!canEditSheet(selectedSheet) || slot.current <= 0} className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100 disabled:opacity-50">Потратить</button>
-                                      <button type="button" onClick={() => handleAdjustSpellSlot(index, 1)} disabled={!canEditSheet(selectedSheet) || slot.current >= slot.max} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100 disabled:opacity-50">Вернуть</button>
+                                      <button type="button" onClick={() => handleAdjustSpellSlot(index, -1)} disabled={!canEditSheet(selectedSheet) || slot.current <= 0} title="Потратить слот" className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100 disabled:opacity-50">−1</button>
+                                      <button type="button" onClick={() => handleAdjustSpellSlot(index, 1)} disabled={!canEditSheet(selectedSheet) || slot.current >= slot.max} title="Вернуть слот" className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100 disabled:opacity-50">+1</button>
                                     </div>
                                   </div>
                                 ))}
@@ -3528,8 +3528,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                         <input type="number" min={0} value={track?.max ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleResourceTrackLimitChange(key, 'max', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Макс" />
                                       </div>
                                       <div className="mt-3 flex gap-2">
-                                        <button type="button" onClick={() => handleAdjustResourceTrack(key, -1)} disabled={!canEditSheet(selectedSheet) || (track?.current ?? 0) <= 0} className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100 disabled:opacity-50">Потратить</button>
-                                        <button type="button" onClick={() => handleAdjustResourceTrack(key, 1)} disabled={!canEditSheet(selectedSheet) || (track?.current ?? 0) >= (track?.max ?? 0)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100 disabled:opacity-50">Вернуть</button>
+                                        <button type="button" onClick={() => handleAdjustResourceTrack(key, -1)} disabled={!canEditSheet(selectedSheet) || (track?.current ?? 0) <= 0} title="Потратить ресурс" className="rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-100 disabled:opacity-50">−1</button>
+                                        <button type="button" onClick={() => handleAdjustResourceTrack(key, 1)} disabled={!canEditSheet(selectedSheet) || (track?.current ?? 0) >= (track?.max ?? 0)} title="Вернуть ресурс" className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100 disabled:opacity-50">+1</button>
                                       </div>
                                     </div>
                                   );
@@ -3537,7 +3537,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               </div>
                               <div className="grid gap-3 md:grid-cols-3">
                                 <div className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
-                                  <div className="text-xs uppercase tracking-wide text-slate-500">Death saves</div>
+                                  <div className="text-xs uppercase tracking-wide text-slate-500">DS</div>
                                   <div className="mt-3 grid grid-cols-2 gap-2">
                                     <input type="number" min={0} max={3} value={resources.deathSaves?.successes ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleDeathSaveChange('successes', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Успехи" />
                                     <input type="number" min={0} max={3} value={resources.deathSaves?.failures ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleDeathSaveChange('failures', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Провалы" />
@@ -3548,7 +3548,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                   </div>
                                 </div>
                                 <div className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
-                                  <div className="text-xs uppercase tracking-wide text-slate-500">Exhaustion</div>
+                                  <div className="text-xs uppercase tracking-wide text-slate-500">Exh</div>
                                   <input type="number" min={0} max={6} value={resources.exhaustion ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleExhaustionChange(Number(event.target.value))} className="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" /><div className="mt-3 flex gap-2"><button type="button" onClick={() => handleAdjustExhaustion(-1)} disabled={!canEditSheet(selectedSheet) || (resources.exhaustion ?? 0) <= 0} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100 disabled:opacity-50">Снизить</button><button type="button" onClick={() => handleAdjustExhaustion(1)} disabled={!canEditSheet(selectedSheet) || (resources.exhaustion ?? 0) >= 6} className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs text-amber-100 disabled:opacity-50">Повысить</button></div>
                                 </div>
                               </div>
@@ -3605,10 +3605,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 <div className="mt-4 flex flex-wrap gap-2 text-sm">
                   {role === 'gm' ? (
                     <>
-                      <button onClick={() => handleStartInitiative('visible')} className="rounded-full bg-cyan-500 px-4 py-2 font-medium text-slate-950">Прокинуть инициативу всем, кто виден врагам</button>
-                      <button onClick={() => handleStartInitiative('all')} className="rounded-full border border-white/10 px-4 py-2 text-slate-200">Прокинуть за всех</button>
-                      <button onClick={handleAdvanceTurn} disabled={!initiative.active || initiative.participants.length === 0} className="rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-2 font-medium text-amber-100 disabled:cursor-not-allowed disabled:opacity-50">Следующий ход</button>
-                      <button onClick={handleStopInitiative} disabled={initiative.participants.length === 0 && !initiative.active} className="rounded-full border border-white/10 px-4 py-2 text-slate-300 disabled:cursor-not-allowed disabled:opacity-50">Сбросить</button>
+                      <button onClick={() => handleStartInitiative('visible')} title="Прокинуть инициативу всем, кто виден врагам" className="rounded-full bg-cyan-500 px-4 py-2 font-medium text-slate-950">Init: вид.</button>
+                      <button onClick={() => handleStartInitiative('all')} title="Прокинуть инициативу за всех" className="rounded-full border border-white/10 px-4 py-2 text-slate-200">Init: все</button>
+                      <button onClick={handleAdvanceTurn} disabled={!initiative.active || initiative.participants.length === 0} title="Следующий ход" className="rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-2 font-medium text-amber-100 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                      <button onClick={handleStopInitiative} disabled={initiative.participants.length === 0 && !initiative.active} title="Сбросить инициативу" className="rounded-full border border-white/10 px-4 py-2 text-slate-300 disabled:cursor-not-allowed disabled:opacity-50">Reset</button>
                     </>
                   ) : null}
                 </div>
@@ -3762,14 +3762,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                             <option value="17+">Показатель опасности 17+</option>
                           </select>
                         </label>
-                        <button onClick={handleRandomLoot} className="w-full rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950">Сгенерировать лут из таблицы</button>
+                        <button onClick={handleRandomLoot} title="Сгенерировать лут из таблицы" className="w-full rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950">Roll loot</button>
                         <div className="overflow-hidden rounded-2xl border border-white/8 px-4 py-3">
                           <div className="font-medium text-white">Последнее событие</div>
                           <div className="mt-1">{eventResult.title}</div>
                           <div className="mt-1 text-slate-400">{eventResult.description}</div>
                           <a className="mt-2 inline-flex break-all text-cyan-300 underline" href={eventResult.link} target="_blank" rel="noreferrer">{eventResult.link}</a>
                         </div>
-                        <button onClick={handleRandomEvent} className="w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">Случайное событие</button>
+                        <button onClick={handleRandomEvent} title="Случайное событие" className="w-full rounded-full bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">Rand event</button>
                       </div>
                       </CompactSection>
                     </div>
@@ -3783,7 +3783,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         </div>
                         <div className="flex gap-2">
                           <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Например: Борин идёт к двери" className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500" />
-                          <button onClick={handleSendChat} className="rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">Отправить</button>
+                          <button onClick={handleSendChat} title="Отправить в журнал" className="rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">Send</button>
                         </div>
                         </div>
 
@@ -3794,7 +3794,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         </div>
                         <div className="flex gap-2">
                           <input value={diceFormula} onChange={(event) => setDiceFormula(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none" />
-                          <button onClick={handleRoll} className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950">Roll</button>
+                          <button onClick={handleRoll} title="Бросить формулу" className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950">Roll</button>
                         </div>
                         </div>
                       </div>
