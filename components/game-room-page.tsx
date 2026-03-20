@@ -18,6 +18,7 @@ type LayerKind = 'terrain' | 'obstacle' | 'texture' | 'furniture';
 type TokenKind = 'player' | 'npc' | 'monster' | 'object';
 type BoardKind = 'public' | 'gm';
 type LootCrBand = '0-4' | '5-10' | '11-16' | '17+';
+type TokenStatusKey = 'poisoned' | 'stunned' | 'prone' | 'concentrating' | 'restrained' | 'blessed' | 'invisible' | 'exhausted';
 
 type RoomToken = {
   id: string;
@@ -36,6 +37,7 @@ type RoomToken = {
   sheetId?: string;
   gmOnly?: boolean;
   visionRadius?: number;
+  statuses?: TokenStatusKey[];
 };
 
 type CharacterStats = {
@@ -191,6 +193,23 @@ const toolMeta: Array<{ value: DrawingTool; label: string; layer?: LayerKind }> 
   { value: 'furniture', label: 'Столы/объекты', layer: 'furniture' },
   { value: 'fog', label: 'Fog' },
   { value: 'erase', label: 'Стереть' },
+];
+
+const tokenStatusCatalog: Array<{
+  key: TokenStatusKey;
+  label: string;
+  short: string;
+  colorClass: string;
+  description: string;
+}> = [
+  { key: 'poisoned', label: 'Poisoned', short: 'PSN', colorClass: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30', description: 'помеха на атаки и проверки' },
+  { key: 'stunned', label: 'Stunned', short: 'STN', colorClass: 'bg-amber-500/20 text-amber-100 border-amber-400/30', description: 'без действий и реакций' },
+  { key: 'prone', label: 'Prone', short: 'PRN', colorClass: 'bg-slate-500/30 text-slate-100 border-slate-300/20', description: 'лежит на земле' },
+  { key: 'concentrating', label: 'Concentrating', short: 'CON', colorClass: 'bg-violet-500/20 text-violet-100 border-violet-400/30', description: 'держит концентрацию' },
+  { key: 'restrained', label: 'Restrained', short: 'RST', colorClass: 'bg-rose-500/20 text-rose-100 border-rose-400/30', description: 'скорость 0, помеха на ЛОВ' },
+  { key: 'blessed', label: 'Blessed', short: 'BLS', colorClass: 'bg-cyan-500/20 text-cyan-100 border-cyan-400/30', description: 'бафф на атаки/спасброски' },
+  { key: 'invisible', label: 'Invisible', short: 'INV', colorClass: 'bg-indigo-500/20 text-indigo-100 border-indigo-400/30', description: 'сложнее заметить и атаковать' },
+  { key: 'exhausted', label: 'Exhausted', short: 'EXH', colorClass: 'bg-orange-500/20 text-orange-100 border-orange-400/30', description: 'накапливаемое истощение' },
 ];
 
 const randomEventPool = [
@@ -883,6 +902,7 @@ const initialTokens: RoomToken[] = [
     roleOwner: 'player',
     sheetId: 'sheet-elira',
     visionRadius: 3,
+    statuses: ['blessed'],
   },
   {
     id: 'borin',
@@ -900,6 +920,7 @@ const initialTokens: RoomToken[] = [
     roleOwner: 'player',
     sheetId: 'sheet-borin',
     visionRadius: 3,
+    statuses: ['concentrating'],
   },
   {
     id: 'goblin',
@@ -916,6 +937,7 @@ const initialTokens: RoomToken[] = [
     owner: 'GM',
     roleOwner: 'gm',
     gmOnly: true,
+    statuses: ['poisoned'],
   },
   {
     id: 'table-1',
@@ -931,6 +953,7 @@ const initialTokens: RoomToken[] = [
     speed: 0,
     owner: 'GM',
     roleOwner: 'gm',
+    statuses: [],
   },
 ];
 
@@ -1327,6 +1350,17 @@ function createEmptyInitiativeState(): InitiativeState {
   };
 }
 
+function normalizeToken(token: RoomToken): RoomToken {
+  return {
+    ...token,
+    statuses: Array.isArray(token.statuses) ? Array.from(new Set(token.statuses)) : [],
+  };
+}
+
+function getStatusMeta(status: TokenStatusKey) {
+  return tokenStatusCatalog.find((item) => item.key === status);
+}
+
 function buildSavedRoomState({
   mapName,
   mapState,
@@ -1532,6 +1566,11 @@ function Board({
             const left = `calc(${((token.x + 0.5) / cols) * 100}% - 1.5rem)`;
             const top = `calc(${((token.y + 0.5) / rows) * 100}% - 1.5rem)`;
             const isActive = activeTokenId === token.id;
+            const visibleStatuses = (token.statuses ?? []).slice(0, 2).flatMap((status) => {
+              const meta = getStatusMeta(status);
+              return meta ? [meta] : [];
+            });
+            const extraStatusCount = Math.max((token.statuses ?? []).length - visibleStatuses.length, 0);
             const style: CSSProperties = {
               left,
               top,
@@ -1547,8 +1586,19 @@ function Board({
                 onPointerDown={onTokenPointerDown ? onTokenPointerDown(token.id) : undefined}
                 className="absolute flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-semibold text-white shadow-lg transition"
                 style={style}
+                title={(token.statuses ?? []).length ? `${token.name}: ${(token.statuses ?? []).map((status) => getStatusMeta(status)?.label ?? status).join(', ')}` : token.name}
               >
                 {token.short}
+                {visibleStatuses.length ? (
+                  <span className="absolute -bottom-5 left-1/2 flex -translate-x-1/2 gap-1">
+                    {visibleStatuses.map((status) => (
+                      <span key={`${token.id}-${status.key}`} className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none ${status.colorClass}`}>
+                        {status.short}
+                      </span>
+                    ))}
+                    {extraStatusCount ? <span className="rounded-full border border-white/10 bg-slate-950/90 px-1.5 py-0.5 text-[9px] font-bold leading-none text-slate-200">+{extraStatusCount}</span> : null}
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -1663,10 +1713,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (parsed.savedMaps) setSavedMaps(parsed.savedMaps);
       if (parsed.activeSavedMapId) setActiveSavedMapId(parsed.activeSavedMapId);
       if (parsed.widgetUrl) setWidgetUrl(parsed.widgetUrl);
-      if (parsed.tokens) setTokens(parsed.tokens);
+      if (parsed.tokens) setTokens(parsed.tokens.map(normalizeToken));
       if (parsed.sheets) setSheets(parsed.sheets);
       if (parsed.journal) setJournal(parsed.journal);
-      if (parsed.initiative) setInitiative(syncInitiativeWithTokens(parsed.initiative as InitiativeState, parsed.tokens ?? initialTokens, parsed.sheets ?? initialSheets));
+      if (parsed.initiative) setInitiative(syncInitiativeWithTokens(parsed.initiative as InitiativeState, (parsed.tokens ?? initialTokens).map(normalizeToken), parsed.sheets ?? initialSheets));
     } catch {
       // ignore corrupted local state
     }
@@ -1676,7 +1726,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   useEffect(() => {
     if (!isLoadedFromStorage) return;
-    const payload = buildSavedRoomState({ mapName, mapState, savedMaps, activeSavedMapId, widgetUrl, tokens, sheets, journal, initiative });
+    const payload = buildSavedRoomState({ mapName, mapState, savedMaps, activeSavedMapId, widgetUrl, tokens: tokens.map(normalizeToken), sheets, journal, initiative });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
   }, [activeSavedMapId, initiative, isLoadedFromStorage, journal, mapName, mapState, roomId, savedMaps, sheets, tokens, widgetUrl]);
 
@@ -1945,7 +1995,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         mapState: nextMapState,
         savedMaps: nextSavedMaps,
         activeSavedMapId: nextPresetId,
-        tokens,
+        tokens: tokens.map(normalizeToken),
         sheets,
         journal: nextJournal,
         widgetUrl,
@@ -1976,7 +2026,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       mapState,
       savedMaps: nextSavedMaps,
       activeSavedMapId: presetId,
-      tokens,
+      tokens: tokens.map(normalizeToken),
       sheets,
       journal,
       widgetUrl,
@@ -2005,7 +2055,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       mapState,
       savedMaps: nextSavedMaps,
       activeSavedMapId,
-      tokens,
+      tokens: tokens.map(normalizeToken),
       sheets,
       journal,
       widgetUrl,
@@ -2041,10 +2091,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setSavedMaps(parsed.savedMaps ?? []);
       setActiveSavedMapId(parsed.activeSavedMapId ?? null);
       setWidgetUrl(parsed.widgetUrl ?? DEFAULT_WIDGET_URL);
-      if (parsed.tokens) setTokens(parsed.tokens);
+      if (parsed.tokens) setTokens(parsed.tokens.map(normalizeToken));
       if (parsed.sheets) setSheets(parsed.sheets);
       if (parsed.journal) setJournal(parsed.journal);
-      setInitiative(syncInitiativeWithTokens((parsed.initiative as InitiativeState | undefined) ?? createEmptyInitiativeState(), parsed.tokens ?? tokens, parsed.sheets ?? sheets));
+      setInitiative(syncInitiativeWithTokens((parsed.initiative as InitiativeState | undefined) ?? createEmptyInitiativeState(), (parsed.tokens ?? tokens).map(normalizeToken), parsed.sheets ?? sheets));
       addJournalEntry('map', `JSON-карта «${file.name}» загружена в комнату.`);
     } catch {
       addJournalEntry('system', `Файл ${file.name} не является валидным JSON карты.`);
@@ -2218,6 +2268,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       roleOwner: 'player',
       sheetId,
       visionRadius: 3,
+      statuses: [],
     };
 
     const nextSheet: CharacterSheet = createEmptyCharacterSheet(sheetId, tokenId, name);
@@ -2266,6 +2317,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         roleOwner: 'player',
         sheetId,
         visionRadius: 3,
+        statuses: [],
       };
 
       const nextSheet: CharacterSheet = {
@@ -2307,6 +2359,29 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       ),
     );
   };
+
+  const handleToggleTokenStatus = useCallback((tokenId: string, status: TokenStatusKey) => {
+    if (role !== 'gm') return;
+    const token = tokens.find((entry) => entry.id === tokenId);
+    if (!token || token.kind === 'object') return;
+
+    const hasStatus = (token.statuses ?? []).includes(status);
+    const statusLabel = getStatusMeta(status)?.label ?? status;
+
+    setTokens((current) =>
+      current.map((entry) =>
+        entry.id === tokenId
+          ? {
+              ...entry,
+              statuses: hasStatus
+                ? (entry.statuses ?? []).filter((item) => item !== status)
+                : [...(entry.statuses ?? []), status],
+            }
+          : entry,
+      ),
+    );
+    addJournalEntry('system', `${token.name}: ${hasStatus ? 'снят' : 'добавлен'} статус ${statusLabel}.`);
+  }, [addJournalEntry, role, tokens]);
 
   const handleAvatarUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -2603,6 +2678,30 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               <div className="mb-2">Обзор игрока: {token.visionRadius ?? 3} клетки</div>
                               <input type="range" min="1" max="8" value={token.visionRadius ?? 3} onChange={(event) => handleTokenSetting(token.id, 'visionRadius', Number(event.target.value))} className="w-full" />
                             </label>
+                          ) : null}
+                          {token.kind !== 'object' ? (
+                            <div className="rounded-xl border border-white/10 px-3 py-3">
+                              <div className="mb-2 flex items-center justify-between gap-2">
+                                <span>Статусы и эффекты</span>
+                                <span className="text-[11px] text-slate-500">{(token.statuses ?? []).length ? `${(token.statuses ?? []).length} active` : 'нет активных'}</span>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {tokenStatusCatalog.map((status) => {
+                                  const isActive = (token.statuses ?? []).includes(status.key);
+                                  return (
+                                    <button
+                                      key={`${token.id}-${status.key}`}
+                                      type="button"
+                                      onClick={() => handleToggleTokenStatus(token.id, status.key)}
+                                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${isActive ? status.colorClass : 'border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200'}`}
+                                      title={status.description}
+                                    >
+                                      {status.short}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           ) : null}
                         </div>
                       </div>

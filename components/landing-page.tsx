@@ -1,62 +1,104 @@
 import Link from 'next/link';
 import { Header } from '@/components/header';
-import { productHighlights, roadmap } from '@/lib/mock-data';
 
-const heroMetrics = [
-  { label: 'Роли в комнате', value: 'GM + Players', note: 'Первый вход получает контроль мастера, остальные присоединяются как игроки.' },
-  { label: 'Карты в сцене', value: '2 слоя обзора', note: 'Публичная карта видна всем, скрытая — только мастеру.' },
-  { label: 'Добавление героя', value: 'Manual / JSON', note: 'Лист можно заполнить с нуля или импортировать из Long Story Short.' },
+const shippedCapabilities = [
+  'Комнаты с ролями мастер/игрок и password flow без отдельного lobby.',
+  'Тактическая карта с сеткой, token movement, zoom, fog of war и слоями карты.',
+  'JSON import/export, сохранение сцен и отдельная скрытая карта мастера.',
+  'Dice roller, журнал сессии, ссылки на dnd.su и базовые инструменты для ведения игры.',
+  'Трекер инициативы, порядок ходов и переход к следующему ходу прямо в комнате.',
 ];
 
-const roomFlow = [
+const priorityTiers = [
   {
-    step: '01',
-    title: 'Создать комнату и задать пароль',
+    title: 'Tier 1 · максимум пользы / минимум риска',
+    accent: 'border-emerald-400/30 bg-emerald-500/10',
     description:
-      'Главная страница теперь подводит к тому же room flow, что и интерфейс комнаты: пароль создаётся на первом входе и становится общей точкой доступа для партии.',
+      'Опираемся на уже существующие токены, карточки персонажей и журнал. Эти фичи дают моментальный прирост качества боя и не требуют переписывать архитектуру.',
+    items: [
+      'Статусы и эффекты на токенах.',
+      'Броски / атаки / спасброски из карточки персонажа в 1 клик.',
+      'Трекер ресурсов персонажа: spell slots, hit dice, rage, ki, sorcery points, death saves, exhaustion.',
+      'Сцены как более полноценные пресеты без поломки текущего JSON.',
+    ],
   },
   {
-    step: '02',
-    title: 'Выбрать роль без лишних экранов',
+    title: 'Tier 2 · сильное усиление мастерского UX',
+    accent: 'border-cyan-400/30 bg-cyan-500/10',
     description:
-      'Мастер попадает в админ-панель, игрок — в сценарий добавления персонажа. Это повторяет фактическое поведение `game-room-page.tsx`.',
+      'Усиливаем мастерскую панель поверх существующих room/token/journal state, не ломая flow для игроков.',
+    items: [
+      'Поле диалогового NPC и быстрый режим монстров/NPC.',
+      'Секретные заметки, триггеры и скрытые события на клетках карты мастера.',
+      'AoE-шаблоны и измерение дистанции.',
+      'Undo / история действий для карты, токенов и инициативы.',
+    ],
   },
   {
-    step: '03',
-    title: 'Играть на тактической и региональной карте',
+    title: 'Tier 3 · расширение экосистемы',
+    accent: 'border-fuchsia-400/30 bg-fuchsia-500/10',
     description:
-      'На лендинге сразу показано, что комната объединяет battle map, fog of war, токены, журнал и рядом стоящий regional widget.',
+      'Эти задачи важны, но их лучше делать после укрепления core loop комнаты.',
+    items: [
+      'LLM-подсказки для мастера: реплики NPC, слухи, лут, мотивация и стиль речи.',
+      'Журнал сессии с автосаммари.',
+      'Прокачка персонажа со ссылками на релевантные механики dnd.su.',
+      'Мобильный UX для игроков и более гибкие роли/права доступа.',
+    ],
   },
 ];
 
-const cockpitCards = [
+const sprintRoadmap = [
   {
-    title: 'Панель мастера',
-    accent: 'bg-fuchsia-400',
-    items: ['пароль комнаты', 'слои terrain / obstacle / texture / furniture', 'скрытая карта мастера', 'сохранённые сцены и экспорт'],
+    title: 'Sprint 1',
+    goal: 'Укрепить боевой loop без миграции архитектуры.',
+    features: ['статусы/эффекты на токенах', 'one-click roll actions из карточки', 'ресурсы персонажа v1'],
+    changes: ['расширение `RoomToken` и `CharacterSheet` опциональными полями', 'локальные UI-панели в `game-room-page.tsx`', 'журналирование действий в существующий `journal`'],
+    compatibility: 'Все новые поля опциональны; старые комнаты и JSON читаются без миграции, недостающие значения нормализуются на клиенте.',
   },
   {
-    title: 'Поток игрока',
-    accent: 'bg-cyan-400',
-    items: ['вход по тому же паролю', 'ручной лист персонажа', 'импорт JSON longstoryshort.app', 'управление токеном и листом'],
+    title: 'Sprint 2',
+    goal: 'Сделать мастерскую комнату центром управления сценой.',
+    features: ['NPC dialogue field', 'быстрый режим монстров/NPC', 'секретные триггеры на клетках', 'AoE и measurement'],
+    changes: ['добавление метаданных к сценам и клеткам GM-карты', 'новые панели мастера без изменения player flow', 'минимальное расширение JSON экспорта сцен'],
+    compatibility: 'Секретные сущности хранятся как новые optional-поля; отсутствие этих блоков трактуется как “фича не настроена”.',
+  },
+  {
+    title: 'Sprint 3',
+    goal: 'Добавить AI и долгую поддержку кампании.',
+    features: ['LLM-подсказки мастеру', 'автосаммари журнала', 'прокачка персонажей через dnd.su', 'гибкие права и mobile UX polish'],
+    changes: ['тонкий сервисный слой для AI-запросов', 'расширение журнала служебными summary entries', 'UI-режимы для игроков на мобильных'],
+    compatibility: 'AI-функции проектируются как необязательные enhancement-блоки; core loop комнаты продолжает работать офлайн и без внешних сервисов.',
   },
 ];
 
-const masterActions = [
-  'создать комнату, задать пароль и автоматически стать мастером',
-  'загрузить карту и рисовать отдельными слоями: покрытие, препятствия, текстуры, мебель',
-  'масштабировать тактическую карту прямо в интерфейсе',
-  'запускать случайные события и лут с привязкой к dnd.su',
-  'держать рядом виджет карты реальной местности для региональной навигации',
-];
-
-const playerActions = [
-  'войти в комнату по тому же паролю и автоматически стать игроком',
-  'создать лист персонажа вручную прямо в комнате',
-  'или загрузить JSON с longstoryshort.app/digital characters',
-  'управлять своим токеном и править свой лист',
-  'видеть тактическую карту и региональный виджет одновременно',
-];
+const bestFirstFeature = {
+  title: 'Статусы и эффекты на токенах',
+  why: [
+    'Инициатива уже реализована, поэтому статусы сразу усиливают существующий бой, а не создают параллельную систему.',
+    'Эта фича почти не требует новых сущностей: достаточно расширить токен и добавить UI-слой поверх текущей карты и панели токенов.',
+    'Статусы — база для следующих этапов: one-click rolls, ресурсы, NPC-боёвка, undo и AI-подсказки смогут на них опираться.',
+  ],
+  architecture: [
+    'Data model: добавить в `RoomToken` опциональное поле `statuses?: TokenStatusKey[]`.',
+    'State management: хранить статусы в том же `tokens` state, что уже сохраняется в localStorage и JSON комнаты.',
+    'UI: дать мастеру быстрые toggle-кнопки в панели токенов и визуальные бейджи у токенов на карте.',
+    'Backward compatibility: при загрузке старых комнат нормализовать отсутствие `statuses` в пустой массив.',
+  ],
+  edgeCases: [
+    'Старые JSON без статусов должны открываться без ошибок.',
+    'Объекты окружения не обязаны поддерживать эффекты так же, как существа.',
+    'Скрытые GM-токены не должны внезапно раскрывать статусы игрокам.',
+    'Повторное добавление статуса не должно дублировать запись; нужен dedupe.',
+  ],
+  implementation: [
+    'Шаг 1: ввести типы статусов и нормализацию данных.',
+    'Шаг 2: добавить UI-переключатели статусов в секцию токенов мастера.',
+    'Шаг 3: отрисовать краткие маркеры статусов прямо на токенах карты.',
+    'Шаг 4: сохранить всё в текущий JSON/export flow без обязательной миграции.',
+    'Шаг 5: опереться на эту модель в следующем спринте для бросков и ресурсов.',
+  ],
+};
 
 export function LandingPage() {
   return (
@@ -64,18 +106,16 @@ export function LandingPage() {
       <Header />
 
       <main>
-        <section className="mx-auto grid max-w-7xl gap-8 px-6 py-16 lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:py-20">
+        <section className="mx-auto grid max-w-7xl gap-8 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-start lg:py-20">
           <div className="space-y-8">
-            <span className="badge">Главная страница синхронизирована с логикой комнаты</span>
+            <span className="badge">D&amp;D session hub: текущее состояние + следующий этап развития</span>
 
             <div className="space-y-5">
               <h1 className="max-w-5xl text-5xl font-semibold tracking-tight text-white md:text-6xl">
-                Лицевая страница теперь объясняет тот же D&amp;D room flow, который уже работает внутри комнаты.
+                Сайт уже умеет вести сессию. Следующий этап — превратить его в полноценный центр управления D&amp;D-партией.
               </h1>
               <p className="max-w-3xl text-lg leading-8 text-slate-300">
-                Вместо абстрактного MVP-описания главная ведёт пользователя в тот же сценарий, что и{' '}
-                <code className="rounded bg-white/5 px-2 py-1 text-base text-slate-100">components/game-room-page.tsx</code>:
-                один пароль, две роли, battle map с zoom и fog, ручное создание персонажа или импорт JSON, плюс инструменты мастера для событий, лута и скрытых сцен.
+                На главной теперь показано не старое MVP-описание, а реальная картина продукта: что уже работает в комнате, какие фичи дают максимальную пользу дальше и как разбить развитие на 3 incremental sprint без поломки текущих комнат, сцен и JSON-совместимости.
               </p>
             </div>
 
@@ -87,177 +127,179 @@ export function LandingPage() {
                 Открыть комнату
               </Link>
               <a
-                href="#features"
+                href="#roadmap"
                 className="rounded-full border border-white/15 px-6 py-3 font-medium text-slate-100 transition hover:border-cyan-400/50 hover:text-white"
               >
-                Посмотреть структуру
+                Посмотреть roadmap
               </a>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
-              {heroMetrics.map((metric) => (
-                <div key={metric.label} className="card p-5">
-                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400">{metric.label}</div>
-                  <div className="mt-3 text-2xl font-semibold text-white">{metric.value}</div>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{metric.note}</p>
-                </div>
-              ))}
+              <div className="card p-5">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Уже работает</div>
+                <div className="mt-3 text-2xl font-semibold text-white">Core session loop</div>
+                <p className="mt-2 text-sm leading-6 text-slate-300">Комната, карта, токены, fog, инициатива, сцены, JSON и базовые мастерские инструменты.</p>
+              </div>
+              <div className="card p-5">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Следующий приоритет</div>
+                <div className="mt-3 text-2xl font-semibold text-white">Combat UX</div>
+                <p className="mt-2 text-sm leading-6 text-slate-300">Статусы, быстрые броски и ресурсы дают наибольший прирост без смены архитектуры.</p>
+              </div>
+              <div className="card p-5">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Подход</div>
+                <div className="mt-3 text-2xl font-semibold text-white">Incremental</div>
+                <p className="mt-2 text-sm leading-6 text-slate-300">Новые поля остаются optional, а старые комнаты и экспорт продолжают открываться без миграций.</p>
+              </div>
             </div>
           </div>
 
           <div className="card overflow-hidden border-fuchsia-500/20 bg-slate-950/80">
             <div className="border-b border-white/10 px-6 py-4">
-              <p className="text-sm font-medium text-fuchsia-300">Превью комнаты</p>
-              <h2 className="mt-2 text-2xl font-semibold text-white">Та же структура, что внутри game room</h2>
+              <p className="text-sm font-medium text-fuchsia-300">Что уже сделано</p>
+              <h2 className="mt-2 text-2xl font-semibold text-white">Текущий продуктовый baseline</h2>
             </div>
 
-            <div className="space-y-5 p-6 text-sm text-slate-200">
-              <div className="rounded-3xl border border-white/10 bg-slate-900/80 p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Комната / demo-room</div>
-                    <div className="mt-2 text-lg font-semibold text-white">Одна комната, один пароль, две роли</div>
-                  </div>
-                  <div className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">Live flow</div>
+            <div className="space-y-3 p-6 text-sm text-slate-200">
+              {shippedCapabilities.map((item) => (
+                <div key={item} className="flex gap-3 rounded-2xl border border-white/10 bg-slate-900/70 p-4 leading-6">
+                  <span className="mt-2 h-2 w-2 rounded-full bg-cyan-400" />
+                  <span>{item}</span>
                 </div>
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {cockpitCards.map((card) => (
-                    <div key={card.title} className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-                      <div className="flex items-center gap-3">
-                        <span className={`h-2.5 w-2.5 rounded-full ${card.accent}`} />
-                        <div className="font-medium text-white">{card.title}</div>
-                      </div>
-                      <ul className="mt-4 space-y-2 text-slate-300">
-                        {card.items.map((item) => (
-                          <li key={item} className="flex gap-2">
-                            <span className="mt-2 h-1.5 w-1.5 rounded-full bg-white/40" />
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {productHighlights.map((highlight) => (
-                  <div key={highlight} className="rounded-2xl border border-white/10 bg-slate-900/70 p-4 leading-6 text-slate-200">
-                    {highlight}
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
           </div>
         </section>
 
         <section id="features" className="mx-auto max-w-7xl px-6 py-16">
-          <div className="mb-10 flex items-end justify-between gap-6">
-            <div className="space-y-3">
-              <span className="badge">Room flow</span>
-              <h2 className="section-title">Главная повторяет ключевые шаги сценария комнаты</h2>
-            </div>
+          <div className="mb-8 space-y-3">
+            <span className="badge">Priority tiers</span>
+            <h2 className="section-title">Какие фичи делать следующими и почему</h2>
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-            <div className="card p-6">
-              <div className="text-sm text-slate-400">Как пользователь проходит путь</div>
-              <div className="mt-6 space-y-5">
-                {roomFlow.map((item) => (
-                  <div key={item.step} className="flex gap-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-fuchsia-500/10 text-sm font-semibold text-fuchsia-300">
-                      {item.step}
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-white">{item.title}</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">{item.description}</p>
-                    </div>
-                  </div>
-                ))}
+          <div className="grid gap-6 xl:grid-cols-3">
+            {priorityTiers.map((tier) => (
+              <div key={tier.title} className={`card p-6 ${tier.accent}`}>
+                <h3 className="text-xl font-semibold text-white">{tier.title}</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-200">{tier.description}</p>
+                <ul className="mt-5 space-y-3 text-sm leading-6 text-slate-100">
+                  {tier.items.map((item) => (
+                    <li key={item} className="flex gap-3">
+                      <span className="mt-2 h-1.5 w-1.5 rounded-full bg-white/80" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </div>
-
-            <div className="grid gap-6 md:grid-cols-2">
-              {[
-                {
-                  title: 'Комната и доступ',
-                  items: ['создание и проверка пароля', 'автоматическое определение роли', 'единая точка входа для всей партии'],
-                },
-                {
-                  title: 'Тактическая сцена',
-                  items: ['две карты: публичная и скрытая', 'zoom, fog of war и токены', 'сеточное поле с гибким размером'],
-                },
-                {
-                  title: 'Персонажи',
-                  items: ['ручное создание листа', 'импорт из longstoryshort.app', 'редактирование характеристик, инвентаря и заметок'],
-                },
-                {
-                  title: 'Инструменты мастера',
-                  items: ['слои карты и палитры', 'сцены, экспорт и сохранения', 'лут, события и журнал сессии'],
-                },
-              ].map((feature) => (
-                <div key={feature.title} className="card p-6">
-                  <h3 className="text-lg font-semibold text-white">{feature.title}</h3>
-                  <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
-                    {feature.items.map((item) => (
-                      <li key={item} className="flex gap-3">
-                        <span className="mt-2 h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="scenarios" className="mx-auto grid max-w-7xl gap-6 px-6 py-16 lg:grid-cols-2">
-          <div className="card p-8">
-            <span className="badge">Для мастера</span>
-            <h2 className="mt-4 text-2xl font-semibold text-white">Тактический и региональный контроль</h2>
-            <ul className="mt-6 space-y-3 text-sm leading-7 text-slate-300">
-              {masterActions.map((action) => (
-                <li key={action} className="flex gap-3">
-                  <span className="mt-2 h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                  <span>{action}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="card p-8">
-            <span className="badge">Для игрока</span>
-            <h2 className="mt-4 text-2xl font-semibold text-white">Быстрый вход и импорт персонажа</h2>
-            <ul className="mt-6 space-y-3 text-sm leading-7 text-slate-300">
-              {playerActions.map((action) => (
-                <li key={action} className="flex gap-3">
-                  <span className="mt-2 h-1.5 w-1.5 rounded-full bg-fuchsia-400" />
-                  <span>{action}</span>
-                </li>
-              ))}
-            </ul>
+            ))}
           </div>
         </section>
 
         <section id="roadmap" className="mx-auto max-w-7xl px-6 py-16">
           <div className="mb-8 space-y-3">
-            <span className="badge">Roadmap</span>
-            <h2 className="section-title">Этапы развития поверх уже работающего сценария</h2>
+            <span className="badge">3-sprint roadmap</span>
+            <h2 className="section-title">Пошаговый план развития без поломки текущего UX</h2>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-            {roadmap.map((phase) => (
-              <div key={phase.title} className="card p-6">
-                <h3 className="text-lg font-semibold text-white">{phase.title}</h3>
-                <ul className="mt-4 space-y-3 text-sm text-slate-300">
-                  {phase.items.map((item) => (
-                    <li key={item}>{item}</li>
+          <div className="grid gap-6 xl:grid-cols-3">
+            {sprintRoadmap.map((sprint) => (
+              <div key={sprint.title} className="card p-6">
+                <div className="text-sm text-slate-400">{sprint.title}</div>
+                <h3 className="mt-2 text-2xl font-semibold text-white">{sprint.goal}</h3>
+
+                <div className="mt-5 space-y-4 text-sm text-slate-300">
+                  <div>
+                    <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Фичи</div>
+                    <ul className="space-y-2">
+                      {sprint.features.map((feature) => (
+                        <li key={feature} className="flex gap-2">
+                          <span className="mt-2 h-1.5 w-1.5 rounded-full bg-fuchsia-400" />
+                          <span>{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div>
+                    <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Изменения в модели / state / UI</div>
+                    <ul className="space-y-2">
+                      {sprint.changes.map((change) => (
+                        <li key={change} className="flex gap-2">
+                          <span className="mt-2 h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                          <span>{change}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 leading-6 text-slate-200">
+                    <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Совместимость</div>
+                    {sprint.compatibility}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="scenarios" className="mx-auto grid max-w-7xl gap-6 px-6 py-16 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="card p-8">
+            <span className="badge">Best first feature</span>
+            <h2 className="mt-4 text-2xl font-semibold text-white">{bestFirstFeature.title}</h2>
+            <div className="mt-6 space-y-4 text-sm leading-7 text-slate-300">
+              <div>
+                <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Почему именно она</div>
+                <ul className="space-y-2">
+                  {bestFirstFeature.why.map((item) => (
+                    <li key={item} className="flex gap-3">
+                      <span className="mt-2 h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                      <span>{item}</span>
+                    </li>
                   ))}
                 </ul>
               </div>
-            ))}
+
+              <div>
+                <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Архитектура</div>
+                <ul className="space-y-2">
+                  {bestFirstFeature.architecture.map((item) => (
+                    <li key={item} className="flex gap-3">
+                      <span className="mt-2 h-1.5 w-1.5 rounded-full bg-fuchsia-400" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div className="card p-8">
+            <span className="badge">Technical design</span>
+            <h2 className="mt-4 text-2xl font-semibold text-white">Edge cases и пошаговое внедрение</h2>
+            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+              <div>
+                <div className="mb-3 text-xs uppercase tracking-[0.2em] text-slate-500">Edge cases</div>
+                <ul className="space-y-2 text-sm leading-6 text-slate-300">
+                  {bestFirstFeature.edgeCases.map((item) => (
+                    <li key={item} className="flex gap-3">
+                      <span className="mt-2 h-1.5 w-1.5 rounded-full bg-amber-400" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <div className="mb-3 text-xs uppercase tracking-[0.2em] text-slate-500">Implementation plan</div>
+                <ol className="space-y-3 text-sm leading-6 text-slate-300">
+                  {bestFirstFeature.implementation.map((item, index) => (
+                    <li key={item} className="flex gap-3">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-white">{index + 1}</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </div>
           </div>
         </section>
       </main>
