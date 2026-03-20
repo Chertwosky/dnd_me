@@ -1483,16 +1483,18 @@ function CompactSection({
   description,
   badge,
   defaultOpen = false,
+  className,
   children,
 }: {
   title: string;
   description?: string;
   badge?: string;
   defaultOpen?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <details className="card group overflow-hidden" open={defaultOpen}>
+    <details className={`card group overflow-hidden ${className ?? ''}`} open={defaultOpen}>
       <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-4 marker:content-none">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -2911,10 +2913,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         </section>
 
         <section className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className={`grid gap-4 ${role === 'gm' ? 'xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]' : 'xl:grid-cols-1'}`}>
             {role === 'gm' ? (
-              <div className="space-y-4">
-                <CompactSection title="Админ-панель мастера" description="Кисти, палитры и размер карты убраны в сворачиваемый блок." badge="master only" defaultOpen>
+              <div className="min-w-0 space-y-4">
+                <CompactSection title="Админ-панель мастера" description="Кисти, палитры и размер карты убраны в сворачиваемый блок." badge="master only" defaultOpen className="xl:sticky xl:top-20">
                   <div className="mt-4 flex flex-wrap gap-2 text-sm">
                     <button className={boardButtonClass(activeBoard === 'public')} onClick={() => setActiveBoard('public')}>
                       Публичная карта
@@ -2987,16 +2989,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 </CompactSection>
 
                 <CompactSection title="Токены" description="Полный список токенов со статусами и обзором игроков." badge={`${tokens.length} шт.`}>
-                  <div className="mt-4 space-y-3 text-sm">
+                  <div className="mt-4 max-h-[680px] space-y-3 overflow-y-auto pr-1 text-sm">
                     {tokens.map((token) => (
-                      <div key={token.id} className={`rounded-2xl border px-3 py-3 ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}>
+                      <div key={token.id} className={`overflow-hidden rounded-2xl border px-3 py-3 ${selectedTokenId === token.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8'}`}>
                         <button onClick={() => setSelectedTokenId(token.id)} className="w-full text-left">
                           <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <div className="font-medium text-white">{token.name}</div>
-                              <div className="text-slate-400">{token.kind} • {cellCoordinate(token.x, token.y)}</div>
+                            <div className="min-w-0">
+                              <div className="truncate font-medium text-white">{token.name}</div>
+                              <div className="truncate text-slate-400">{token.kind} • {cellCoordinate(token.x, token.y)}</div>
                             </div>
-                            <span className="text-xs text-slate-300">HP {token.hp}/{token.maxHp}</span>
+                            <span className="shrink-0 text-xs text-slate-300">HP {token.hp}/{token.maxHp}</span>
                           </div>
                         </button>
                         <div className="mt-3 grid gap-2 text-xs text-slate-300">
@@ -3042,7 +3044,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               </div>
             ) : null}
 
-            <div className="space-y-4 xl:col-span-1">
+            <div className="min-w-0 space-y-4 xl:col-span-1">
               <CompactSection title="Панель персонажей группы" description="И игроки, и мастер могут загружать и просматривать карточки всей группы." badge="party roster" defaultOpen>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button onClick={createPlayerCharacter} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-white">
@@ -3059,8 +3061,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 </div>
                 <div className="mt-2 text-xs text-slate-400">Поддержан JSON в формате longstoryshort.app, включая вложенный блок `data`, характеристики, биографию, черты, инвентарь и ссылки на аватар.</div>
 
-                <div className="mt-5 grid gap-4 lg:grid-cols-[280px,1fr]">
-                  <div className="space-y-3">
+                <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
+                  <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
                     {groupSheets.map((sheet) => {
                       const token = tokens.find((item) => item.sheetId === sheet.id);
                       const isActive = selectedSheet?.id === sheet.id;
@@ -3083,16 +3085,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     })}
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     {selectedSheet ? (
-                      <div className="space-y-4 text-sm text-slate-200">
-                        <div className="grid gap-4 lg:grid-cols-[200px,1fr]">
+                      <div className="min-w-0 space-y-4 text-sm text-slate-200">
+                        <div className="grid gap-4 xl:grid-cols-[180px_minmax(0,1fr)]">
                           <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70">
                             <div className="flex aspect-[4/5] items-center justify-center bg-slate-900 text-4xl font-semibold text-white">
                               {selectedSheet.avatarUrl ? <img src={selectedSheet.avatarUrl} alt={selectedSheet.name} className="h-full w-full object-cover" /> : <span>{getTokenInitial(selectedSheet.name)}</span>}
                             </div>
                           </div>
-                          <div className="space-y-3">
+                          <div className="min-w-0 space-y-3">
                             <input value={selectedSheet.name} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('name', event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
                             <div className="grid gap-2 md:grid-cols-2">
                               <input value={selectedSheet.race} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('race', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" />
@@ -3115,10 +3117,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           </div>
                         </div>
 
-                        <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-                          <div>
+                        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+                          <div className="min-w-0">
                             <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">Характеристики и быстрые броски</div>
-                            <div className="grid gap-3 md:grid-cols-6">
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
                               {statLabels.map((stat) => {
                                 const modifier = getAbilityModifier(selectedSheet.stats[stat.key]);
                                 return (
@@ -3148,7 +3150,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                             </div>
                           </div>
 
-                          <div className="rounded-3xl border border-white/8 bg-slate-950/40 p-4">
+                          <div className="min-w-0 rounded-3xl border border-white/8 bg-slate-950/40 p-4">
                             <div className="flex items-center justify-between gap-3">
                               <div className="text-xs uppercase tracking-wide text-slate-500">Быстрые действия боя</div>
                               <div className="text-xs text-slate-500">PB {formatSignedModifier(selectedSheet.proficiencyBonus ?? Math.max(2, Math.ceil(selectedSheet.level / 4) + 1))}</div>
@@ -3240,11 +3242,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           <input value={selectedSheet.hair ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('hair', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Волосы" />
                         </div>
 
-                        <div className="grid gap-3 lg:grid-cols-2">
+                        <div className="grid gap-3 xl:grid-cols-2">
                           {characterSections(selectedSheet).map((section) => (
-                            <div key={section.title} className="rounded-2xl border border-white/8 bg-slate-950/40 px-4 py-4">
+                            <div key={section.title} className="overflow-hidden rounded-2xl border border-white/8 bg-slate-950/40 px-4 py-4">
                               <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">{section.title}</div>
-                              <div className="whitespace-pre-wrap text-slate-200">{section.value}</div>
+                              <div className="break-words whitespace-pre-wrap text-slate-200">{section.value}</div>
                             </div>
                           ))}
                         </div>
@@ -3294,7 +3296,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   </div>
 
                   {initiativeParticipantsForView.length ? (
-                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
                       {initiativeParticipantsForView.map((participant, index) => {
                         const isActive = activeInitiativeParticipant?.tokenId === participant.tokenId;
                         const avatarUrl = initiativePortraits.get(participant.tokenId);
@@ -3328,7 +3330,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   )}
                 </div>
 
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 max-h-[360px] space-y-3 overflow-y-auto pr-1">
                   {initiativeParticipantsForView.length ? (
                     initiativeParticipantsForView.map((participant, index) => {
                       const isActive = activeInitiativeParticipant?.tokenId === participant.tokenId;
@@ -3373,10 +3375,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
               {role === 'gm' ? (
                 <>
-                  <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                     <CompactSection title="Инструменты мастера" description="Лут, события, заметка и броски спрятаны в один блок." badge="dnd.su only">
                       <div className="mt-4 space-y-3 text-sm text-slate-300">
-                        <div className="rounded-2xl border border-white/8 px-4 py-3">
+                        <div className="overflow-hidden rounded-2xl border border-white/8 px-4 py-3">
                           <div className="font-medium text-white">Последний лут</div>
                           <div className="mt-1">{lootResult.name}</div>
                           <div className="mt-1 text-slate-400">{lootResult.details}</div>
@@ -3402,7 +3404,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           </select>
                         </label>
                         <button onClick={handleRandomLoot} className="w-full rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950">Сгенерировать лут из таблицы</button>
-                        <div className="rounded-2xl border border-white/8 px-4 py-3">
+                        <div className="overflow-hidden rounded-2xl border border-white/8 px-4 py-3">
                           <div className="font-medium text-white">Последнее событие</div>
                           <div className="mt-1">{eventResult.title}</div>
                           <div className="mt-1 text-slate-400">{eventResult.description}</div>
@@ -3412,8 +3414,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       </div>
                     </CompactSection>
 
-                    <div className="space-y-4">
-                      <div className="card p-4">
+                    <CompactSection title="Быстрые действия" description="Чат и кубы собраны в один компактный вертикальный стек." badge="utility" defaultOpen className="h-fit">
+                      <div className="space-y-4">
+                        <div className="rounded-2xl border border-white/8 bg-slate-950/40 p-4">
                         <div className="mb-4 flex items-center justify-between">
                           <h2 className="text-lg font-semibold text-white">Чат / заметка</h2>
                           <span className="text-sm text-slate-400">локально в журнал</span>
@@ -3422,9 +3425,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           <input value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Например: Борин идёт к двери" className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500" />
                           <button onClick={handleSendChat} className="rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white">Отправить</button>
                         </div>
-                      </div>
+                        </div>
 
-                      <div className="card p-4">
+                        <div className="rounded-2xl border border-white/8 bg-slate-950/40 p-4">
                         <div className="mb-4 flex items-center justify-between">
                           <h2 className="text-lg font-semibold text-white">Кубы</h2>
                           <span className="text-sm text-slate-400">NdM±K</span>
@@ -3433,19 +3436,20 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           <input value={diceFormula} onChange={(event) => setDiceFormula(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none" />
                           <button onClick={handleRoll} className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950">Roll</button>
                         </div>
+                        </div>
                       </div>
-                    </div>
+                    </CompactSection>
                   </div>
 
                   <CompactSection title="Журнал действий" description="Лента событий осталась полностью доступной, но больше не отвлекает постоянно." badge="последние 20 событий">
-                    <div className="space-y-3 text-sm">
+                    <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1 text-sm">
                       {journal.map((entry) => (
-                        <div key={entry.id} className="rounded-2xl border border-white/8 px-4 py-3">
+                        <div key={entry.id} className="overflow-hidden rounded-2xl border border-white/8 px-4 py-3">
                           <div className="flex items-center justify-between text-xs text-slate-400">
                             <span>{entry.type}</span>
                             <span>{entry.time}</span>
                           </div>
-                          <p className="mt-2 whitespace-pre-wrap text-slate-200">{entry.text}</p>
+                          <p className="mt-2 break-words whitespace-pre-wrap text-slate-200">{entry.text}</p>
                         </div>
                       ))}
                     </div>
