@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type CSSProperties,
@@ -214,6 +215,19 @@ type SavedCharacterPreset = {
   name: string;
   savedAt: string;
   sheet: CharacterSheet;
+};
+
+type MasterPanelId = 'admin' | 'tokens' | 'party' | 'initiative' | 'tools';
+type MasterPanelColumn = 'left' | 'right';
+type MasterPanelDragState = {
+  panelId: MasterPanelId;
+  column: MasterPanelColumn;
+  pointerId: number;
+  offsetX: number;
+  offsetY: number;
+  x: number;
+  y: number;
+  width: number;
 };
 
 const DEFAULT_COLS = 16;
@@ -1855,7 +1869,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [levelRollbackSnapshots, setLevelRollbackSnapshots] = useState<Record<string, CharacterSheet[]>>({});
   const [gmPanelOrder, setGmPanelOrder] = useState<Array<'admin' | 'tokens'>>(['admin', 'tokens']);
   const [gmRightPanelOrder, setGmRightPanelOrder] = useState<Array<'party' | 'initiative' | 'tools'>>(['party', 'initiative', 'tools']);
-  const [draggedMasterPanel, setDraggedMasterPanel] = useState<string | null>(null);
+  const [draggedMasterPanel, setDraggedMasterPanel] = useState<MasterPanelId | null>(null);
+  const [masterPanelDrag, setMasterPanelDrag] = useState<MasterPanelDragState | null>(null);
   const [gmPanelWidths, setGmPanelWidths] = useState<Record<'admin' | 'tokens' | 'party' | 'initiative' | 'tools', number>>({
     admin: 440,
     tokens: 440,
@@ -1863,6 +1878,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     initiative: 999,
     tools: 320,
   });
+  const leftPanelRefs = useRef<Partial<Record<'admin' | 'tokens', HTMLDivElement | null>>>({});
+  const rightPanelRefs = useRef<Partial<Record<'party' | 'initiative' | 'tools', HTMLDivElement | null>>>({});
 
   const cols = mapState.cols;
   const rows = mapState.rows;
@@ -2816,21 +2833,110 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     return next;
   }, []);
 
-  const handleDragStartMasterPanel = useCallback((panelId: string) => {
-    setDraggedMasterPanel(panelId);
+  const registerLeftPanelRef = useCallback((panelId: 'admin' | 'tokens', node: HTMLDivElement | null) => {
+    leftPanelRefs.current[panelId] = node;
   }, []);
 
-  const handleDropLeftMasterPanel = useCallback((targetId: 'admin' | 'tokens') => {
-    if (!draggedMasterPanel || !gmPanelOrder.includes(draggedMasterPanel as 'admin' | 'tokens')) return;
-    setGmPanelOrder((current) => movePanelInOrder(current, draggedMasterPanel, targetId) as Array<'admin' | 'tokens'>);
-    setDraggedMasterPanel(null);
-  }, [draggedMasterPanel, gmPanelOrder, movePanelInOrder]);
+  const registerRightPanelRef = useCallback((panelId: 'party' | 'initiative' | 'tools', node: HTMLDivElement | null) => {
+    rightPanelRefs.current[panelId] = node;
+  }, []);
 
-  const handleDropRightMasterPanel = useCallback((targetId: 'party' | 'initiative' | 'tools') => {
-    if (!draggedMasterPanel || !gmRightPanelOrder.includes(draggedMasterPanel as 'party' | 'initiative' | 'tools')) return;
-    setGmRightPanelOrder((current) => movePanelInOrder(current, draggedMasterPanel, targetId) as Array<'party' | 'initiative' | 'tools'>);
-    setDraggedMasterPanel(null);
-  }, [draggedMasterPanel, gmRightPanelOrder, movePanelInOrder]);
+  const handleStartMasterPanelDrag = useCallback((
+    panelId: MasterPanelId,
+    column: MasterPanelColumn,
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (role !== 'gm') return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, input, label, select, textarea, a')) return;
+
+    const container = event.currentTarget.closest('[data-master-panel-id]');
+    if (!(container instanceof HTMLDivElement)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const rect = container.getBoundingClientRect();
+    setDraggedMasterPanel(panelId);
+    setMasterPanelDrag({
+      panelId,
+      column,
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      x: rect.left,
+      y: rect.top,
+      width: rect.width,
+    });
+  }, [role]);
+
+  const reorderMasterPanelsForPointer = useCallback((column: MasterPanelColumn, draggedId: MasterPanelId, clientY: number) => {
+    if (column === 'left') {
+      const panels = gmPanelOrder.filter((panelId) => panelId !== draggedId);
+      for (const panelId of panels) {
+        const node = leftPanelRefs.current[panelId];
+        if (!node) continue;
+        const rect = node.getBoundingClientRect();
+        if (clientY < rect.top + rect.height / 2) {
+          setGmPanelOrder((current) => movePanelInOrder(current, draggedId, panelId) as Array<'admin' | 'tokens'>);
+          return;
+        }
+      }
+      setGmPanelOrder((current) => {
+        const next = current.filter((panelId) => panelId !== draggedId) as Array<'admin' | 'tokens'>;
+        next.push(draggedId as 'admin' | 'tokens');
+        return next;
+      });
+      return;
+    }
+
+    const panels = gmRightPanelOrder.filter((panelId) => panelId !== draggedId);
+    for (const panelId of panels) {
+      const node = rightPanelRefs.current[panelId];
+      if (!node) continue;
+      const rect = node.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) {
+        setGmRightPanelOrder((current) => movePanelInOrder(current, draggedId, panelId) as Array<'party' | 'initiative' | 'tools'>);
+        return;
+      }
+    }
+    setGmRightPanelOrder((current) => {
+      const next = current.filter((panelId) => panelId !== draggedId) as Array<'party' | 'initiative' | 'tools'>;
+      next.push(draggedId as 'party' | 'initiative' | 'tools');
+      return next;
+    });
+  }, [gmPanelOrder, gmRightPanelOrder, movePanelInOrder]);
+
+  useEffect(() => {
+    if (!masterPanelDrag) return undefined;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== masterPanelDrag.pointerId) return;
+      const nextX = event.clientX - masterPanelDrag.offsetX;
+      const nextY = event.clientY - masterPanelDrag.offsetY;
+      setMasterPanelDrag((current) => (current ? { ...current, x: nextX, y: nextY } : current));
+      reorderMasterPanelsForPointer(masterPanelDrag.column, masterPanelDrag.panelId, event.clientY);
+    };
+
+    const finishDrag = (pointerId: number) => {
+      if (pointerId !== masterPanelDrag.pointerId) return;
+      setMasterPanelDrag(null);
+      setDraggedMasterPanel(null);
+    };
+
+    const handlePointerUp = (event: PointerEvent) => finishDrag(event.pointerId);
+    const handlePointerCancel = (event: PointerEvent) => finishDrag(event.pointerId);
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+    };
+  }, [masterPanelDrag, reorderMasterPanelsForPointer]);
 
   const handleGmPanelWidthChange = useCallback((panelId: 'admin' | 'tokens' | 'party' | 'initiative' | 'tools', width: number) => {
     setGmPanelWidths((current) => ({ ...current, [panelId]: width }));
@@ -3221,15 +3327,22 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 {gmPanelOrder.map((panelId, index) => (
                   <div
                     key={panelId}
-                    draggable
-                    onDragStart={() => handleDragStartMasterPanel(panelId)}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => handleDropLeftMasterPanel(panelId)}
-                    onDragEnd={() => setDraggedMasterPanel(null)}
-                    style={{ width: `min(100%, ${gmPanelWidths[panelId]}px)` }}
-                    className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? 'ring-2 ring-cyan-400/50' : ''}`}
+                    ref={(node) => registerLeftPanelRef(panelId, node)}
+                    data-master-panel-id={panelId}
+                    style={masterPanelDrag?.panelId === panelId ? {
+                      position: 'fixed',
+                      left: masterPanelDrag.x,
+                      top: masterPanelDrag.y,
+                      width: `${masterPanelDrag.width}px`,
+                      zIndex: 40,
+                      pointerEvents: 'none',
+                    } : { width: `min(100%, ${gmPanelWidths[panelId]}px)` }}
+                    className={`space-y-2 rounded-3xl transition-transform ${draggedMasterPanel === panelId ? 'ring-2 ring-cyan-400/50 shadow-2xl shadow-cyan-500/20' : ''}`}
                   >
-                    <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
+                    <div
+                      onPointerDown={(event) => handleStartMasterPanelDrag(panelId, 'left', event)}
+                      className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                    >
                       <span className="font-medium text-white">Панель мастера: {panelId === 'admin' ? 'админка' : 'токены'}</span>
                       <button type="button" onClick={() => handleMoveGmPanel(panelId, 'up')} disabled={index === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
                       <button type="button" onClick={() => handleMoveGmPanel(panelId, 'down')} disabled={index === gmPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
@@ -3275,16 +3388,27 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
             <div className="min-w-0 flex flex-col gap-4 xl:col-span-1">
               <div
-                draggable={role === 'gm'}
-                onDragStart={() => role === 'gm' && handleDragStartMasterPanel('party')}
-                onDragOver={(event) => role === 'gm' && event.preventDefault()}
-                onDrop={() => role === 'gm' && handleDropRightMasterPanel('party')}
-                onDragEnd={() => setDraggedMasterPanel(null)}
-                style={role === 'gm' ? { order: gmRightPanelOrder.indexOf('party'), width: `min(100%, ${gmPanelWidths.party}px)` } : undefined}
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === 'party' ? 'ring-2 ring-cyan-400/50' : ''}`}
+                ref={(node) => registerRightPanelRef('party', node)}
+                data-master-panel-id="party"
+                style={masterPanelDrag?.panelId === 'party'
+                  ? {
+                      position: 'fixed',
+                      left: masterPanelDrag.x,
+                      top: masterPanelDrag.y,
+                      width: `${masterPanelDrag.width}px`,
+                      zIndex: 40,
+                      pointerEvents: 'none',
+                    }
+                  : role === 'gm'
+                    ? { order: gmRightPanelOrder.indexOf('party'), width: `min(100%, ${gmPanelWidths.party}px)` }
+                    : undefined}
+                className={`space-y-2 rounded-3xl transition-transform ${draggedMasterPanel === 'party' ? 'ring-2 ring-cyan-400/50 shadow-2xl shadow-cyan-500/20' : ''}`}
               >
                 {role === 'gm' ? (
-                  <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
+                  <div
+                    onPointerDown={(event) => handleStartMasterPanelDrag('party', 'right', event)}
+                    className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                  >
                     <span className="font-medium text-white">Панель мастера: персонажи</span>
                     <button type="button" onClick={() => handleMoveGmRightPanel('party', 'up')} disabled={gmRightPanelOrder.indexOf('party') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
                     <button type="button" onClick={() => handleMoveGmRightPanel('party', 'down')} disabled={gmRightPanelOrder.indexOf('party') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
@@ -3583,16 +3707,27 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               </div>
 
               <div
-                draggable={role === 'gm'}
-                onDragStart={() => role === 'gm' && handleDragStartMasterPanel('initiative')}
-                onDragOver={(event) => role === 'gm' && event.preventDefault()}
-                onDrop={() => role === 'gm' && handleDropRightMasterPanel('initiative')}
-                onDragEnd={() => setDraggedMasterPanel(null)}
-                style={role === 'gm' ? { order: gmRightPanelOrder.indexOf('initiative'), width: `min(100%, ${gmPanelWidths.initiative}px)` } : undefined}
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === 'initiative' ? 'ring-2 ring-cyan-400/50' : ''}`}
+                ref={(node) => registerRightPanelRef('initiative', node)}
+                data-master-panel-id="initiative"
+                style={masterPanelDrag?.panelId === 'initiative'
+                  ? {
+                      position: 'fixed',
+                      left: masterPanelDrag.x,
+                      top: masterPanelDrag.y,
+                      width: `${masterPanelDrag.width}px`,
+                      zIndex: 40,
+                      pointerEvents: 'none',
+                    }
+                  : role === 'gm'
+                    ? { order: gmRightPanelOrder.indexOf('initiative'), width: `min(100%, ${gmPanelWidths.initiative}px)` }
+                    : undefined}
+                className={`space-y-2 rounded-3xl transition-transform ${draggedMasterPanel === 'initiative' ? 'ring-2 ring-cyan-400/50 shadow-2xl shadow-cyan-500/20' : ''}`}
               >
                 {role === 'gm' ? (
-                  <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
+                  <div
+                    onPointerDown={(event) => handleStartMasterPanelDrag('initiative', 'right', event)}
+                    className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                  >
                     <span className="font-medium text-white">Панель мастера: инициатива</span>
                     <button type="button" onClick={() => handleMoveGmRightPanel('initiative', 'up')} disabled={gmRightPanelOrder.indexOf('initiative') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
                     <button type="button" onClick={() => handleMoveGmRightPanel('initiative', 'down')} disabled={gmRightPanelOrder.indexOf('initiative') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
@@ -3718,17 +3853,26 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
               {role === 'gm' ? (
                 <div
-                  draggable
-                  onDragStart={() => handleDragStartMasterPanel('tools')}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => handleDropRightMasterPanel('tools')}
-                  onDragEnd={() => setDraggedMasterPanel(null)}
-                  style={{ order: gmRightPanelOrder.indexOf('tools') }}
-                  className={`space-y-2 rounded-3xl ${draggedMasterPanel === 'tools' ? 'ring-2 ring-cyan-400/50' : ''}`}
+                  ref={(node) => registerRightPanelRef('tools', node)}
+                  data-master-panel-id="tools"
+                  style={masterPanelDrag?.panelId === 'tools'
+                    ? {
+                        position: 'fixed',
+                        left: masterPanelDrag.x,
+                        top: masterPanelDrag.y,
+                        width: `${masterPanelDrag.width}px`,
+                        zIndex: 40,
+                        pointerEvents: 'none',
+                      }
+                    : { order: gmRightPanelOrder.indexOf('tools') }}
+                  className={`space-y-2 rounded-3xl transition-transform ${draggedMasterPanel === 'tools' ? 'ring-2 ring-cyan-400/50 shadow-2xl shadow-cyan-500/20' : ''}`}
                 >
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                     <div style={{ width: `min(100%, ${gmPanelWidths.tools}px)` }} className="space-y-2">
-                      <div className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing">
+                      <div
+                        onPointerDown={(event) => handleStartMasterPanelDrag('tools', 'right', event)}
+                        className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                      >
                         <span className="font-medium text-white">Панель мастера: инструменты</span>
                         <button type="button" onClick={() => handleMoveGmRightPanel('tools', 'up')} disabled={gmRightPanelOrder.indexOf('tools') === 0} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↑</button>
                         <button type="button" onClick={() => handleMoveGmRightPanel('tools', 'down')} disabled={gmRightPanelOrder.indexOf('tools') === gmRightPanelOrder.length - 1} className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40">↓</button>
