@@ -2728,6 +2728,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     null,
   );
   const [gmRailsSwapped, setGmRailsSwapped] = useState(false);
+  const [activeDropRail, setActiveDropRail] = useState<"left" | "right" | null>(
+    null,
+  );
   const [gmPanelWidths, setGmPanelWidths] = useState<
     Record<"admin" | "tokens" | "party" | "initiative" | "tools", number>
   >({
@@ -4240,6 +4243,36 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setGmRailsSwapped((current) => !current);
   }, []);
 
+  const handleRailDragOver = useCallback(
+    (rail: "left" | "right", event: React.DragEvent<HTMLDivElement>) => {
+      if (!draggedMasterPanel) return;
+      event.preventDefault();
+      setActiveDropRail(rail);
+    },
+    [draggedMasterPanel],
+  );
+
+  const handleRailDrop = useCallback(
+    (rail: "left" | "right") => {
+      if (!draggedMasterPanel) return;
+      const draggedIsLeft = gmPanelOrder.includes(
+        draggedMasterPanel as "admin" | "tokens",
+      );
+      const draggedIsRight = gmRightPanelOrder.includes(
+        draggedMasterPanel as "party" | "initiative" | "tools",
+      );
+      if (
+        (rail === "left" && draggedIsRight) ||
+        (rail === "right" && draggedIsLeft)
+      ) {
+        setGmRailsSwapped(rail === "right");
+      }
+      setActiveDropRail(null);
+      setDraggedMasterPanel(null);
+    },
+    [draggedMasterPanel, gmPanelOrder, gmRightPanelOrder],
+  );
+
   const handleGmPanelWidthChange = useCallback(
     (
       panelId: "admin" | "tokens" | "party" | "initiative" | "tools",
@@ -4783,10 +4816,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           >
             {role === "gm" ? (
               <div
-                className="min-w-0 space-y-4"
+                className={`min-w-0 space-y-4 ${activeDropRail === "left" ? "rounded-3xl ring-2 ring-cyan-400/40" : ""}`}
                 style={
                   role === "gm" ? { order: gmRailsSwapped ? 2 : 1 } : undefined
                 }
+                onDragOver={(event) =>
+                  role === "gm" && handleRailDragOver("left", event)
+                }
+                onDragLeave={() =>
+                  activeDropRail === "left" && setActiveDropRail(null)
+                }
+                onDrop={() => role === "gm" && handleRailDrop("left")}
               >
                 {gmPanelOrder.map((panelId, index) => (
                   <div
@@ -4795,7 +4835,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     onDragStart={() => handleDragStartMasterPanel(panelId)}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={() => handleDropLeftMasterPanel(panelId)}
-                    onDragEnd={() => setDraggedMasterPanel(null)}
+                    onDragEnd={() => {
+                      setDraggedMasterPanel(null);
+                      setActiveDropRail(null);
+                    }}
                     style={{ width: `min(100%, ${gmPanelWidths[panelId]}px)` }}
                     className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""}`}
                   >
@@ -5106,10 +5149,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             ) : null}
 
             <div
-              className="min-w-0 flex flex-col gap-4 xl:col-span-1"
+              className={`min-w-0 flex flex-col gap-4 xl:col-span-1 ${activeDropRail === "right" ? "rounded-3xl ring-2 ring-cyan-400/40" : ""}`}
               style={
                 role === "gm" ? { order: gmRailsSwapped ? 1 : 2 } : undefined
               }
+              onDragOver={(event) =>
+                role === "gm" && handleRailDragOver("right", event)
+              }
+              onDragLeave={() =>
+                activeDropRail === "right" && setActiveDropRail(null)
+              }
+              onDrop={() => role === "gm" && handleRailDrop("right")}
             >
               <div
                 draggable={role === "gm"}
@@ -5120,7 +5170,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 onDrop={() =>
                   role === "gm" && handleDropRightMasterPanel("party")
                 }
-                onDragEnd={() => setDraggedMasterPanel(null)}
+                onDragEnd={() => {
+                  setDraggedMasterPanel(null);
+                  setActiveDropRail(null);
+                }}
                 style={
                   role === "gm"
                     ? {
@@ -5271,7 +5324,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     </div>
                   ) : null}
 
-                  <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
+                  <div
+                    className={`mt-5 grid gap-4 ${gmRailsSwapped ? "2xl:grid-cols-[minmax(0,260px)_minmax(0,1fr)]" : "xl:grid-cols-[minmax(0,260px)_minmax(0,1fr)]"}`}
+                  >
                     <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
                       {groupSheets.map((sheet) => {
                         const token = tokens.find(
@@ -5320,7 +5375,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     <div className="min-w-0">
                       {selectedSheet ? (
                         <div className="min-w-0 space-y-4 text-sm text-slate-200">
-                          <div className="grid gap-4 xl:grid-cols-[180px_minmax(0,1fr)]">
+                          <div
+                            className={`grid gap-4 ${gmRailsSwapped ? "2xl:grid-cols-[180px_minmax(0,1fr)]" : "xl:grid-cols-[180px_minmax(0,1fr)]"}`}
+                          >
                             <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/70">
                               <div className="flex aspect-[4/5] items-center justify-center bg-slate-900 text-4xl font-semibold text-white">
                                 {selectedSheet.avatarUrl ? (
@@ -6244,7 +6301,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                             />
                           </div>
 
-                          <div className="grid gap-3 xl:grid-cols-2">
+                          <div
+                            className={`grid gap-3 ${gmRailsSwapped ? "2xl:grid-cols-2" : "xl:grid-cols-2"}`}
+                          >
                             {characterSections(selectedSheet).map((section) => (
                               <div
                                 key={section.title}
@@ -6279,7 +6338,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 onDrop={() =>
                   role === "gm" && handleDropRightMasterPanel("initiative")
                 }
-                onDragEnd={() => setDraggedMasterPanel(null)}
+                onDragEnd={() => {
+                  setDraggedMasterPanel(null);
+                  setActiveDropRail(null);
+                }}
                 style={
                   role === "gm"
                     ? {
@@ -6625,7 +6687,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   onDragStart={() => handleDragStartMasterPanel("tools")}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={() => handleDropRightMasterPanel("tools")}
-                  onDragEnd={() => setDraggedMasterPanel(null)}
+                  onDragEnd={() => {
+                    setDraggedMasterPanel(null);
+                    setActiveDropRail(null);
+                  }}
                   style={{ order: gmRightPanelOrder.indexOf("tools") }}
                   className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""}`}
                 >
