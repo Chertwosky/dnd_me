@@ -1551,6 +1551,10 @@ function getAbilityModifier(score: number) {
   return Math.floor((score - 10) / 2);
 }
 
+function formatModifier(value: number) {
+  return `${value >= 0 ? '+' : ''}${value}`;
+}
+
 function createEmptyCharacterSheet(id: string, tokenId: string, name: string): CharacterSheet {
   return {
     id,
@@ -2357,6 +2361,59 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     });
   }, [updateSelectedSheet]);
 
+  const handleAdjustSpellSlot = useCallback((index: number, delta: number) => {
+    if (!selectedSheet) return;
+    const resources = selectedSheetResources;
+    const slot = resources.spellSlots?.[index] ?? { current: 0, max: 0 };
+    const nextValue = clamp(slot.current + delta, 0, slot.max);
+    handleSpellSlotChange(index, 'current', nextValue);
+    if (nextValue !== slot.current) {
+      addJournalEntry('sheet', `${selectedSheet.name}: spell slot ${index + 1} → ${nextValue}/${slot.max}.`);
+    }
+  }, [addJournalEntry, handleSpellSlotChange, selectedSheet, selectedSheetResources]);
+
+  const handleAdjustResourceTrack = useCallback((resourceKey: 'hitDice' | 'rage' | 'ki' | 'sorceryPoints', delta: number) => {
+    if (!selectedSheet) return;
+    const resources = selectedSheetResources;
+    const track = resources[resourceKey] ?? { current: 0, max: 0 };
+    const nextValue = clamp(track.current + delta, 0, track.max);
+    handleResourceTrackChange(resourceKey, 'current', nextValue);
+    if (nextValue !== track.current) {
+      addJournalEntry('sheet', `${selectedSheet.name}: ${resourceKey} → ${nextValue}/${track.max}.`);
+    }
+  }, [addJournalEntry, handleResourceTrackChange, selectedSheet, selectedSheetResources]);
+
+  const handleResetDeathSaves = useCallback(() => {
+    if (!selectedSheet) return;
+    handleDeathSaveChange('successes', 0);
+    handleDeathSaveChange('failures', 0);
+    addJournalEntry('sheet', `${selectedSheet.name}: death saves сброшены.`);
+  }, [addJournalEntry, handleDeathSaveChange, selectedSheet]);
+
+  const handleShortRest = useCallback(() => {
+    if (!selectedSheet) return;
+    const resources = selectedSheetResources;
+    handleResourceTrackChange('hitDice', 'current', resources.hitDice?.max ?? 0);
+    addJournalEntry('sheet', `${selectedSheet.name}: short rest — hit dice восстановлены.`);
+  }, [addJournalEntry, handleResourceTrackChange, selectedSheet, selectedSheetResources]);
+
+  const handleLongRest = useCallback(() => {
+    if (!selectedSheet) return;
+    const resources = selectedSheetResources;
+    (resources.spellSlots ?? []).forEach((slot, index) => handleSpellSlotChange(index, 'current', slot.max));
+    handleResourceTrackChange('hitDice', 'current', resources.hitDice?.max ?? 0);
+    handleResourceTrackChange('rage', 'current', resources.rage?.max ?? 0);
+    handleResourceTrackChange('ki', 'current', resources.ki?.max ?? 0);
+    handleResourceTrackChange('sorceryPoints', 'current', resources.sorceryPoints?.max ?? 0);
+    handleDeathSaveChange('successes', 0);
+    handleDeathSaveChange('failures', 0);
+    updateSelectedSheet((sheet) => {
+      const nextResources = normalizeResources(sheet.resources);
+      return { ...sheet, resources: { ...nextResources, exhaustion: 0 } };
+    });
+    addJournalEntry('sheet', `${selectedSheet.name}: long rest — ресурсы восстановлены.`);
+  }, [addJournalEntry, handleDeathSaveChange, handleResourceTrackChange, handleSpellSlotChange, selectedSheet, selectedSheetResources, updateSelectedSheet]);
+
   const handleSheetChange = <K extends keyof CharacterSheet>(key: K, value: CharacterSheet[K]) => {
     if (!selectedSheet || !canEditSheet(selectedSheet)) return;
 
@@ -2975,14 +3032,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                     <div className="mt-3 grid gap-2">
                                       <button
                                         type="button"
-                                        onClick={() => handleQuickRoll(selectedSheet, `${stat.label} check`, `1d20${modifier >= 0 ? '+' : ''}${modifier}`)}
+                                        onClick={() => handleQuickRoll(selectedSheet, `${stat.label} check`, `1d20${formatModifier(modifier)}`)}
                                         className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[11px] font-medium text-cyan-100"
                                       >
                                         Check
                                       </button>
                                       <button
                                         type="button"
-                                        onClick={() => handleQuickRoll(selectedSheet, `${stat.label} save`, `1d20${modifier >= 0 ? '+' : ''}${modifier}`)}
+                                        onClick={() => handleQuickRoll(selectedSheet, `${stat.label} save`, `1d20${formatModifier(modifier)}`)}
                                         className="rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-2 py-1 text-[11px] font-medium text-fuchsia-100"
                                       >
                                         Save
@@ -2997,66 +3054,84 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           <div className="rounded-3xl border border-white/8 bg-slate-950/40 p-4">
                             <div className="text-xs uppercase tracking-wide text-slate-500">Быстрые действия боя</div>
                             <div className="mt-3 grid gap-2">
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Initiative', `1d20${selectedSheetInitiativeModifier >= 0 ? '+' : ''}${selectedSheetInitiativeModifier}`)} className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-100">Бросить инициативу</button>
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Attack', `1d20${getAbilityModifier(selectedSheet.stats.str) >= 0 ? '+' : ''}${getAbilityModifier(selectedSheet.stats.str)}`)} className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-left text-sm text-emerald-100">Атака от СИЛ</button>
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Spell attack', `1d20${getAbilityModifier(selectedSheet.stats.int) >= 0 ? '+' : ''}${getAbilityModifier(selectedSheet.stats.int)}`)} className="rounded-2xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-left text-sm text-violet-100">Заклинательная атака</button>
-                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Concentration', `1d20${getAbilityModifier(selectedSheet.stats.con) >= 0 ? '+' : ''}${getAbilityModifier(selectedSheet.stats.con)}`)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2 text-left text-sm text-slate-200">Проверка концентрации</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Initiative', `1d20${formatModifier(selectedSheetInitiativeModifier)}`)} className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-100">Бросить инициативу</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Attack', `1d20${formatModifier(getAbilityModifier(selectedSheet.stats.str))}`)} className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-left text-sm text-emerald-100">Атака от СИЛ</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Spell attack', `1d20${formatModifier(getAbilityModifier(selectedSheet.stats.int))}`)} className="rounded-2xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-left text-sm text-violet-100">Заклинательная атака</button>
+                              <button type="button" onClick={() => handleQuickRoll(selectedSheet, 'Concentration', `1d20${formatModifier(getAbilityModifier(selectedSheet.stats.con))}`)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-2 text-left text-sm text-slate-200">Проверка концентрации</button>
                             </div>
                             <div className="mt-3 text-xs leading-5 text-slate-400">Кнопки пишут результат в существующий журнал и используют текущие характеристики листа без новой боевой подсистемы.</div>
                           </div>
                         </div>
 
                         <div className="rounded-3xl border border-white/8 bg-slate-950/40 p-4">
-                          <div className="mb-3 flex items-center justify-between gap-3">
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <div className="text-xs uppercase tracking-wide text-slate-500">Ресурсы персонажа v1</div>
                               <div className="mt-1 text-sm text-slate-300">Spell slots, hit dice, rage, ki, sorcery points, death saves и exhaustion сохраняются в JSON комнаты.</div>
                             </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button type="button" disabled={!canEditSheet(selectedSheet)} onClick={handleShortRest} className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100 disabled:opacity-60">Short rest</button>
+                              <button type="button" disabled={!canEditSheet(selectedSheet)} onClick={handleLongRest} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-100 disabled:opacity-60">Long rest</button>
+                              <button type="button" disabled={!canEditSheet(selectedSheet)} onClick={handleResetDeathSaves} className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-200 disabled:opacity-60">Сброс death saves</button>
+                            </div>
                           </div>
-                          {(() => { const resources = selectedSheetResources; return (
-                            <div className="space-y-4">
-                              <div className="grid gap-3 md:grid-cols-3">
-                                {(resources.spellSlots ?? []).map((slot, index) => (
-                                  <div key={`slot-${index}`} className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
-                                    <div className="text-xs uppercase tracking-wide text-slate-500">Spell slot {index + 1}</div>
-                                    <div className="mt-3 grid grid-cols-2 gap-2">
+
+                          <div className="space-y-4">
+                            <div className="grid gap-3 md:grid-cols-3">
+                              {(selectedSheetResources.spellSlots ?? []).map((slot, index) => (
+                                <div key={`slot-${index}`} className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                  <div className="text-xs uppercase tracking-wide text-slate-500">Spell slot {index + 1}</div>
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <button type="button" disabled={!canEditSheet(selectedSheet)} onClick={() => handleAdjustSpellSlot(index, -1)} className="rounded-full border border-white/10 px-2 py-1 text-xs text-slate-200 disabled:opacity-60">-</button>
+                                    <button type="button" disabled={!canEditSheet(selectedSheet)} onClick={() => handleAdjustSpellSlot(index, 1)} className="rounded-full border border-white/10 px-2 py-1 text-xs text-slate-200 disabled:opacity-60">+</button>
+                                    <div className="grid flex-1 grid-cols-2 gap-2">
                                       <input type="number" min={0} value={slot.current} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSpellSlotChange(index, 'current', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Текущие" />
                                       <input type="number" min={0} value={slot.max} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSpellSlotChange(index, 'max', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Макс" />
                                     </div>
                                   </div>
-                                ))}
-                              </div>
-                              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                {([['hitDice', 'Hit dice'], ['rage', 'Rage'], ['ki', 'Ki'], ['sorceryPoints', 'Sorcery']] as const).map(([key, label]) => {
-                                  const track = resources[key];
-                                  return (
-                                    <div key={key} className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
-                                      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-                                      <div className="mt-3 grid grid-cols-2 gap-2">
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                              {([['hitDice', 'Hit dice'], ['rage', 'Rage'], ['ki', 'Ki'], ['sorceryPoints', 'Sorcery']] as const).map(([key, label]) => {
+                                const track = selectedSheetResources[key];
+                                return (
+                                  <div key={key} className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                    <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+                                    <div className="mt-3 flex items-center gap-2">
+                                      <button type="button" disabled={!canEditSheet(selectedSheet)} onClick={() => handleAdjustResourceTrack(key, -1)} className="rounded-full border border-white/10 px-2 py-1 text-xs text-slate-200 disabled:opacity-60">-</button>
+                                      <button type="button" disabled={!canEditSheet(selectedSheet)} onClick={() => handleAdjustResourceTrack(key, 1)} className="rounded-full border border-white/10 px-2 py-1 text-xs text-slate-200 disabled:opacity-60">+</button>
+                                      <div className="grid flex-1 grid-cols-2 gap-2">
                                         <input type="number" min={0} value={track?.current ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleResourceTrackChange(key, 'current', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Текущие" />
                                         <input type="number" min={0} value={track?.max ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleResourceTrackChange(key, 'max', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Макс" />
                                       </div>
                                     </div>
-                                  );
-                                })}
-                              </div>
-                              <div className="grid gap-3 md:grid-cols-3">
-                                <div className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
-                                  <div className="text-xs uppercase tracking-wide text-slate-500">Death saves</div>
-                                  <div className="mt-3 grid grid-cols-2 gap-2">
-                                    <input type="number" min={0} max={3} value={resources.deathSaves?.successes ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleDeathSaveChange('successes', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Успехи" />
-                                    <input type="number" min={0} max={3} value={resources.deathSaves?.failures ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleDeathSaveChange('failures', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Провалы" />
                                   </div>
+                                );
+                              })}
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-3">
+                              <div className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                <div className="text-xs uppercase tracking-wide text-slate-500">Death saves</div>
+                                <div className="mt-3 grid grid-cols-2 gap-2">
+                                  <input type="number" min={0} max={3} value={selectedSheetResources.deathSaves?.successes ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleDeathSaveChange('successes', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Успехи" />
+                                  <input type="number" min={0} max={3} value={selectedSheetResources.deathSaves?.failures ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleDeathSaveChange('failures', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" placeholder="Провалы" />
                                 </div>
-                                <div className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
-                                  <div className="text-xs uppercase tracking-wide text-slate-500">Exhaustion</div>
-                                  <input type="number" min={0} max={6} value={resources.exhaustion ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleExhaustionChange(Number(event.target.value))} className="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" />
+                              </div>
+
+                              <div className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
+                                <div className="text-xs uppercase tracking-wide text-slate-500">Exhaustion</div>
+                                <div className="mt-3 flex items-center gap-2">
+                                  <button type="button" disabled={!canEditSheet(selectedSheet)} onClick={() => handleExhaustionChange((selectedSheetResources.exhaustion ?? 0) - 1)} className="rounded-full border border-white/10 px-2 py-1 text-xs text-slate-200 disabled:opacity-60">-</button>
+                                  <button type="button" disabled={!canEditSheet(selectedSheet)} onClick={() => handleExhaustionChange((selectedSheetResources.exhaustion ?? 0) + 1)} className="rounded-full border border-white/10 px-2 py-1 text-xs text-slate-200 disabled:opacity-60">+</button>
+                                  <input type="number" min={0} max={6} value={selectedSheetResources.exhaustion ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleExhaustionChange(Number(event.target.value))} className="w-full rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-2 text-white disabled:opacity-60" />
                                 </div>
                               </div>
                             </div>
-                          ); })()}
+                          </div>
                         </div>
-
                         <div className="grid gap-2 md:grid-cols-3">
                           <input value={selectedSheet.age ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('age', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Возраст" />
                           <input value={selectedSheet.height ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('height', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 disabled:opacity-60" placeholder="Рост" />
