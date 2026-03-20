@@ -11,6 +11,20 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
+import { CharacterXpCard } from '@/components/character-xp-card';
+import { LevelUpBanner } from '@/components/level-up-banner';
+import { LevelUpDrawer } from '@/components/level-up-drawer';
+import {
+  applyXp,
+  buildLevelUpPreview,
+  deriveCharacterProgression,
+  getProgressionOptions,
+  startLevelUp,
+  confirmLevelUp,
+  type CampaignConfig,
+  type CharacterClassLevel,
+  type LevelUpDraft,
+} from '@/lib/level-up';
 
 type RoomRole = 'gm' | 'player';
 type JoinStep = 'auth' | 'player-sheet' | 'ready';
@@ -112,6 +126,10 @@ type CharacterSheet = {
   feats?: string;
   features?: string;
   resources?: CharacterResources;
+  classLevels?: CharacterClassLevel[];
+  takenFeatIds?: string[];
+  selectedSubclassId?: string;
+  knownSpellIds?: string[];
 };
 
 type JournalEntry = {
@@ -986,7 +1004,9 @@ const initialSheets: CharacterSheet[] = [
     name: 'Элира Найтбриз',
     race: 'Эльф',
     heroClass: 'Wizard',
+    subclass: 'School of Evocation',
     level: 4,
+    experience: 6200,
     hp: 28,
     maxHp: 32,
     ac: 15,
@@ -995,6 +1015,10 @@ const initialSheets: CharacterSheet[] = [
     notes: 'Ищет скрытый архив башни и избегает ближнего боя.',
     inventory: 'Arcane focus, Potion of Healing, Explorer pack',
     spells: 'Magic Missile, Shield, Misty Step',
+    classLevels: [{ classId: 'Wizard', level: 4 }],
+    selectedSubclassId: 'evocation',
+    knownSpellIds: ['magic-missile', 'shield', 'misty-step'],
+    takenFeatIds: ['observant'],
     resources: {
       spellSlots: [{ current: 4, max: 4 }, { current: 3, max: 3 }, { current: 2, max: 2 }],
       hitDice: { current: 4, max: 4 },
@@ -1011,7 +1035,9 @@ const initialSheets: CharacterSheet[] = [
     name: 'Борин Стоунхарт',
     race: 'Дварф',
     heroClass: 'Fighter',
+    subclass: 'Champion',
     level: 4,
+    experience: 6600,
     hp: 41,
     maxHp: 41,
     ac: 18,
@@ -1020,6 +1046,9 @@ const initialSheets: CharacterSheet[] = [
     notes: 'Держит переднюю линию и прикрывает Элиру щитом.',
     inventory: 'Battleaxe, Shield, Rope 50 ft',
     spells: '',
+    classLevels: [{ classId: 'Fighter', level: 4 }],
+    selectedSubclassId: 'champion',
+    takenFeatIds: ['heavy-armor-master'],
     resources: {
       spellSlots: [{ current: 0, max: 0 }, { current: 0, max: 0 }, { current: 0, max: 0 }],
       hitDice: { current: 4, max: 4 },
@@ -1798,6 +1827,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   ]);
   const [isLoadedFromStorage, setIsLoadedFromStorage] = useState(false);
   const [initiative, setInitiative] = useState<InitiativeState>(createEmptyInitiativeState);
+  const [campaignConfig, setCampaignConfig] = useState<CampaignConfig>({
+    id: 'room-campaign',
+    name: 'Руины старой башни',
+    progressionMode: 'xp',
+    edition: '5e14',
+    includeHomebrew: false,
+    manualLevelUpUnlocked: false,
+  });
+  const [levelUpDrafts, setLevelUpDrafts] = useState<Record<string, LevelUpDraft | undefined>>({});
+  const [isLevelUpOpen, setIsLevelUpOpen] = useState(false);
 
   const cols = mapState.cols;
   const rows = mapState.rows;
@@ -1833,6 +1872,19 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const selectedSheetInitiativeModifier = useMemo(
     () => (selectedSheetToken ? getInitiativeModifier(selectedSheetToken, sheets) : 0),
     [selectedSheetToken, sheets],
+  );
+  const selectedProgression = useMemo(
+    () => (selectedSheet ? deriveCharacterProgression(selectedSheet, campaignConfig, levelUpDrafts[selectedSheet.id]) : null),
+    [campaignConfig, levelUpDrafts, selectedSheet],
+  );
+  const selectedLevelUpDraft = selectedSheet ? levelUpDrafts[selectedSheet.id] ?? null : null;
+  const selectedLevelUpPreview = useMemo(
+    () => (selectedSheet && selectedLevelUpDraft ? buildLevelUpPreview(selectedSheet, campaignConfig, selectedLevelUpDraft) : null),
+    [campaignConfig, selectedLevelUpDraft, selectedSheet],
+  );
+  const selectedProgressionOptions = useMemo(
+    () => (selectedSheet ? getProgressionOptions(selectedSheet, campaignConfig) : null),
+    [campaignConfig, selectedSheet],
   );
 
   const activePalette = useMemo(() => {
@@ -2540,6 +2592,58 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     }
   };
 
+  const handleProgressionModeChange = useCallback((mode: CampaignConfig['progressionMode']) => {
+    setCampaignConfig((current) => ({
+      ...current,
+      progressionMode: mode,
+      manualLevelUpUnlocked: mode === 'milestone' ? current.manualLevelUpUnlocked : false,
+    }));
+  }, []);
+
+  const handleAddXp = useCallback((xpDelta: number) => {
+    if (!selectedSheet) return;
+    const result = applyXp(selectedSheet, campaignConfig, xpDelta);
+    setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? { ...sheet, experience: result.character.experience } : sheet)));
+    addJournalEntry('sheet', `${selectedSheet.name}: мастер добавил ${xpDelta} XP.${result.progression.canLevelUp ? ' Персонаж готов к повышению уровня.' : ''}`);
+  }, [addJournalEntry, campaignConfig, selectedSheet]);
+
+  const handleToggleMilestoneReady = useCallback(() => {
+    setCampaignConfig((current) => ({ ...current, manualLevelUpUnlocked: !current.manualLevelUpUnlocked }));
+  }, []);
+
+  const handleStartLevelUp = useCallback(() => {
+    if (!selectedSheet) return;
+    const draft = levelUpDrafts[selectedSheet.id] ?? startLevelUp(selectedSheet, campaignConfig);
+    setLevelUpDrafts((current) => ({ ...current, [selectedSheet.id]: draft }));
+    setIsLevelUpOpen(true);
+  }, [campaignConfig, levelUpDrafts, selectedSheet]);
+
+  const handlePatchLevelUpDraft = useCallback((patch: Partial<LevelUpDraft>) => {
+    if (!selectedSheet) return;
+    setLevelUpDrafts((current) => {
+      const existing = current[selectedSheet.id] ?? startLevelUp(selectedSheet, campaignConfig);
+      const nextDraft = { ...existing, ...patch };
+      nextDraft.previewSnapshot = buildLevelUpPreview(selectedSheet, campaignConfig, nextDraft);
+      return { ...current, [selectedSheet.id]: nextDraft };
+    });
+  }, [campaignConfig, selectedSheet]);
+
+  const handleConfirmLevelUp = useCallback(() => {
+    if (!selectedSheet || !selectedLevelUpDraft) return;
+    try {
+      const nextSheet = confirmLevelUp(selectedSheet, campaignConfig, selectedLevelUpDraft);
+      setSheets((current) => current.map((sheet) => (sheet.id === selectedSheet.id ? { ...sheet, ...nextSheet } : sheet)));
+      setLevelUpDrafts((current) => ({ ...current, [selectedSheet.id]: undefined }));
+      if (campaignConfig.progressionMode === 'milestone') {
+        setCampaignConfig((current) => ({ ...current, manualLevelUpUnlocked: false }));
+      }
+      setIsLevelUpOpen(false);
+      addJournalEntry('sheet', `${selectedSheet.name}: повышение уровня подтверждено. Теперь уровень ${nextSheet.level}.`);
+    } catch (error) {
+      addJournalEntry('system', error instanceof Error ? error.message : 'Не удалось подтвердить level up.');
+    }
+  }, [addJournalEntry, campaignConfig, selectedLevelUpDraft, selectedSheet]);
+
   const handleRoomAuth = () => {
     const name = displayName.trim() || 'Без имени';
     const pass = passwordInput.trim();
@@ -3114,6 +3218,36 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               <input value={selectedSheet.playerName ?? ''} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('playerName', event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" placeholder="Игрок" />
                               <input type="number" value={selectedSheet.experience ?? 0} disabled={!canEditSheet(selectedSheet)} onChange={(event) => handleSheetChange('experience', Number(event.target.value))} className="rounded-2xl border border-white/10 bg-slate-900/80 px-3 py-3 disabled:opacity-60" placeholder="XP" />
                             </div>
+                            {selectedProgression ? (
+                              <div className="space-y-3 rounded-3xl border border-white/10 bg-slate-950/40 p-4">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-xs uppercase tracking-wide text-slate-500">Campaign progression</span>
+                                  <button type="button" onClick={() => handleProgressionModeChange('xp')} className={`rounded-full px-3 py-1 text-xs ${campaignConfig.progressionMode === 'xp' ? 'bg-cyan-500 text-slate-950' : 'border border-white/10 text-slate-200'}`}>XP mode</button>
+                                  <button type="button" onClick={() => handleProgressionModeChange('milestone')} className={`rounded-full px-3 py-1 text-xs ${campaignConfig.progressionMode === 'milestone' ? 'bg-fuchsia-500 text-white' : 'border border-white/10 text-slate-200'}`}>Milestone mode</button>
+                                  <button type="button" onClick={handleToggleMilestoneReady} className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200" disabled={campaignConfig.progressionMode !== 'milestone'}>Открыть level up вручную</button>
+                                  <button type="button" onClick={() => handleAddXp(300)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100" disabled={campaignConfig.progressionMode !== 'xp'}>+300 XP</button>
+                                  <button type="button" onClick={() => handleAddXp(1200)} className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100" disabled={campaignConfig.progressionMode !== 'xp'}>+1200 XP</button>
+                                </div>
+                                <CharacterXpCard progression={selectedProgression} mode={campaignConfig.progressionMode} />
+                                <LevelUpBanner progression={selectedProgression} onOpen={handleStartLevelUp} />
+                                {selectedProgressionOptions ? (
+                                  <div className="grid gap-3 md:grid-cols-3">
+                                    <div className="rounded-2xl border border-white/8 px-3 py-3">
+                                      <div className="text-xs uppercase tracking-wide text-slate-500">Class features</div>
+                                      <div className="mt-2 text-sm text-slate-200">{selectedProgressionOptions.continueClass.classFeatures.map((item) => item.name).join(', ') || 'Нет новых особенностей'}</div>
+                                    </div>
+                                    <div className="rounded-2xl border border-white/8 px-3 py-3">
+                                      <div className="text-xs uppercase tracking-wide text-slate-500">Spells / ASI</div>
+                                      <div className="mt-2 text-sm text-slate-200">{selectedProgressionOptions.continueClass.spells.length ? `Заклинаний: ${selectedProgressionOptions.continueClass.spells.length}` : 'Новых заклинаний нет'} · {selectedProgressionOptions.continueClass.asi.available ? 'Есть окно ASI/feat' : 'ASI нет'}</div>
+                                    </div>
+                                    <div className="rounded-2xl border border-white/8 px-3 py-3">
+                                      <div className="text-xs uppercase tracking-wide text-slate-500">Multiclass preview</div>
+                                      <div className="mt-2 text-sm text-slate-200">{selectedProgressionOptions.multiclassOptions.filter((item) => item.available).map((item) => item.item.classId).join(', ') || 'Нет доступных мультиклассов'}</div>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
 
@@ -3526,6 +3660,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           )}
         </section>
       </div>
+      <LevelUpDrawer
+        open={isLevelUpOpen}
+        draft={selectedLevelUpDraft}
+        preview={selectedLevelUpPreview}
+        onClose={() => setIsLevelUpOpen(false)}
+        onChange={handlePatchLevelUpDraft}
+        onConfirm={handleConfirmLevelUp}
+      />
     </div>
   );
 }
