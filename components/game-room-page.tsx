@@ -262,6 +262,12 @@ const masterPanelShortLabels: Record<MasterPanelId, string> = {
   tools: "Утил.",
 };
 
+function getMasterPanelGridSpan(width: number) {
+  if (width >= 960) return 3;
+  if (width >= 640) return 2;
+  return 1;
+}
+
 const layerPalette: Record<LayerKind, string[]> = {
   terrain: ["#0f172a", "#334155", "#14532d", "#1d4ed8", "#92400e", "#4c1d95"],
   obstacle: ["#ef4444", "#f97316", "#eab308", "#84cc16"],
@@ -2260,16 +2266,19 @@ function resizeTiles(
 function AdaptiveLabel({
   full,
   short,
+  icon = "…",
   className,
 }: {
   full: string;
   short: string;
+  icon?: string;
   className?: string;
 }) {
   return (
-    <span className={className} title={full} aria-label={full}>
-      <span className="sm:hidden">{short}</span>
-      <span className="hidden sm:inline">{full}</span>
+    <span className={`adaptive-label ${className ?? ""}`.trim()} title={full} aria-label={full}>
+      <span className="adaptive-label__icon" aria-hidden="true">{icon}</span>
+      <span className="adaptive-label__short">{short}</span>
+      <span className="adaptive-label__full">{full}</span>
     </span>
   );
 }
@@ -4759,7 +4768,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           <div
             className={
               role === "gm"
-                ? "flex flex-wrap items-start gap-4"
+                ? "gm-panel-grid items-start"
                 : "grid gap-4 xl:grid-cols-1"
             }
           >
@@ -4783,7 +4792,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }}
                       style={{
                         order: gmPanelOrder.indexOf(panelId),
-                        width: `min(100%, ${gmPanelWidths[panelId]}px)`,
+                        gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths[panelId])} / span ${getMasterPanelGridSpan(gmPanelWidths[panelId])}`,
                       }}
                       className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === panelId ? "ring-2 ring-fuchsia-400/60" : ""}`}
                     >
@@ -4793,7 +4802,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           role === "gm" &&
                           handleDragStartMasterPanel(panelId, event)
                         }
-                        className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                        className="flex min-w-0 cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
                       >
                         <span className="font-medium text-white">
                           Панель мастера:{" "}
@@ -4861,7 +4870,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               Скрытая карта мастера
                             </button>
                           </div>
-                          <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                          <div className="mt-4 grid grid-cols-2 gap-2 text-sm [&>*]:min-w-0">
                             {toolMeta.map((item) => (
                               <button
                                 key={item.value}
@@ -4872,7 +4881,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                       layerPalette[item.layer][0],
                                     );
                                 }}
-                                className={`rounded-2xl border px-3 py-2 ${tool === item.value ? "border-fuchsia-400 bg-fuchsia-500/15 text-white" : "border-white/10 text-slate-300"}`}
+                                className={`min-w-0 rounded-2xl border px-3 py-2 ${tool === item.value ? "border-fuchsia-400 bg-fuchsia-500/15 text-white" : "border-white/10 text-slate-300"}`}
                               >
                                 <AdaptiveLabel
                                   full={item.label}
@@ -5011,7 +5020,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                         {cellCoordinate(token.x, token.y)}
                                       </div>
                                     </div>
-                                    <span className="shrink-0 text-xs text-slate-300">
+                                    <span className="max-w-[7rem] truncate text-right text-xs text-slate-300 sm:max-w-none">
                                       HP {token.hp}/{token.maxHp}
                                     </span>
                                   </div>
@@ -5121,7 +5130,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   role === "gm"
                     ? {
                         order: gmPanelOrder.indexOf("party"),
-                        width: `min(100%, ${gmPanelWidths.party}px)`,
+                        gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.party)} / span ${getMasterPanelGridSpan(gmPanelWidths.party)}`,
                       }
                     : undefined
                 }
@@ -5133,7 +5142,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     onDragStart={(event) =>
                       handleDragStartMasterPanel("party", event)
                     }
-                    className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                    className="flex min-w-0 cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
                   >
                     <span className="font-medium text-white">
                       Панель мастера:{" "}
@@ -5589,7 +5598,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                     onOpen={handleStartLevelUp}
                                   />
                                   {selectedProgressionOptions ? (
-                                    <div className="grid gap-3 md:grid-cols-3">
+                                    <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
                                       <div className="rounded-2xl border border-white/8 px-3 py-3">
                                         <div className="text-xs uppercase tracking-wide text-slate-500">
                                           Class features
@@ -5664,12 +5673,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                             </div>
                           </div>
 
-                          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+                          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.9fr)]">
                             <div className="min-w-0">
                               <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">
                                 Характеристики и быстрые броски
                               </div>
-                              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+                              <div className="grid grid-cols-[repeat(auto-fit,minmax(88px,1fr))] gap-3">
                                 {statLabels.map((stat) => {
                                   const modifier = getAbilityModifier(
                                     selectedSheet.stats[stat.key],
@@ -5688,7 +5697,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                       <div className="mt-1 text-xs text-slate-400">
                                         mod {formatSignedModifier(modifier)}
                                       </div>
-                                      <div className="mt-3 grid gap-2">
+                                      <div className="mt-3 grid grid-cols-2 gap-2">
                                         <button
                                           type="button"
                                           onClick={() =>
@@ -5698,7 +5707,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                               `1d20${formatSignedModifier(modifier)}`,
                                             )
                                           }
-                                          className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[11px] font-medium text-cyan-100"
+                                          className="min-w-0 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[11px] font-medium text-cyan-100"
                                         >
                                           Check
                                         </button>
@@ -5711,7 +5720,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                               `1d20${formatSignedModifier(modifier)}`,
                                             )
                                           }
-                                          className="rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-2 py-1 text-[11px] font-medium text-fuchsia-100"
+                                          className="min-w-0 rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-2 py-1 text-[11px] font-medium text-fuchsia-100"
                                         >
                                           Save
                                         </button>
@@ -5738,7 +5747,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                   )}
                                 </div>
                               </div>
-                              <div className="mt-3 grid gap-2">
+                              <div className="mt-3 grid gap-2 sm:grid-cols-2">
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -5879,7 +5888,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               const resources = selectedSheetResources;
                               return (
                                 <div className="space-y-4">
-                                  <div className="grid gap-3 md:grid-cols-3">
+                                  <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
                                     {(resources.spellSlots ?? []).map(
                                       (slot, index) => (
                                         <div
@@ -5957,7 +5966,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                       ),
                                     )}
                                   </div>
-                                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                  <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3">
                                     {(
                                       [
                                         ["hitDice", "Hit dice"],
@@ -6050,7 +6059,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                       );
                                     })}
                                   </div>
-                                  <div className="grid gap-3 md:grid-cols-3">
+                                  <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
                                     <div className="rounded-2xl border border-white/8 bg-slate-900/60 px-3 py-3">
                                       <div className="text-xs uppercase tracking-wide text-slate-500">
                                         Death saves
@@ -6280,7 +6289,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   role === "gm"
                     ? {
                         order: gmPanelOrder.indexOf("initiative"),
-                        width: `min(100%, ${gmPanelWidths.initiative}px)`,
+                        gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.initiative)} / span ${getMasterPanelGridSpan(gmPanelWidths.initiative)}`,
                       }
                     : undefined
                 }
@@ -6292,7 +6301,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     onDragStart={(event) =>
                       handleDragStartMasterPanel("initiative", event)
                     }
-                    className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                    className="flex min-w-0 cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
                   >
                     <span className="font-medium text-white">
                       Панель мастера:{" "}
@@ -6629,12 +6638,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     setDraggedMasterPanel(null);
                     setDragOverMasterPanel(null);
                   }}
-                  style={{ order: gmPanelOrder.indexOf("tools") }}
+                  style={{
+                    order: gmPanelOrder.indexOf("tools"),
+                    gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)} / span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)}`,
+                  }}
                   className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""}`}
                 >
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                  <div
+                    className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]"
+                  >
                     <div
-                      style={{ width: `min(100%, ${gmPanelWidths.tools}px)` }}
                       className="space-y-2"
                     >
                       <div
@@ -6642,7 +6655,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         onDragStart={(event) =>
                           handleDragStartMasterPanel("tools", event)
                         }
-                        className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                        className="flex min-w-0 cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
                       >
                         <span className="font-medium text-white">
                           Панель мастера:{" "}
