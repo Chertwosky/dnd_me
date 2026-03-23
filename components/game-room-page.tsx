@@ -2277,6 +2277,15 @@ function AdaptiveLabel({
   );
 }
 
+
+function getGmPanelColumnSpan(width: number) {
+  if (width >= 620) return 12;
+  if (width >= 520) return 10;
+  if (width >= 420) return 8;
+  if (width >= 320) return 6;
+  return 4;
+}
+
 function CompactSection({
   title,
   description,
@@ -4762,7 +4771,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           <div
             className={
               role === "gm"
-                ? "flex flex-wrap items-start gap-4"
+                ? "gm-panel-grid"
                 : "grid gap-4 xl:grid-cols-1"
             }
           >
@@ -4786,9 +4795,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }}
                       style={{
                         order: gmPanelOrder.indexOf(panelId),
-                        width: `min(100%, ${gmPanelWidths[panelId]}px)`,
+                        ["--gm-panel-span" as string]: getGmPanelColumnSpan(
+                          gmPanelWidths[panelId],
+                        ),
                       }}
-                      className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === panelId ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                      className={`gm-panel-cell space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === panelId ? "ring-2 ring-fuchsia-400/60" : ""}`}
                     >
                       <div
                         draggable={role === "gm"}
@@ -5124,11 +5135,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   role === "gm"
                     ? {
                         order: gmPanelOrder.indexOf("party"),
-                        width: `min(100%, ${gmPanelWidths.party}px)`,
+                        ["--gm-panel-span" as string]: getGmPanelColumnSpan(
+                          gmPanelWidths.party,
+                        ),
                       }
                     : undefined
                 }
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                className={`gm-panel-cell space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""}`}
               >
                 {role === "gm" ? (
                   <div
@@ -6283,11 +6296,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   role === "gm"
                     ? {
                         order: gmPanelOrder.indexOf("initiative"),
-                        width: `min(100%, ${gmPanelWidths.initiative}px)`,
+                        ["--gm-panel-span" as string]: getGmPanelColumnSpan(
+                          gmPanelWidths.initiative,
+                        ),
                       }
                     : undefined
                 }
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "initiative" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "initiative" ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                className={`gm-panel-cell space-y-2 rounded-3xl ${draggedMasterPanel === "initiative" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "initiative" ? "ring-2 ring-fuchsia-400/60" : ""}`}
               >
                 {role === "gm" ? (
                   <div
@@ -6632,14 +6647,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     setDraggedMasterPanel(null);
                     setDragOverMasterPanel(null);
                   }}
-                  style={{ order: gmPanelOrder.indexOf("tools") }}
-                  className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                  style={{
+                    order: gmPanelOrder.indexOf("tools"),
+                    ["--gm-panel-span" as string]: getGmPanelColumnSpan(
+                      gmPanelWidths.tools,
+                    ),
+                  }}
+                  className={`gm-panel-cell space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""}`}
                 >
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                    <div
-                      style={{ width: `min(100%, ${gmPanelWidths.tools}px)` }}
-                      className="space-y-2"
-                    >
+                  <div className="grid gap-4 min-[1400px]:grid-cols-[minmax(0,1fr)_320px]">
+                    <div className="space-y-2">
                       <div
                         draggable
                         onDragStart={(event) =>
