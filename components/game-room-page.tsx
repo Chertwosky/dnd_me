@@ -215,6 +215,26 @@ type LootResult = {
   rolledGems?: string[];
 };
 
+type NpcQuickDraft = {
+  name: string;
+  short: string;
+  kind: Extract<TokenKind, "npc" | "monster">;
+  color: string;
+  hp: string;
+  ac: string;
+  speed: string;
+  x: string;
+  y: string;
+  gmOnly: boolean;
+};
+
+type RumorEntry = {
+  title: string;
+  text: string;
+  truth: "правда" | "полуправда" | "ложь";
+  hook: string;
+};
+
 type SavedRoomState = {
   mapName: string;
   mapState: MapState;
@@ -353,6 +373,91 @@ const tokenStatusCatalog: Array<{
     description: "накапливаемое истощение",
   },
 ];
+
+const npcQuickDraftDefault: NpcQuickDraft = {
+  name: "Стражник у ворот",
+  short: "SG",
+  kind: "npc",
+  color: "rgb(251 191 36)",
+  hp: "11",
+  ac: "13",
+  speed: "30",
+  x: "2",
+  y: "2",
+  gmOnly: false,
+};
+
+const rumorSubjects = [
+  "старый колодец",
+  "городская стража",
+  "портовый склад",
+  "дом советника",
+  "рыночная площадь",
+  "заброшенная часовня",
+  "трактир у ворот",
+  "канал под мостом",
+];
+
+const rumorActors = [
+  "контрабандисты",
+  "культисты",
+  "наёмники",
+  "воровская артель",
+  "жрецы",
+  "городские чиновники",
+  "охотники за реликвиями",
+  "местные подростки",
+];
+
+const rumorTwists = [
+  "ищут вход ниже уровня улиц",
+  "прячут свидетеля ночного убийства",
+  "передают шифры через уличных музыкантов",
+  "выкупают все карты старых подземелий",
+  "боятся звонить в колокол после заката",
+  "держат сделку с одним из капитанов стражи",
+  "разыскивают человека с необычной печатью на ладони",
+  "знают, где появится следующая магическая буря",
+];
+
+const rumorHooks = [
+  "Проверить место ночью и проследить, кто приходит первым.",
+  "Расспросить торговцев и сравнить версии с тем, что знают нищие дети.",
+  "Подбросить ложную приманку и посмотреть, кто на неё клюнет.",
+  "Попросить жрецов или архивариуса подтвердить старые записи.",
+  "Устроить наблюдение с крыши соседнего здания.",
+  "Нанять гонца и проверить, кто попытается перехватить сообщение.",
+];
+
+function createRumorsFromPrompt(prompt: string): RumorEntry[] {
+  const normalized = prompt.trim() || "город на границе цивилизации";
+  const words = normalized
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9\s-]/gi, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  const seedBase = words.join("") || normalized.toLowerCase();
+  const pick = <T,>(list: T[], offset: number) => {
+    const codeSum = Array.from(seedBase).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    return list[(codeSum + offset * 7) % list.length];
+  };
+
+  return Array.from({ length: 5 }, (_, index) => {
+    const focus = words[index % words.length] ?? normalized;
+    const subject = pick(rumorSubjects, index);
+    const actor = pick(rumorActors, index + 1);
+    const twist = pick(rumorTwists, index + 2);
+    const hook = pick(rumorHooks, index + 3);
+    const truth = (["правда", "полуправда", "ложь"] as const)[index % 3];
+
+    return {
+      title: `Слух ${index + 1}: ${subject}`,
+      text: `В городе шепчутся, что ${actor} связаны с темой «${focus}» и что ${subject} скрывает тех, кто ${twist}.`,
+      truth,
+      hook: hook.replace(/^./, (letter) => letter.toUpperCase()),
+    };
+  });
+}
 
 const randomEventPool = [
   {
@@ -2690,6 +2795,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [lootCrBand, setLootCrBand] = useState<LootCrBand>("0-4");
   const [lootResult, setLootResult] = useState<LootResult>(randomLootDefault);
   const [eventResult, setEventResult] = useState(randomEventPool[0]);
+  const [npcQuickDraft, setNpcQuickDraft] = useState<NpcQuickDraft>(npcQuickDraftDefault);
+  const [rumorPrompt, setRumorPrompt] = useState("Контрабанда в портовом городе, тайный культ под ратушей");
+  const [rumors, setRumors] = useState<RumorEntry[]>(() => createRumorsFromPrompt("Контрабанда в портовом городе, тайный культ под ратушей"));
   const [zoom, setZoom] = useState(1);
   const [gridColsInput, setGridColsInput] = useState(String(DEFAULT_COLS));
   const [gridRowsInput, setGridRowsInput] = useState(String(DEFAULT_ROWS));
@@ -3653,6 +3761,48 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       `Событие из dnd.su: ${nextEvent.title}. Ссылка: ${nextEvent.link}`,
     );
   };
+
+  const handleNpcQuickDraftChange = useCallback((key: keyof NpcQuickDraft, value: string | boolean) => {
+    setNpcQuickDraft((current) => ({ ...current, [key]: value }));
+  }, []);
+
+  const handleAddNpcToMap = useCallback(() => {
+    if (role !== "gm") return;
+    const name = npcQuickDraft.name.trim() || "Новый NPC";
+    const short = (npcQuickDraft.short.trim() || getTokenInitial(name)).slice(0, 3).toUpperCase();
+    const tokenId = `npc-${Date.now()}`;
+    const hp = Math.max(1, Number(npcQuickDraft.hp) || 1);
+    const ac = Math.max(1, Number(npcQuickDraft.ac) || 10);
+    const speed = Math.max(0, Number(npcQuickDraft.speed) || 30);
+    const x = clamp(Number(npcQuickDraft.x) || 0, 0, cols - 1);
+    const y = clamp(Number(npcQuickDraft.y) || 0, 0, rows - 1);
+    const nextToken: RoomToken = {
+      id: tokenId,
+      name,
+      short,
+      kind: npcQuickDraft.kind,
+      color: npcQuickDraft.color,
+      x,
+      y,
+      hp,
+      maxHp: hp,
+      ac,
+      speed,
+      owner: displayName || "GM",
+      roleOwner: "gm",
+      gmOnly: npcQuickDraft.gmOnly,
+      statuses: [],
+    };
+    setTokens((current) => [...current, nextToken]);
+    setSelectedTokenId(tokenId);
+    addJournalEntry("map", `${name} добавлен на карту в ${cellCoordinate(x, y)}.`);
+  }, [addJournalEntry, cols, displayName, npcQuickDraft, role, rows]);
+
+  const handleGenerateRumors = useCallback(() => {
+    const nextRumors = createRumorsFromPrompt(rumorPrompt);
+    setRumors(nextRumors);
+    addJournalEntry("event", `Сгенерированы слухи города по запросу мастера: ${rumorPrompt.trim() || "без уточнений"}.`);
+  }, [addJournalEntry, rumorPrompt]);
 
   const updateSelectedSheet = useCallback(
     (updater: (sheet: CharacterSheet) => CharacterSheet) => {
@@ -6699,8 +6849,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       </div>
                       <CompactSection
                         title="Инструменты мастера"
-                        description="Лут, события, заметка и броски спрятаны в один блок."
-                        badge="dnd.su only"
+                        description="Лут, события, быстрый NPC и слухи города собраны в один блок."
+                        badge="hybrid utilities"
                       >
                         <div className="mt-4 space-y-3 text-sm text-slate-300">
                           <div className="overflow-hidden rounded-2xl border border-white/8 px-4 py-3">
@@ -6796,6 +6946,61 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           >
                             Случайное событие
                           </button>
+
+                          <div className="rounded-2xl border border-white/8 bg-slate-950/40 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="font-medium text-white">Быстро добавить NPC на карту</div>
+                                <div className="mt-1 text-xs text-slate-400">Создаёт токен NPC/монстра сразу в текущей сцене.</div>
+                              </div>
+                              <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-wide text-slate-300">map tool</span>
+                            </div>
+                            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                              <input value={npcQuickDraft.name} onChange={(event) => handleNpcQuickDraftChange("name", event.target.value)} placeholder="Имя NPC" className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white" />
+                              <input value={npcQuickDraft.short} onChange={(event) => handleNpcQuickDraftChange("short", event.target.value)} placeholder="Короткая метка" className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white" />
+                              <select value={npcQuickDraft.kind} onChange={(event) => handleNpcQuickDraftChange("kind", event.target.value)} className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white">
+                                <option value="npc">NPC</option>
+                                <option value="monster">Монстр</option>
+                              </select>
+                              <input value={npcQuickDraft.color} onChange={(event) => handleNpcQuickDraftChange("color", event.target.value)} placeholder="rgb(...) или #hex" className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white" />
+                              <input value={npcQuickDraft.hp} onChange={(event) => handleNpcQuickDraftChange("hp", event.target.value)} placeholder="HP" className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white" />
+                              <input value={npcQuickDraft.ac} onChange={(event) => handleNpcQuickDraftChange("ac", event.target.value)} placeholder="AC" className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white" />
+                              <input value={npcQuickDraft.speed} onChange={(event) => handleNpcQuickDraftChange("speed", event.target.value)} placeholder="Скорость" className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white" />
+                              <div className="grid grid-cols-2 gap-3">
+                                <input value={npcQuickDraft.x} onChange={(event) => handleNpcQuickDraftChange("x", event.target.value)} placeholder="X" className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white" />
+                                <input value={npcQuickDraft.y} onChange={(event) => handleNpcQuickDraftChange("y", event.target.value)} placeholder="Y" className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white" />
+                              </div>
+                            </div>
+                            <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
+                              <input type="checkbox" checked={npcQuickDraft.gmOnly} onChange={(event) => handleNpcQuickDraftChange("gmOnly", event.target.checked)} />
+                              Скрыть токен от игроков до раскрытия
+                            </label>
+                            <button onClick={handleAddNpcToMap} className="mt-4 w-full rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950">Добавить NPC на карту</button>
+                          </div>
+
+                          <div className="rounded-2xl border border-white/8 bg-slate-950/40 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="font-medium text-white">Таблица слухов города</div>
+                                <div className="mt-1 text-xs text-slate-400">Мастер задаёт контекст, генератор возвращает 5 слухов для сцены.</div>
+                              </div>
+                              <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-wide text-slate-300">5 rumors</span>
+                            </div>
+                            <textarea value={rumorPrompt} onChange={(event) => setRumorPrompt(event.target.value)} rows={3} placeholder="Например: город на границе болот, исчезают лодочники, культ луны" className="mt-4 w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500" />
+                            <button onClick={handleGenerateRumors} className="mt-3 w-full rounded-full bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950">Сгенерировать 5 слухов</button>
+                            <div className="mt-4 space-y-3">
+                              {rumors.map((rumor) => (
+                                <div key={rumor.title} className="rounded-2xl border border-white/8 px-4 py-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="font-medium text-white">{rumor.title}</div>
+                                    <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-wide text-slate-300">{rumor.truth}</span>
+                                  </div>
+                                  <p className="mt-2 text-sm leading-6 text-slate-300">{rumor.text}</p>
+                                  <p className="mt-2 text-xs uppercase tracking-wide text-cyan-300">Хук: <span className="normal-case tracking-normal text-slate-400">{rumor.hook}</span></p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       </CompactSection>
                     </div>
