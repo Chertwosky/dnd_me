@@ -4810,7 +4810,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         ) : null}
 
         <section
-          className={`grid gap-3 ${role === "gm" ? "md:grid-cols-3 xl:grid-cols-6" : "md:grid-cols-2 xl:grid-cols-5"}`}
+          className={`grid gap-3 ${role === "gm" ? "sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" : "sm:grid-cols-2 xl:grid-cols-5"}`}
         >
           <div className="card px-4 py-3">
             <div className="text-xs uppercase tracking-wide text-slate-500">
@@ -4874,8 +4874,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           <div
             className={
               role === "gm"
-                ? "gm-panel-grid items-start"
-                : "grid gap-4 xl:grid-cols-1"
+                ? "grid gap-4 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)_minmax(0,360px)] xl:items-start"
+                : "grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)] xl:items-start"
             }
           >
             {role === "gm" ? (
@@ -4900,7 +4900,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         order: gmPanelOrder.indexOf(panelId),
                         gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths[panelId])} / span ${getMasterPanelGridSpan(gmPanelWidths[panelId])}`,
                       }}
-                      className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === panelId ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                      className={`space-y-2 rounded-3xl ${panelId === "admin" ? "xl:col-start-1" : "xl:col-start-3"} ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === panelId ? "ring-2 ring-fuchsia-400/60" : ""}`}
                     >
                       <div
                         draggable={role === "gm"}
@@ -4954,8 +4954,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       </div>
                       {panelId === "admin" ? (
                         <CompactSection
-                          title="Админ-панель мастера"
-                          description="Кисти, палитры и размер карты убраны в сворачиваемый блок."
+                          title="Левая панель мастера"
+                          description="Основные настройки карты и инструменты рисования вынесены в отдельную левую колонку."
                           badge="master only"
                           defaultOpen
                           className="xl:sticky xl:top-20"
@@ -5102,8 +5102,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         </CompactSection>
                       ) : (
                         <CompactSection
-                          title="Токены"
-                          description="Полный список токенов со статусами и обзором игроков."
+                          title="Правая панель токенов"
+                          description="Список токенов и статусов теперь живёт отдельно от основной комнаты, чтобы не перегружать сцену."
                           badge={`${tokens.length} шт.`}
                         >
                           <div className="mt-4 max-h-[680px] space-y-3 overflow-y-auto pr-1 text-sm">
@@ -5240,7 +5240,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }
                     : undefined
                 }
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                className={`space-y-2 rounded-3xl xl:col-start-3 ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""}`}
               >
                 {role === "gm" ? (
                   <div
@@ -5292,8 +5292,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   </div>
                 ) : null}
                 <CompactSection
-                  title="Панель персонажей группы"
-                  description="И игроки, и мастер могут загружать и просматривать карточки всей группы."
+                  title="Правая панель персонажей"
+                  description="Карточки группы вынесены в отдельную правую колонку, чтобы центр комнаты оставался чище."
                   badge="party roster"
                   defaultOpen
                 >
@@ -6399,7 +6399,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }
                     : undefined
                 }
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "initiative" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "initiative" ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                className={`space-y-2 rounded-3xl xl:col-start-3 ${draggedMasterPanel === "initiative" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "initiative" ? "ring-2 ring-fuchsia-400/60" : ""}`}
               >
                 {role === "gm" ? (
                   <div
@@ -6451,8 +6451,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   </div>
                 ) : null}
                 <CompactSection
-                  title="Инициатива и ход боя"
-                  description="Трекер работает поверх текущих токенов и сохраняется в JSON комнаты."
+                  title="Правая панель боя"
+                  description="Инициатива собрана рядом с карточками и токенами — всё боевое теперь в одной зоне."
                   badge="combat"
                 >
                   <div className="mt-4 flex flex-wrap gap-2 text-sm">
@@ -6748,7 +6748,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     order: gmPanelOrder.indexOf("tools"),
                     gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)} / span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)}`,
                   }}
-                  className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                  className={`space-y-2 rounded-3xl xl:col-start-1 ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""}`}
                 >
                   <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
                     <div className="space-y-2">
@@ -6800,8 +6800,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         />
                       </div>
                       <CompactSection
-                        title="Инструменты мастера"
-                        description="Лут, события, заметка и броски спрятаны в один блок."
+                        title="Левая панель утилит"
+                        description="Чат, заметки, лут и вспомогательные инструменты собраны в отдельной боковой колонке."
                         badge="dnd.su only"
                       >
                         <div className="mt-4 space-y-3 text-sm text-slate-300">
