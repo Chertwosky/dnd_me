@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type CSSProperties,
@@ -2260,16 +2261,78 @@ function resizeTiles(
 function AdaptiveLabel({
   full,
   short,
+  symbol,
   className,
 }: {
   full: string;
   short: string;
+  symbol?: string;
   className?: string;
 }) {
+  const containerRef = useRef<HTMLSpanElement | null>(null);
+  const [labelMode, setLabelMode] = useState<"full" | "short" | "symbol">(
+    "full",
+  );
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    const fallbackSymbol =
+      symbol ??
+      short.match(/[+\-–—÷×⌂]/)?.[0] ??
+      short.trim().charAt(0).toUpperCase() ??
+      full.trim().charAt(0).toUpperCase() ??
+      "•";
+
+    const updateLabelMode = (width: number) => {
+      if (width < 72) {
+        setLabelMode("symbol");
+        node.dataset.symbol = fallbackSymbol;
+        return;
+      }
+
+      if (width < 148) {
+        setLabelMode("short");
+        node.dataset.symbol = fallbackSymbol;
+        return;
+      }
+
+      setLabelMode("full");
+      node.dataset.symbol = fallbackSymbol;
+    };
+
+    updateLabelMode(node.getBoundingClientRect().width);
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      updateLabelMode(entry.contentRect.width);
+    });
+
+    resizeObserver.observe(node);
+
+    return () => resizeObserver.disconnect();
+  }, [full, short, symbol]);
+
   return (
-    <span className={className} title={full} aria-label={full}>
-      <span className="sm:hidden">{short}</span>
-      <span className="hidden sm:inline">{full}</span>
+    <span
+      ref={containerRef}
+      className={`inline-flex min-w-0 max-w-full items-center ${className ?? ""}`}
+      title={full}
+      aria-label={full}
+    >
+      <span className="block min-w-0 truncate">
+        {labelMode === "full"
+          ? full
+          : labelMode === "short"
+            ? short
+            : symbol ??
+              short.match(/[+\-–—÷×⌂]/)?.[0] ??
+              short.trim().charAt(0).toUpperCase() ??
+              full.trim().charAt(0).toUpperCase() ??
+              "•"}
+      </span>
     </span>
   );
 }
@@ -2295,9 +2358,11 @@ function CompactSection({
       open={defaultOpen}
     >
       <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-4 marker:content-none">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold text-white">{title}</h2>
+            <h2 className="truncate text-base font-semibold text-white">
+              {title}
+            </h2>
             {badge ? <span className="badge">{badge}</span> : null}
           </div>
           {description ? (
