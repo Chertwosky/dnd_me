@@ -4870,12 +4870,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
         </section>
 
-        <section className="space-y-4">
+        <section className="space-y-4 xl:grid xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)] xl:items-start xl:gap-4">
           <div
             className={
               role === "gm"
-                ? "gm-panel-grid items-start"
-                : "grid gap-4 xl:grid-cols-1"
+                ? "gm-panel-grid items-start xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto xl:pr-1"
+                : "grid gap-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto xl:pr-1"
             }
           >
             {role === "gm" ? (
@@ -7177,26 +7177,58 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               ) : null}
             </div>
           </div>
-          <div className="card sticky top-3 z-10 flex flex-wrap items-center gap-2 px-4 py-3 text-sm text-slate-200">
-            <span className="badge">Инструмент: {tool}</span>
-            <span className="badge">
-              Редактируется:{" "}
-              {activeBoard === "public" ? "публичная карта" : "скрытая карта"}
-            </span>
-            <span className="badge">
-              Видимость игроков:{" "}
-              {playerTokens
-                .map((token) => `${token.name} ${token.visionRadius ?? 3}`)
-                .join(" • ") || "нет"}
-            </span>
-          </div>
+          <div className="space-y-4 xl:min-w-0">
+            <div className="card sticky top-3 z-10 flex flex-wrap items-center gap-2 px-4 py-3 text-sm text-slate-200">
+              <span className="badge">Инструмент: {tool}</span>
+              <span className="badge">
+                Редактируется:{" "}
+                {activeBoard === "public" ? "публичная карта" : "скрытая карта"}
+              </span>
+              <span className="badge">
+                Видимость игроков:{" "}
+                {playerTokens
+                  .map((token) => `${token.name} ${token.visionRadius ?? 3}`)
+                  .join(" • ") || "нет"}
+              </span>
+            </div>
 
-          {role === "gm" ? (
-            <div className="space-y-4">
+            {role === "gm" ? (
+              <div className="space-y-4">
+                <div id="battle-board-public">
+                  <Board
+                    title="Публичная карта"
+                    subtitle="То, что увидят игроки с учётом публичных слоёв, fog of war и радиуса обзора игроков."
+                    cols={cols}
+                    rows={rows}
+                    tiles={mapState.publicTiles}
+                    tokens={visibleTokensForPlayers}
+                    visibleMask={playerVisibilityMask}
+                    zoom={zoom}
+                    onBoardPointerDown={handleBoardPointerDown("public")}
+                    onTokenPointerDown={handleTokenPointerDown}
+                    activeTokenId={activeInitiativeParticipant?.tokenId}
+                  />
+                </div>
+                <div id="battle-board-gm">
+                  <Board
+                    title="Скрытая карта мастера"
+                    subtitle="Здесь мастер держит НПС, ловушки, тайники и будущие сцены до их открытия игрокам."
+                    cols={cols}
+                    rows={rows}
+                    tiles={mapState.gmTiles}
+                    tokens={tokens}
+                    zoom={zoom}
+                    onBoardPointerDown={handleBoardPointerDown("gm")}
+                    onTokenPointerDown={handleTokenPointerDown}
+                    activeTokenId={activeInitiativeParticipant?.tokenId}
+                  />
+                </div>
+              </div>
+            ) : (
               <div id="battle-board-public">
                 <Board
-                  title="Публичная карта"
-                  subtitle="То, что увидят игроки с учётом публичных слоёв, fog of war и радиуса обзора игроков."
+                  title="Игровое поле"
+                  subtitle="Игрок видит только публичную карту и только те клетки, которые открывает обзор персонажей."
                   cols={cols}
                   rows={rows}
                   tiles={mapState.publicTiles}
@@ -7208,38 +7240,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   activeTokenId={activeInitiativeParticipant?.tokenId}
                 />
               </div>
-              <div id="battle-board-gm">
-                <Board
-                  title="Скрытая карта мастера"
-                  subtitle="Здесь мастер держит НПС, ловушки, тайники и будущие сцены до их открытия игрокам."
-                  cols={cols}
-                  rows={rows}
-                  tiles={mapState.gmTiles}
-                  tokens={tokens}
-                  zoom={zoom}
-                  onBoardPointerDown={handleBoardPointerDown("gm")}
-                  onTokenPointerDown={handleTokenPointerDown}
-                  activeTokenId={activeInitiativeParticipant?.tokenId}
-                />
-              </div>
-            </div>
-          ) : (
-            <div id="battle-board-public">
-              <Board
-                title="Игровое поле"
-                subtitle="Игрок видит только публичную карту и только те клетки, которые открывает обзор персонажей."
-                cols={cols}
-                rows={rows}
-                tiles={mapState.publicTiles}
-                tokens={visibleTokensForPlayers}
-                visibleMask={playerVisibilityMask}
-                zoom={zoom}
-                onBoardPointerDown={handleBoardPointerDown("public")}
-                onTokenPointerDown={handleTokenPointerDown}
-                activeTokenId={activeInitiativeParticipant?.tokenId}
-              />
-            </div>
-          )}
+            )}
+          </div>
         </section>
       </div>
       <LevelUpDrawer
