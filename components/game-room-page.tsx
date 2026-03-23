@@ -2260,16 +2260,19 @@ function resizeTiles(
 function AdaptiveLabel({
   full,
   short,
+  icon = "…",
   className,
 }: {
   full: string;
   short: string;
+  icon?: string;
   className?: string;
 }) {
   return (
-    <span className={className} title={full} aria-label={full}>
-      <span className="sm:hidden">{short}</span>
-      <span className="hidden sm:inline">{full}</span>
+    <span className={`adaptive-label ${className ?? ""}`.trim()} title={full} aria-label={full}>
+      <span className="adaptive-label__icon" aria-hidden="true">{icon}</span>
+      <span className="adaptive-label__short">{short}</span>
+      <span className="adaptive-label__full">{full}</span>
     </span>
   );
 }
@@ -4793,7 +4796,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           role === "gm" &&
                           handleDragStartMasterPanel(panelId, event)
                         }
-                        className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                        className="flex min-w-0 cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
                       >
                         <span className="font-medium text-white">
                           Панель мастера:{" "}
@@ -4861,7 +4864,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               Скрытая карта мастера
                             </button>
                           </div>
-                          <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                          <div className="mt-4 grid grid-cols-2 gap-2 text-sm [&>*]:min-w-0">
                             {toolMeta.map((item) => (
                               <button
                                 key={item.value}
@@ -4872,7 +4875,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                       layerPalette[item.layer][0],
                                     );
                                 }}
-                                className={`rounded-2xl border px-3 py-2 ${tool === item.value ? "border-fuchsia-400 bg-fuchsia-500/15 text-white" : "border-white/10 text-slate-300"}`}
+                                className={`min-w-0 rounded-2xl border px-3 py-2 ${tool === item.value ? "border-fuchsia-400 bg-fuchsia-500/15 text-white" : "border-white/10 text-slate-300"}`}
                               >
                                 <AdaptiveLabel
                                   full={item.label}
@@ -5011,7 +5014,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                         {cellCoordinate(token.x, token.y)}
                                       </div>
                                     </div>
-                                    <span className="shrink-0 text-xs text-slate-300">
+                                    <span className="max-w-[7rem] truncate text-right text-xs text-slate-300 sm:max-w-none">
                                       HP {token.hp}/{token.maxHp}
                                     </span>
                                   </div>
@@ -5133,7 +5136,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     onDragStart={(event) =>
                       handleDragStartMasterPanel("party", event)
                     }
-                    className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                    className="flex min-w-0 cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
                   >
                     <span className="font-medium text-white">
                       Панель мастера:{" "}
@@ -6292,7 +6295,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     onDragStart={(event) =>
                       handleDragStartMasterPanel("initiative", event)
                     }
-                    className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                    className="flex min-w-0 cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
                   >
                     <span className="font-medium text-white">
                       Панель мастера:{" "}
@@ -6642,7 +6645,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         onDragStart={(event) =>
                           handleDragStartMasterPanel("tools", event)
                         }
-                        className="flex cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
+                        className="flex min-w-0 cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
                       >
                         <span className="font-medium text-white">
                           Панель мастера:{" "}
