@@ -2736,6 +2736,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     "контрабанда в доках и пропавший сборщик налогов",
   );
   const [rumorResults, setRumorResults] = useState<string[]>([]);
+  const [isGeneratingRumors, setIsGeneratingRumors] = useState(false);
+  const [rumorError, setRumorError] = useState<string | null>(null);
   const [journal, setJournal] = useState<JournalEntry[]>([
     {
       id: "j1",
@@ -4409,15 +4411,48 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     tokens,
   ]);
 
-  const handleGenerateRumors = useCallback(() => {
-    if (role !== "gm") return;
-    const rumors = buildRumorTable(rumorPromptInput);
-    setRumorResults(rumors);
-    addJournalEntry(
-      "event",
-      `Сгенерирована таблица слухов для темы: ${rumorPromptInput.trim() || "городские слухи"}.`,
-    );
-  }, [addJournalEntry, role, rumorPromptInput]);
+  const handleGenerateRumors = useCallback(async () => {
+    if (role !== "gm" || isGeneratingRumors) return;
+
+    const prompt = rumorPromptInput.trim();
+    if (!prompt) {
+      setRumorError("Введите тему или вводную для слухов.");
+      return;
+    }
+
+    setIsGeneratingRumors(true);
+    setRumorError(null);
+
+    try {
+      const response = await fetch("/api/rumors", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { rumors?: string[]; error?: string; details?: string }
+        | null;
+
+      if (!response.ok || !payload?.rumors || payload.rumors.length !== 5) {
+        const fallbackMessage = payload?.error || "Не удалось получить слухи от ассистента.";
+        throw new Error(fallbackMessage);
+      }
+
+      setRumorResults(payload.rumors);
+      addJournalEntry(
+        "event",
+        `Ассистент сгенерировал таблицу слухов для темы: ${prompt}.`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не удалось получить слухи от ассистента.";
+      setRumorError(message);
+    } finally {
+      setIsGeneratingRumors(false);
+    }
+  }, [addJournalEntry, isGeneratingRumors, role, rumorPromptInput]);
 
   const handleImportCharacterJson = async (
     event: ChangeEvent<HTMLInputElement>,
@@ -7001,8 +7036,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                   Таблица слухов города
                                 </div>
                                 <div className="mt-1 text-sm text-slate-400">
-                                  Введите запрос как для мастера, и блок вернёт
-                                  5 готовых слухов в городском стиле.
+                                  Введите запрос как для мастера — сайт отправит его
+                                  ассистенту, а ответ вернёт 5 готовых слухов в городском стиле.
                                 </div>
                               </div>
                               <span className="badge">5 rumors</span>
@@ -7018,10 +7053,18 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                             />
                             <button
                               onClick={handleGenerateRumors}
-                              className="mt-3 rounded-full bg-cyan-500 px-5 py-3 text-sm font-medium text-slate-950"
+                              disabled={isGeneratingRumors}
+                              className="mt-3 rounded-full bg-cyan-500 px-5 py-3 text-sm font-medium text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              Сгенерировать 5 слухов
+                              {isGeneratingRumors
+                                ? "Ассистент пишет слухи..."
+                                : "Сгенерировать 5 слухов"}
                             </button>
+                            {rumorError ? (
+                              <div className="mt-3 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                                {rumorError}
+                              </div>
+                            ) : null}
                             <div className="mt-4 space-y-2">
                               {rumorResults.length ? (
                                 rumorResults.map((rumor, index) => (
