@@ -1886,6 +1886,30 @@ function getTokenInitial(name: string) {
   return name.trim().charAt(0).toUpperCase() || "P";
 }
 
+function hexFromColorString(color: string) {
+  if (color.startsWith("#")) return color;
+  const match = color.match(/rgb\((\d+)\s+(\d+)\s+(\d+)\)/i);
+  if (!match) return "#fbbf24";
+  return `#${match
+    .slice(1)
+    .map((channel) => Number(channel).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function buildRumorTable(prompt: string) {
+  const topic = prompt.trim() || "город на грани неприятностей";
+  const normalizedTopic = topic.replace(/[.!?]+$/u, "");
+  const lowerTopic = normalizedTopic.toLowerCase();
+
+  return [
+    `Говорят, что в районе ${normalizedTopic} по ночам скупают старые карты и долговые расписки, словно кто-то готовит тихий передел влияния.`,
+    `В трактирах шепчутся, что местная стража получила негласный приказ не вмешиваться в дела, связанные с ${lowerTopic}, до особого сигнала сверху.`,
+    `Купцы уверяют, будто история про ${lowerTopic} — лишь ширма: настоящий интерес вызывает человек, который внезапно начал щедро платить за молчание свидетелей.`,
+    `Среди ремесленников ползёт слух, что из-за ${lowerTopic} скоро подорожают редкие припасы, а значит кто-то заранее копит ресурсы перед крупным событием.`,
+    `Самые суеверные клянутся, что ${lowerTopic} уже влияет на настроение всего города: люди чаще ссорятся, пропадают гонцы и даже храмовые служители выглядят настороженно.`,
+  ];
+}
+
 function readNestedString(source: unknown, paths: string[][], fallback = "") {
   if (!source || typeof source !== "object") return fallback;
 
@@ -2275,8 +2299,14 @@ function AdaptiveLabel({
   className?: string;
 }) {
   return (
-    <span className={`adaptive-label ${className ?? ""}`.trim()} title={full} aria-label={full}>
-      <span className="adaptive-label__icon" aria-hidden="true">{icon}</span>
+    <span
+      className={`adaptive-label ${className ?? ""}`.trim()}
+      title={full}
+      aria-label={full}
+    >
+      <span className="adaptive-label__icon" aria-hidden="true">
+        {icon}
+      </span>
       <span className="adaptive-label__short">{short}</span>
       <span className="adaptive-label__full">{full}</span>
     </span>
@@ -2695,6 +2725,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [gridRowsInput, setGridRowsInput] = useState(String(DEFAULT_ROWS));
   const [mapPresetName, setMapPresetName] = useState("Сцена 1");
   const [widgetUrl, setWidgetUrl] = useState(DEFAULT_WIDGET_URL);
+  const [npcNameInput, setNpcNameInput] = useState("Ночной информатор");
+  const [npcKindInput, setNpcKindInput] = useState<TokenKind>("npc");
+  const [npcColorInput, setNpcColorInput] = useState("rgb(251 191 36)");
+  const [npcHpInput, setNpcHpInput] = useState("11");
+  const [npcAcInput, setNpcAcInput] = useState("12");
+  const [npcSpeedInput, setNpcSpeedInput] = useState("30");
+  const [npcPlacementBoard, setNpcPlacementBoard] = useState<BoardKind>("gm");
+  const [rumorPromptInput, setRumorPromptInput] = useState(
+    "контрабанда в доках и пропавший сборщик налогов",
+  );
+  const [rumorResults, setRumorResults] = useState<string[]>([]);
   const [journal, setJournal] = useState<JournalEntry[]>([
     {
       id: "j1",
@@ -4312,6 +4353,71 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setJoinStep("ready");
     addJournalEntry("sheet", `${displayName} создал новый лист персонажа.`);
   };
+
+  const handleAddNpcToMap = useCallback(() => {
+    if (role !== "gm") return;
+
+    const trimmedName = npcNameInput.trim() || "Новый NPC";
+    const npcIndex =
+      tokens.filter((token) => token.kind === "npc" || token.kind === "monster")
+        .length + 1;
+    const prefix = npcKindInput === "monster" ? "monster" : "npc";
+    const nextToken: RoomToken = {
+      id: `${prefix}-${Date.now()}`,
+      name: trimmedName,
+      short: getTokenInitial(trimmedName),
+      kind: npcKindInput,
+      color: npcColorInput,
+      x:
+        npcPlacementBoard === "gm"
+          ? clamp(cols - 2, 0, cols - 1)
+          : clamp(1 + (npcIndex % 5), 0, cols - 1),
+      y:
+        npcPlacementBoard === "gm"
+          ? clamp(1 + (npcIndex % 4), 0, rows - 1)
+          : clamp(rows - 2, 0, rows - 1),
+      hp: Number(npcHpInput) || 1,
+      maxHp: Number(npcHpInput) || 1,
+      ac: Number(npcAcInput) || 10,
+      speed: Number(npcSpeedInput) || 30,
+      owner: displayName || "GM",
+      roleOwner: "gm",
+      gmOnly: npcPlacementBoard === "gm",
+      visionRadius: npcPlacementBoard === "gm" ? 0 : 3,
+      statuses: [],
+    };
+
+    setTokens((current) => [...current, nextToken]);
+    setSelectedTokenId(nextToken.id);
+    addJournalEntry(
+      "map",
+      `${trimmedName} добавлен на ${npcPlacementBoard === "gm" ? "скрытую карту мастера" : "публичную карту"} как ${npcKindInput === "monster" ? "монстр" : "NPC"}.`,
+    );
+  }, [
+    addJournalEntry,
+    cols,
+    displayName,
+    npcAcInput,
+    npcColorInput,
+    npcHpInput,
+    npcKindInput,
+    npcNameInput,
+    npcPlacementBoard,
+    npcSpeedInput,
+    role,
+    rows,
+    tokens,
+  ]);
+
+  const handleGenerateRumors = useCallback(() => {
+    if (role !== "gm") return;
+    const rumors = buildRumorTable(rumorPromptInput);
+    setRumorResults(rumors);
+    addJournalEntry(
+      "event",
+      `Сгенерирована таблица слухов для темы: ${rumorPromptInput.trim() || "городские слухи"}.`,
+    );
+  }, [addJournalEntry, role, rumorPromptInput]);
 
   const handleImportCharacterJson = async (
     event: ChangeEvent<HTMLInputElement>,
@@ -6644,12 +6750,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   }}
                   className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""}`}
                 >
-                  <div
-                    className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]"
-                  >
-                    <div
-                      className="space-y-2"
-                    >
+                  <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+                    <div className="space-y-2">
                       <div
                         draggable
                         onDragStart={(event) =>
@@ -6796,6 +6898,151 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           >
                             Случайное событие
                           </button>
+
+                          <div className="rounded-2xl border border-amber-400/20 bg-amber-500/5 px-4 py-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="font-medium text-white">
+                                  Быстро добавить NPC на карту
+                                </div>
+                                <div className="mt-1 text-sm text-slate-400">
+                                  Мастер задаёт параметры и сразу получает новый
+                                  токен на публичной или скрытой карте.
+                                </div>
+                              </div>
+                              <span className="badge">NPC</span>
+                            </div>
+                            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                              <input
+                                value={npcNameInput}
+                                onChange={(event) =>
+                                  setNpcNameInput(event.target.value)
+                                }
+                                placeholder="Имя NPC"
+                                className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                              />
+                              <select
+                                value={npcKindInput}
+                                onChange={(event) =>
+                                  setNpcKindInput(
+                                    event.target.value as TokenKind,
+                                  )
+                                }
+                                className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                              >
+                                <option value="npc">NPC</option>
+                                <option value="monster">Монстр</option>
+                                <option value="object">Объект</option>
+                              </select>
+                              <input
+                                value={npcHpInput}
+                                onChange={(event) =>
+                                  setNpcHpInput(event.target.value)
+                                }
+                                placeholder="HP"
+                                className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                              />
+                              <input
+                                value={npcAcInput}
+                                onChange={(event) =>
+                                  setNpcAcInput(event.target.value)
+                                }
+                                placeholder="AC"
+                                className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                              />
+                              <input
+                                value={npcSpeedInput}
+                                onChange={(event) =>
+                                  setNpcSpeedInput(event.target.value)
+                                }
+                                placeholder="Speed"
+                                className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                              />
+                              <select
+                                value={npcPlacementBoard}
+                                onChange={(event) =>
+                                  setNpcPlacementBoard(
+                                    event.target.value as BoardKind,
+                                  )
+                                }
+                                className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                              >
+                                <option value="gm">
+                                  Скрытая карта мастера
+                                </option>
+                                <option value="public">Публичная карта</option>
+                              </select>
+                            </div>
+                            <div className="mt-3 flex items-center gap-3">
+                              <label className="flex-1 rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-xs uppercase tracking-wide text-slate-400">
+                                Цвет токена
+                                <input
+                                  type="color"
+                                  value={hexFromColorString(npcColorInput)}
+                                  onChange={(event) =>
+                                    setNpcColorInput(event.target.value)
+                                  }
+                                  className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-transparent"
+                                />
+                              </label>
+                              <button
+                                onClick={handleAddNpcToMap}
+                                className="rounded-full bg-amber-400 px-5 py-3 text-sm font-medium text-slate-950"
+                              >
+                                Добавить на карту
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/5 px-4 py-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="font-medium text-white">
+                                  Таблица слухов города
+                                </div>
+                                <div className="mt-1 text-sm text-slate-400">
+                                  Введите запрос как для мастера, и блок вернёт
+                                  5 готовых слухов в городском стиле.
+                                </div>
+                              </div>
+                              <span className="badge">5 rumors</span>
+                            </div>
+                            <textarea
+                              value={rumorPromptInput}
+                              onChange={(event) =>
+                                setRumorPromptInput(event.target.value)
+                              }
+                              rows={3}
+                              placeholder="Например: культ под рынком, пропавший магистр и тревога в порту"
+                              className="mt-4 w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none"
+                            />
+                            <button
+                              onClick={handleGenerateRumors}
+                              className="mt-3 rounded-full bg-cyan-500 px-5 py-3 text-sm font-medium text-slate-950"
+                            >
+                              Сгенерировать 5 слухов
+                            </button>
+                            <div className="mt-4 space-y-2">
+                              {rumorResults.length ? (
+                                rumorResults.map((rumor, index) => (
+                                  <div
+                                    key={`${index}-${rumor}`}
+                                    className="rounded-2xl border border-white/8 bg-slate-950/40 px-4 py-3 text-sm leading-6 text-slate-200"
+                                  >
+                                    <span className="mr-2 font-semibold text-cyan-300">
+                                      {index + 1}.
+                                    </span>
+                                    {rumor}
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-4 text-sm text-slate-400">
+                                  Пока пусто. Введите тему города, фракцию,
+                                  кризис или загадку — и получите 5 слухов.
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </CompactSection>
                     </div>
