@@ -34,18 +34,21 @@ function collectResponseText(payload: OpenAIResponse): string {
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "OPENAI_API_KEY is not configured on the server." },
-      { status: 500 },
-    );
-  }
-
   const body = (await request.json().catch(() => null)) as
-    | { prompt?: unknown }
+    | { prompt?: unknown; apiKey?: unknown }
     | null;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  const apiKey =
+    typeof body?.apiKey === "string" && body.apiKey.trim()
+      ? body.apiKey.trim()
+      : process.env.OPENAI_API_KEY?.trim() || "";
+
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "API key is required." },
+      { status: 400 },
+    );
+  }
 
   if (!prompt) {
     return NextResponse.json(

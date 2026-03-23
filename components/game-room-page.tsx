@@ -2736,6 +2736,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     "контрабанда в доках и пропавший сборщик налогов",
   );
   const [rumorResults, setRumorResults] = useState<string[]>([]);
+  const [rumorApiKeyInput, setRumorApiKeyInput] = useState("");
   const [isGeneratingRumors, setIsGeneratingRumors] = useState(false);
   const [rumorError, setRumorError] = useState<string | null>(null);
   const [journal, setJournal] = useState<JournalEntry[]>([
@@ -4420,6 +4421,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       return;
     }
 
+    const apiKey = rumorApiKeyInput.trim();
+    if (!apiKey) {
+      setRumorError("Введите API-ключ для генерации слухов.");
+      return;
+    }
+
     setIsGeneratingRumors(true);
     setRumorError(null);
 
@@ -4429,7 +4436,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, apiKey }),
       });
 
       const payload = (await response.json().catch(() => null)) as
@@ -4452,7 +4459,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     } finally {
       setIsGeneratingRumors(false);
     }
-  }, [addJournalEntry, isGeneratingRumors, role, rumorPromptInput]);
+  }, [
+    addJournalEntry,
+    isGeneratingRumors,
+    role,
+    rumorApiKeyInput,
+    rumorPromptInput,
+  ]);
 
   const handleImportCharacterJson = async (
     event: ChangeEvent<HTMLInputElement>,
@@ -7036,11 +7049,30 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                   Таблица слухов города
                                 </div>
                                 <div className="mt-1 text-sm text-slate-400">
-                                  Введите запрос как для мастера — сайт отправит его
-                                  ассистенту, а ответ вернёт 5 готовых слухов в городском стиле.
+                                  Укажите API-ключ и запрос мастера — сайт отправит
+                                  их ассистенту, а ответ вернёт 5 готовых слухов в
+                                  городском стиле.
                                 </div>
                               </div>
                               <span className="badge">5 rumors</span>
+                            </div>
+                            <label className="mt-4 block text-xs uppercase tracking-wide text-slate-400">
+                              API-ключ ассистента
+                              <input
+                                type="password"
+                                value={rumorApiKeyInput}
+                                onChange={(event) =>
+                                  setRumorApiKeyInput(event.target.value)
+                                }
+                                placeholder="sk-..."
+                                autoComplete="off"
+                                spellCheck={false}
+                                className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm normal-case tracking-normal text-white outline-none"
+                              />
+                            </label>
+                            <div className="mt-2 text-xs text-slate-500">
+                              Ключ не показывается в интерфейсе и используется для
+                              текущего запроса генерации.
                             </div>
                             <textarea
                               value={rumorPromptInput}
