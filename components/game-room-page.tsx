@@ -2561,7 +2561,7 @@ function Board({
   const minWidth = Math.max(600, cols * 44);
 
   return (
-    <div className="card p-4">
+    <div className="card overflow-hidden p-4 shadow-[0_20px_60px_rgba(2,6,23,0.45)]">
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-white">{title}</h2>
@@ -4870,12 +4870,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
         </section>
 
-        <section className="space-y-4">
+        <section className="flex flex-col gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,460px)]">
           <div
             className={
               role === "gm"
-                ? "gm-panel-grid items-start"
-                : "grid gap-4 xl:grid-cols-1"
+                ? "order-2 xl:order-2 xl:col-start-2 xl:row-span-2 xl:sticky xl:top-4 xl:max-h-[calc(100vh-1.5rem)] xl:overflow-y-auto xl:pr-1 gm-panel-grid items-start"
+                : "order-2 grid gap-4 xl:order-2 xl:col-start-2 xl:sticky xl:top-4 xl:max-h-[calc(100vh-1.5rem)] xl:overflow-y-auto xl:pr-1 xl:grid-cols-1"
             }
           >
             {role === "gm" ? (
@@ -5295,7 +5295,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   title="Панель персонажей группы"
                   description="И игроки, и мастер могут загружать и просматривать карточки всей группы."
                   badge="party roster"
-                  defaultOpen
                 >
                   <div className="mt-4 flex flex-wrap gap-3 [&>*]:min-w-0">
                     <button
@@ -7051,7 +7050,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       title="Быстрые действия"
                       description="Чат и кубы собраны в один компактный вертикальный стек."
                       badge="utility"
-                      defaultOpen
                       className="h-fit"
                     >
                       <div className="space-y-4">
@@ -7177,7 +7175,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               ) : null}
             </div>
           </div>
-          <div className="card sticky top-3 z-10 flex flex-wrap items-center gap-2 px-4 py-3 text-sm text-slate-200">
+          <div className="order-1 card sticky top-3 z-10 flex flex-wrap items-center gap-2 px-4 py-3 text-sm text-slate-200 xl:col-start-1">
             <span className="badge">Инструмент: {tool}</span>
             <span className="badge">
               Редактируется:{" "}
@@ -7192,7 +7190,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
 
           {role === "gm" ? (
-            <div className="space-y-4">
+            <div className="order-1 space-y-4 xl:col-start-1">
               <div id="battle-board-public">
                 <Board
                   title="Публичная карта"
@@ -7224,7 +7222,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               </div>
             </div>
           ) : (
-            <div id="battle-board-public">
+            <div id="battle-board-public" className="order-1 xl:col-start-1">
               <Board
                 title="Игровое поле"
                 subtitle="Игрок видит только публичную карту и только те клетки, которые открывает обзор персонажей."
