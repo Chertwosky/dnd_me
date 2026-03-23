@@ -8,6 +8,7 @@ import {
   useState,
   type ChangeEvent,
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -4179,15 +4180,24 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     [],
   );
 
-  const handleDragStartMasterPanel = useCallback((panelId: MasterPanelId) => {
-    setDraggedMasterPanel(panelId);
-  }, []);
+  const handleDragStartMasterPanel = useCallback(
+    (panelId: MasterPanelId, event: ReactDragEvent<HTMLDivElement>) => {
+      setDraggedMasterPanel(panelId);
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", panelId);
+    },
+    [],
+  );
 
   const handleDropMasterPanel = useCallback(
-    (targetId: MasterPanelId) => {
-      if (!draggedMasterPanel) return;
+    (targetId: MasterPanelId, event: ReactDragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const draggedPanelId =
+        draggedMasterPanel ||
+        (event.dataTransfer.getData("text/plain") as MasterPanelId);
+      if (!draggedPanelId) return;
       setGmPanelOrder((current) =>
-        movePanelInOrder(current, draggedMasterPanel, targetId),
+        movePanelInOrder(current, draggedPanelId, targetId),
       );
       setDraggedMasterPanel(null);
     },
@@ -4750,9 +4760,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     <div
                       key={panelId}
                       draggable
-                      onDragStart={() => handleDragStartMasterPanel(panelId)}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => handleDropMasterPanel(panelId)}
+                      onDragStart={(event) =>
+                        handleDragStartMasterPanel(panelId, event)
+                      }
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={(event) => handleDropMasterPanel(panelId, event)}
                       onDragEnd={() => setDraggedMasterPanel(null)}
                       style={{
                         order: gmPanelOrder.indexOf(panelId),
@@ -5074,11 +5089,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             >
               <div
                 draggable={role === "gm"}
-                onDragStart={() =>
-                  role === "gm" && handleDragStartMasterPanel("party")
+                onDragStart={(event) =>
+                  role === "gm" && handleDragStartMasterPanel("party", event)
                 }
-                onDragOver={(event) => role === "gm" && event.preventDefault()}
-                onDrop={() => role === "gm" && handleDropMasterPanel("party")}
+                onDragOver={(event) => {
+                  if (role !== "gm") return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) =>
+                  role === "gm" && handleDropMasterPanel("party", event)
+                }
                 onDragEnd={() => setDraggedMasterPanel(null)}
                 style={
                   role === "gm"
@@ -6223,12 +6244,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
               <div
                 draggable={role === "gm"}
-                onDragStart={() =>
-                  role === "gm" && handleDragStartMasterPanel("initiative")
+                onDragStart={(event) =>
+                  role === "gm" &&
+                  handleDragStartMasterPanel("initiative", event)
                 }
-                onDragOver={(event) => role === "gm" && event.preventDefault()}
-                onDrop={() =>
-                  role === "gm" && handleDropMasterPanel("initiative")
+                onDragOver={(event) => {
+                  if (role !== "gm") return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) =>
+                  role === "gm" && handleDropMasterPanel("initiative", event)
                 }
                 onDragEnd={() => setDraggedMasterPanel(null)}
                 style={
@@ -6571,9 +6597,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               {role === "gm" ? (
                 <div
                   draggable
-                  onDragStart={() => handleDragStartMasterPanel("tools")}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => handleDropMasterPanel("tools")}
+                  onDragStart={(event) =>
+                    handleDragStartMasterPanel("tools", event)
+                  }
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(event) => handleDropMasterPanel("tools", event)}
                   onDragEnd={() => setDraggedMasterPanel(null)}
                   style={{ order: gmPanelOrder.indexOf("tools") }}
                   className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""}`}
