@@ -2764,6 +2764,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     SavedCharacterPreset[]
   >([]);
   const [customXpInput, setCustomXpInput] = useState("0");
+  const [isLeftRoomPanelOpen, setIsLeftRoomPanelOpen] = useState(false);
+  const [isRightRoomPanelOpen, setIsRightRoomPanelOpen] = useState(false);
   const [levelRollbackSnapshots, setLevelRollbackSnapshots] = useState<
     Record<string, CharacterSheet[]>
   >({});
@@ -4870,14 +4872,70 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
         </section>
 
-        <section className="space-y-4 xl:grid xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)] xl:items-start xl:gap-4">
+        <section className="relative space-y-4">
+          {isLeftRoomPanelOpen || isRightRoomPanelOpen ? (
+            <button
+              type="button"
+              aria-label="Закрыть боковые панели"
+              onClick={() => {
+                setIsLeftRoomPanelOpen(false);
+                setIsRightRoomPanelOpen(false);
+              }}
+              className="fixed inset-0 z-30 bg-slate-950/65 backdrop-blur-sm"
+            />
+          ) : null}
+
+          <div className="sticky top-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/8 bg-slate-950/70 px-4 py-3 backdrop-blur">
+            <div>
+              <div className="text-sm font-medium text-white">
+                Комната в фокусе
+              </div>
+              <div className="text-xs text-slate-400">
+                Основное поле остаётся в центре, панели выезжают по кнопке.
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setIsLeftRoomPanelOpen((current) => !current)}
+                className={`rounded-full border px-4 py-2 text-sm transition ${isLeftRoomPanelOpen ? "border-fuchsia-400 bg-fuchsia-500/15 text-white" : "border-white/10 text-slate-200 hover:border-white/20"}`}
+              >
+                {isLeftRoomPanelOpen ? "Скрыть слева" : "Открыть слева"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRightRoomPanelOpen((current) => !current)}
+                className={`rounded-full border px-4 py-2 text-sm transition ${isRightRoomPanelOpen ? "border-cyan-400 bg-cyan-500/15 text-white" : "border-white/10 text-slate-200 hover:border-white/20"}`}
+              >
+                {isRightRoomPanelOpen ? "Скрыть справа" : "Открыть справа"}
+              </button>
+            </div>
+          </div>
+
           <div
             className={
               role === "gm"
-                ? "gm-panel-grid items-start xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto xl:pr-1"
-                : "grid gap-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto xl:pr-1"
+                ? `gm-panel-grid fixed inset-y-0 left-0 z-40 w-[min(92vw,420px)] content-start overflow-y-auto border-r border-white/10 bg-slate-950/95 px-3 pb-6 pt-20 shadow-[24px_0_80px_rgba(15,23,42,0.55)] backdrop-blur-xl transition-transform duration-300 ${isLeftRoomPanelOpen ? "translate-x-0" : "-translate-x-[105%]"}`
+                : `grid gap-4 fixed inset-y-0 left-0 z-40 w-[min(92vw,420px)] content-start overflow-y-auto border-r border-white/10 bg-slate-950/95 px-3 pb-6 pt-20 shadow-[24px_0_80px_rgba(15,23,42,0.55)] backdrop-blur-xl transition-transform duration-300 ${isLeftRoomPanelOpen ? "translate-x-0" : "-translate-x-[105%]"}`
             }
           >
+            <div className="sticky top-0 z-10 mb-3 flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-3 text-sm text-slate-300 backdrop-blur">
+              <div>
+                <div className="font-medium text-white">
+                  Левая панель комнаты
+                </div>
+                <div className="text-xs text-slate-400">
+                  Админка, токены, бой и служебные инструменты.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLeftRoomPanelOpen(false)}
+                className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-200"
+              >
+                Закрыть
+              </button>
+            </div>
             {role === "gm" ? (
               <div className="contents">
                 {gmPanelOrder
@@ -5217,10 +5275,27 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             <div
               className={
                 role === "gm"
-                  ? "contents"
-                  : "min-w-0 flex flex-col gap-4 xl:col-span-1"
+                  ? `fixed inset-y-0 right-0 z-40 w-[min(92vw,460px)] overflow-y-auto border-l border-white/10 bg-slate-950/95 px-3 pb-6 pt-20 shadow-[-24px_0_80px_rgba(15,23,42,0.55)] backdrop-blur-xl transition-transform duration-300 ${isRightRoomPanelOpen ? "translate-x-0" : "translate-x-[105%]"}`
+                  : `fixed inset-y-0 right-0 z-40 w-[min(92vw,460px)] overflow-y-auto border-l border-white/10 bg-slate-950/95 px-3 pb-6 pt-20 shadow-[-24px_0_80px_rgba(15,23,42,0.55)] backdrop-blur-xl transition-transform duration-300 ${isRightRoomPanelOpen ? "translate-x-0" : "translate-x-[105%]"}`
               }
             >
+              <div className="sticky top-0 z-10 mb-3 flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-3 text-sm text-slate-300 backdrop-blur">
+                <div>
+                  <div className="font-medium text-white">
+                    Правая панель комнаты
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    Листы персонажей и работа с партией.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRightRoomPanelOpen(false)}
+                  className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-200"
+                >
+                  Закрыть
+                </button>
+              </div>
               <div
                 onDragOver={(event) =>
                   role === "gm" && handleDragOverMasterPanel("party", event)
