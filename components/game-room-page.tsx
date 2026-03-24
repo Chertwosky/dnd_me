@@ -4885,32 +4885,25 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             />
           ) : null}
 
-          <div className="sticky top-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/8 bg-slate-950/70 px-4 py-3 backdrop-blur">
-            <div>
-              <div className="text-sm font-medium text-white">
-                Комната в фокусе
-              </div>
-              <div className="text-xs text-slate-400">
-                Основное поле остаётся в центре, панели выезжают по кнопке.
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setIsLeftRoomPanelOpen((current) => !current)}
-                className={`rounded-full border px-4 py-2 text-sm transition ${isLeftRoomPanelOpen ? "border-fuchsia-400 bg-fuchsia-500/15 text-white" : "border-white/10 text-slate-200 hover:border-white/20"}`}
-              >
-                {isLeftRoomPanelOpen ? "Скрыть слева" : "Открыть слева"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsRightRoomPanelOpen((current) => !current)}
-                className={`rounded-full border px-4 py-2 text-sm transition ${isRightRoomPanelOpen ? "border-cyan-400 bg-cyan-500/15 text-white" : "border-white/10 text-slate-200 hover:border-white/20"}`}
-              >
-                {isRightRoomPanelOpen ? "Скрыть справа" : "Открыть справа"}
-              </button>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsLeftRoomPanelOpen((current) => !current)}
+            className={`fixed left-3 top-1/2 z-50 -translate-y-1/2 rounded-r-2xl border border-l-0 px-3 py-4 text-xs font-medium tracking-wide text-white shadow-[18px_0_40px_rgba(15,23,42,0.45)] transition ${isLeftRoomPanelOpen ? "border-fuchsia-400 bg-fuchsia-500/90" : "border-white/10 bg-slate-950/90 hover:border-fuchsia-300/60"}`}
+          >
+            <span className="whitespace-pre-line">
+              {isLeftRoomPanelOpen ? "Скрыть\nпанель" : "Админ\nпанель"}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsRightRoomPanelOpen((current) => !current)}
+            className={`fixed right-3 top-1/2 z-50 -translate-y-1/2 rounded-l-2xl border border-r-0 px-3 py-4 text-xs font-medium tracking-wide text-white shadow-[-18px_0_40px_rgba(15,23,42,0.45)] transition ${isRightRoomPanelOpen ? "border-cyan-400 bg-cyan-500/90" : "border-white/10 bg-slate-950/90 hover:border-cyan-300/60"}`}
+          >
+            <span className="whitespace-pre-line">
+              {isRightRoomPanelOpen ? "Скрыть\nлист" : "Листы\nгероев"}
+            </span>
+          </button>
 
           <div
             className={
