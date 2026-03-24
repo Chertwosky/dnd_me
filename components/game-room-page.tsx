@@ -2811,6 +2811,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       ),
     [playerTokens, sheets],
   );
+  const roomSheets = useMemo(
+    () => (groupSheets.length ? groupSheets : sheets),
+    [groupSheets, sheets],
+  );
   const canEditSheet = useCallback(
     (sheet: CharacterSheet) => {
       if (role === "gm") return true;
@@ -4581,6 +4585,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     );
   }, [tokens, sheets]);
 
+  useEffect(() => {
+    if (role !== "gm" && role !== "player") {
+      setIsLeftRoomPanelOpen(false);
+      setIsRightRoomPanelOpen(false);
+    }
+  }, [role]);
+
   const paintedCells = activeTiles.filter(
     (tile) => tile.terrain !== DEFAULT_TERRAIN,
   ).length;
@@ -4885,23 +4896,27 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             />
           ) : null}
 
-          <button
-            type="button"
-            aria-label="Открыть левую панель комнаты"
-            onClick={() => setIsLeftRoomPanelOpen((current) => !current)}
-            className={`fixed left-3 top-1/2 z-20 -translate-y-1/2 rounded-[999px] border px-3 py-4 text-xs font-medium uppercase tracking-[0.24em] shadow-[0_20px_50px_rgba(15,23,42,0.45)] backdrop-blur transition ${isLeftRoomPanelOpen ? "border-fuchsia-400 bg-fuchsia-500 text-white" : "border-white/10 bg-slate-950/80 text-slate-200 hover:border-white/20"}`}
-          >
-            {isLeftRoomPanelOpen ? "← Закрыть" : "Админ →"}
-          </button>
+          {role === "gm" || role === "player" ? (
+            <>
+              <button
+                type="button"
+                aria-label="Открыть левую панель комнаты"
+                onClick={() => setIsLeftRoomPanelOpen((current) => !current)}
+                className={`fixed left-3 top-1/2 z-20 -translate-y-1/2 rounded-[999px] border px-3 py-4 text-xs font-medium uppercase tracking-[0.24em] shadow-[0_20px_50px_rgba(15,23,42,0.45)] backdrop-blur transition ${isLeftRoomPanelOpen ? "border-fuchsia-400 bg-fuchsia-500 text-white" : "border-white/10 bg-slate-950/80 text-slate-200 hover:border-white/20"}`}
+              >
+                {isLeftRoomPanelOpen ? "← Закрыть" : "Админ →"}
+              </button>
 
-          <button
-            type="button"
-            aria-label="Открыть правую панель комнаты"
-            onClick={() => setIsRightRoomPanelOpen((current) => !current)}
-            className={`fixed right-3 top-1/2 z-20 -translate-y-1/2 rounded-[999px] border px-3 py-4 text-xs font-medium uppercase tracking-[0.24em] shadow-[0_20px_50px_rgba(15,23,42,0.45)] backdrop-blur transition ${isRightRoomPanelOpen ? "border-cyan-400 bg-cyan-500 text-slate-950" : "border-white/10 bg-slate-950/80 text-slate-200 hover:border-white/20"}`}
-          >
-            {isRightRoomPanelOpen ? "Закрыть →" : "← Листы"}
-          </button>
+              <button
+                type="button"
+                aria-label="Открыть правую панель комнаты"
+                onClick={() => setIsRightRoomPanelOpen((current) => !current)}
+                className={`fixed right-3 top-1/2 z-20 -translate-y-1/2 rounded-[999px] border px-3 py-4 text-xs font-medium uppercase tracking-[0.24em] shadow-[0_20px_50px_rgba(15,23,42,0.45)] backdrop-blur transition ${isRightRoomPanelOpen ? "border-cyan-400 bg-cyan-500 text-slate-950" : "border-white/10 bg-slate-950/80 text-slate-200 hover:border-white/20"}`}
+              >
+                {isRightRoomPanelOpen ? "Закрыть →" : "← Листы"}
+              </button>
+            </>
+          ) : null}
 
           <div
             className={
@@ -5360,7 +5375,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 <CompactSection
                   title="Панель персонажей группы"
                   description="И игроки, и мастер могут загружать и просматривать карточки всей группы."
-                  badge="party roster"
+                  badge={`${roomSheets.length} листов`}
                   defaultOpen
                 >
                   <div className="mt-4 flex flex-wrap gap-3 [&>*]:min-w-0">
@@ -5448,7 +5463,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
                   <div className="mt-5 grid gap-4 2xl:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
                     <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
-                      {groupSheets.map((sheet) => {
+                      {roomSheets.map((sheet) => {
                         const token = tokens.find(
                           (item) => item.sheetId === sheet.id,
                         );
