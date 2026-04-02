@@ -2760,16 +2760,20 @@ function Board({
             const y = Math.floor(index / cols);
             const cell = tiles[index] ?? createCell();
             const isVisible = visibleMask ? visibleMask[index] : true;
+            const textureOverlay = getTextureOverlay(cell);
             return (
               <div
                 key={`${title}-${x}-${y}`}
-                className="relative border border-white/10"
+                className="relative"
                 style={getTerrainBackground(cell)}
               >
-                {getTextureOverlay(cell) ? (
+                {textureOverlay ? (
                   <div
                     className="absolute inset-0 opacity-55"
-                    style={getTextureOverlay(cell) ?? undefined}
+                    style={{
+                      ...textureOverlay,
+                      backgroundPosition: `${x * 10}px ${y * 10}px`,
+                    }}
                   />
                 ) : null}
                 {cell.obstacle ? (
@@ -2829,6 +2833,14 @@ function Board({
               </div>
             );
           })}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage:
+                "linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.14) 1px, transparent 1px)",
+              backgroundSize: `${100 / cols}% ${100 / rows}%`,
+            }}
+          />
 
           {tokens.map((token) => {
             const left = `calc(${((token.x + 0.5) / cols) * 100}% - 1.5rem)`;
