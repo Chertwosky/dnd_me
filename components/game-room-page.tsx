@@ -2707,6 +2707,11 @@ function Board({
   tiles,
   tokens,
   zoom,
+  showZoomOverlay,
+  onZoomOut,
+  onZoomIn,
+  onZoomChange,
+  onZoomFit,
   visibleMask,
   onBoardPointerDown,
   onTokenPointerDown,
@@ -2719,6 +2724,11 @@ function Board({
   tiles: CellData[];
   tokens: RoomToken[];
   zoom: number;
+  showZoomOverlay?: boolean;
+  onZoomOut?: () => void;
+  onZoomIn?: () => void;
+  onZoomChange?: (value: number) => void;
+  onZoomFit?: () => void;
   visibleMask?: boolean[];
   onBoardPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onTokenPointerDown?: (
@@ -2742,9 +2752,43 @@ function Board({
       </div>
 
       <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/70 p-3">
-        <div
-          onPointerDown={onBoardPointerDown}
-          className="relative touch-none select-none overflow-hidden rounded-2xl border border-white/10 bg-slate-900"
+        <div className="relative">
+          {showZoomOverlay ? (
+            <div className="absolute right-2 top-2 z-20 flex items-center gap-2 rounded-xl border border-white/15 bg-slate-950/85 px-2 py-2 backdrop-blur">
+              <button
+                type="button"
+                onClick={onZoomOut}
+                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-100"
+              >
+                −
+              </button>
+              <input
+                type="range"
+                min="20"
+                max="180"
+                value={Math.round(zoom * 100)}
+                onChange={(event) => onZoomChange?.(Number(event.target.value) / 100)}
+                className="w-24"
+              />
+              <button
+                type="button"
+                onClick={onZoomIn}
+                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-100"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                onClick={onZoomFit}
+                className="rounded-lg border border-white/15 px-2 py-1 text-[11px] text-slate-200"
+              >
+                fit
+              </button>
+            </div>
+          ) : null}
+          <div
+            onPointerDown={onBoardPointerDown}
+            className="relative touch-none select-none overflow-hidden rounded-2xl border border-white/10 bg-slate-900"
           style={{
             display: "grid",
             gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
@@ -2906,6 +2950,7 @@ function Board({
               </button>
             );
           })}
+          </div>
         </div>
       </div>
     </div>
@@ -3035,6 +3080,25 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     : mapState.publicTiles;
   const activeTiles =
     activeBoard === "public" ? mapState.publicTiles : mapState.gmTiles;
+  const handleZoomOut = useCallback(
+    () =>
+      setZoom((current) =>
+        clamp(Number((current - 0.1).toFixed(2)), 0.2, 1.8),
+      ),
+    [],
+  );
+  const handleZoomIn = useCallback(
+    () =>
+      setZoom((current) =>
+        clamp(Number((current + 0.1).toFixed(2)), 0.2, 1.8),
+      ),
+    [],
+  );
+  const handleZoomFit = useCallback(() => {
+    const fitByWidth = 1200 / (cols * 44);
+    const fitByHeight = 700 / (rows * 44);
+    setZoom(clamp(Math.min(fitByWidth, fitByHeight), 0.2, 1.8));
+  }, [cols, rows]);
 
   const selectedToken = useMemo(
     () => tokens.find((token) => token.id === selectedTokenId) ?? tokens[0],
@@ -5542,63 +5606,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                             </div>
                           ) : null}
                           <div className="mt-4 space-y-3 text-sm text-slate-300">
-                            <label className="block">
-                              <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
-                                <span>Zoom</span>
-                                <span>{Math.round(zoom * 100)}%</span>
-                              </div>
-                              <div className="mb-2 flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setZoom((current) =>
-                                      clamp(Number((current - 0.1).toFixed(2)), 0.2, 1.8),
-                                    )
-                                  }
-                                  className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-slate-200"
-                                >
-                                  Zoom out
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setZoom((current) =>
-                                      clamp(Number((current + 0.1).toFixed(2)), 0.2, 1.8),
-                                    )
-                                  }
-                                  className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-slate-200"
-                                >
-                                  Zoom in
-                                </button>
-                              </div>
-                              <input
-                                type="range"
-                                min="20"
-                                max="180"
-                                value={Math.round(zoom * 100)}
-                                onChange={(event) =>
-                                  setZoom(Number(event.target.value) / 100)
-                                }
-                                className="w-full"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const fitByWidth = 1200 / (cols * 44);
-                                  const fitByHeight = 700 / (rows * 44);
-                                  setZoom(
-                                    clamp(
-                                      Math.min(fitByWidth, fitByHeight),
-                                      0.2,
-                                      1.8,
-                                    ),
-                                  );
-                                }}
-                                className="mt-2 rounded-xl border border-white/10 px-3 py-1.5 text-xs text-slate-200"
-                              >
-                                Показать всю карту
-                              </button>
-                            </label>
+                            <div className="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-400">
+                              Масштаб карты теперь закреплён поверх карты (кнопки +/−,
+                              слайдер и fit).
+                            </div>
                             <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
                               <div>Покрытие: {paintedCells}</div>
                               <div>Fog: {foggedCells}</div>
@@ -7777,6 +7788,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   tokens={visibleTokensForPlayers}
                   visibleMask={playerVisibilityMask}
                   zoom={zoom}
+                  showZoomOverlay
+                  onZoomOut={handleZoomOut}
+                  onZoomIn={handleZoomIn}
+                  onZoomChange={setZoom}
+                  onZoomFit={handleZoomFit}
                   onBoardPointerDown={handleBoardPointerDown("public")}
                   onTokenPointerDown={handleTokenPointerDown}
                   activeTokenId={activeInitiativeParticipant?.tokenId}
@@ -7791,6 +7807,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   tiles={mapState.gmTiles}
                   tokens={tokens}
                   zoom={zoom}
+                  showZoomOverlay
+                  onZoomOut={handleZoomOut}
+                  onZoomIn={handleZoomIn}
+                  onZoomChange={setZoom}
+                  onZoomFit={handleZoomFit}
                   onBoardPointerDown={handleBoardPointerDown("gm")}
                   onTokenPointerDown={handleTokenPointerDown}
                   activeTokenId={activeInitiativeParticipant?.tokenId}
@@ -7808,6 +7829,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 tokens={visibleTokensForPlayers}
                 visibleMask={playerVisibilityMask}
                 zoom={zoom}
+                showZoomOverlay
+                onZoomOut={handleZoomOut}
+                onZoomIn={handleZoomIn}
+                onZoomChange={setZoom}
+                onZoomFit={handleZoomFit}
                 onBoardPointerDown={handleBoardPointerDown("public")}
                 onTokenPointerDown={handleTokenPointerDown}
                 activeTokenId={activeInitiativeParticipant?.tokenId}
