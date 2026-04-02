@@ -184,11 +184,15 @@ type InitiativeState = {
 
 type CellData = {
   terrain: string;
+  terrainKind?: "stone" | "wood" | "water" | "earth" | "grass";
   obstacle: string | null;
+  obstacleKind?: "stoneWall" | "woodWall" | "door" | "column";
   obstacleScale?: "full" | "half" | "quarter";
   obstacleAnchor?: "center" | "tl" | "tr" | "bl" | "br";
   texture: string | null;
+  textureKind?: "moss" | "sand" | "cobble" | "road" | "rubble";
   furniture: string | null;
+  furnitureKind?: "table" | "chair" | "stage" | "crate" | "light";
   furnitureScale?: "full" | "half" | "quarter";
   furnitureAnchor?: "center" | "tl" | "tr" | "bl" | "br";
   fog: boolean;
@@ -278,6 +282,37 @@ const layerPalette: Record<LayerKind, string[]> = {
   texture: ["#22c55e", "#06b6d4", "#a855f7", "#f43f5e"],
   furniture: ["#f8fafc", "#cbd5e1", "#94a3b8", "#fde68a"],
 };
+
+const terrainBrushes = [
+  { id: "stone", label: "Камень", color: "#334155" },
+  { id: "wood", label: "Дерево", color: "#92400e" },
+  { id: "water", label: "Вода", color: "#1d4ed8" },
+  { id: "earth", label: "Земля", color: "#78350f" },
+  { id: "grass", label: "Трава", color: "#166534" },
+] as const;
+
+const obstacleBrushes = [
+  { id: "stoneWall", label: "Кам. стена", color: "#94a3b8" },
+  { id: "woodWall", label: "Дер. стена", color: "#a16207" },
+  { id: "door", label: "Дверь", color: "#d97706" },
+  { id: "column", label: "Колонна", color: "#cbd5e1" },
+] as const;
+
+const textureBrushes = [
+  { id: "moss", label: "Мох", color: "#22c55e" },
+  { id: "sand", label: "Песок", color: "#eab308" },
+  { id: "cobble", label: "Брусчатка", color: "#a855f7" },
+  { id: "road", label: "Дорога", color: "#f97316" },
+  { id: "rubble", label: "Щебень", color: "#64748b" },
+] as const;
+
+const furnitureBrushes = [
+  { id: "table", label: "Стол", color: "#f8fafc" },
+  { id: "chair", label: "Стул", color: "#cbd5e1" },
+  { id: "stage", label: "Сцена", color: "#fde68a" },
+  { id: "crate", label: "Ящик", color: "#b45309" },
+  { id: "light", label: "Свет", color: "#facc15" },
+] as const;
 
 const toolMeta: Array<{
   value: DrawingTool;
@@ -1639,11 +1674,15 @@ const initialSheets: CharacterSheet[] = [
 function createCell(): CellData {
   return {
     terrain: DEFAULT_TERRAIN,
+    terrainKind: "stone",
     obstacle: null,
+    obstacleKind: "stoneWall",
     obstacleScale: "full",
     obstacleAnchor: "center",
     texture: null,
+    textureKind: "moss",
     furniture: null,
+    furnitureKind: "table",
     furnitureScale: "full",
     furnitureAnchor: "center",
     fog: false,
@@ -1674,6 +1713,38 @@ function getStampStyle(
   if (anchor.includes("l")) style.left = inset;
   if (anchor.includes("r")) style.right = inset;
   return style;
+}
+
+function getTerrainPattern(kind?: CellData["terrainKind"]) {
+  if (kind === "wood") {
+    return "repeating-linear-gradient(0deg, rgba(255,255,255,0.06) 0 2px, transparent 2px 11px)";
+  }
+  if (kind === "water") {
+    return "repeating-radial-gradient(circle at 30% 35%, rgba(255,255,255,0.14) 0 2px, transparent 2px 12px)";
+  }
+  if (kind === "earth") {
+    return "repeating-linear-gradient(30deg, rgba(15,23,42,0.16) 0 3px, transparent 3px 10px)";
+  }
+  if (kind === "grass") {
+    return "repeating-linear-gradient(80deg, rgba(255,255,255,0.12) 0 1px, transparent 1px 6px)";
+  }
+  return "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.09), transparent 35%), radial-gradient(circle at 80% 70%, rgba(15,23,42,0.24), transparent 42%)";
+}
+
+function getTexturePattern(kind?: CellData["textureKind"]) {
+  if (kind === "sand") {
+    return "radial-gradient(circle, currentColor 1px, transparent 1px)";
+  }
+  if (kind === "cobble") {
+    return "repeating-linear-gradient(0deg, currentColor 0 1px, transparent 1px 9px), repeating-linear-gradient(90deg, currentColor 0 1px, transparent 1px 9px)";
+  }
+  if (kind === "road") {
+    return "repeating-linear-gradient(-35deg, transparent 0 6px, currentColor 6px 9px)";
+  }
+  if (kind === "rubble") {
+    return "radial-gradient(circle at 25% 30%, currentColor 0 2px, transparent 2px), radial-gradient(circle at 70% 68%, currentColor 0 2px, transparent 2px)";
+  }
+  return "repeating-linear-gradient(45deg, transparent 0 7px, currentColor 7px 9px)";
 }
 
 function createEmptyMap(cols: number, rows: number) {
@@ -2631,16 +2702,20 @@ function Board({
                 className="relative border border-white/10"
                 style={{
                   backgroundColor: cell.terrain,
-                  backgroundImage:
-                    "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.09), transparent 35%), radial-gradient(circle at 80% 70%, rgba(15,23,42,0.24), transparent 42%)",
+                  backgroundImage: getTerrainPattern(cell.terrainKind),
                 }}
               >
                 {cell.texture ? (
                   <div
                     className="absolute inset-0 opacity-55"
                     style={{
-                      backgroundImage:
-                        "repeating-linear-gradient(45deg, transparent 0 7px, currentColor 7px 9px)",
+                      backgroundImage: getTexturePattern(cell.textureKind),
+                      backgroundSize:
+                        cell.textureKind === "sand"
+                          ? "8px 8px"
+                          : cell.textureKind === "rubble"
+                            ? "14px 14px"
+                            : "auto",
                       color: cell.texture,
                       mixBlendMode: "screen",
                     }}
@@ -2652,8 +2727,16 @@ function Board({
                     style={{
                       ...getStampStyle(cell.obstacleScale, cell.obstacleAnchor),
                       borderColor: cell.obstacle,
-                      backgroundColor: `${cell.obstacle}4D`,
-                      boxShadow: `inset 0 0 0 1px ${cell.obstacle}AA`,
+                      backgroundColor:
+                        cell.obstacleKind === "door"
+                          ? `${cell.obstacle}B0`
+                          : `${cell.obstacle}4D`,
+                      boxShadow:
+                        cell.obstacleKind === "column"
+                          ? `0 0 0 2px ${cell.obstacle}88, inset 0 0 16px ${cell.obstacle}55`
+                          : `inset 0 0 0 1px ${cell.obstacle}AA`,
+                      borderRadius:
+                        cell.obstacleKind === "column" ? "9999px" : "0.375rem",
                     }}
                   />
                 ) : null}
@@ -2664,7 +2747,19 @@ function Board({
                       ...getStampStyle(cell.furnitureScale, cell.furnitureAnchor),
                       backgroundColor: cell.furniture,
                       backgroundImage:
-                        "linear-gradient(120deg, rgba(255,255,255,0.2), rgba(15,23,42,0.22))",
+                        cell.furnitureKind === "stage"
+                          ? "repeating-linear-gradient(0deg, rgba(15,23,42,0.2) 0 2px, rgba(255,255,255,0.12) 2px 6px)"
+                          : "linear-gradient(120deg, rgba(255,255,255,0.2), rgba(15,23,42,0.22))",
+                      borderRadius:
+                        cell.furnitureKind === "chair"
+                          ? "9999px"
+                          : cell.furnitureKind === "stage"
+                            ? "0.25rem"
+                            : "0.125rem",
+                      boxShadow:
+                        cell.furnitureKind === "light"
+                          ? `0 0 20px 8px ${cell.furniture}AA, 0 0 36px 12px ${cell.furniture}66`
+                          : undefined,
                     }}
                   />
                 ) : null}
@@ -2762,6 +2857,18 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [selectedTokenId, setSelectedTokenId] = useState("elira");
   const [tool, setTool] = useState<DrawingTool>("move");
   const [selectedColor, setSelectedColor] = useState(layerPalette.terrain[1]);
+  const [selectedTerrainKind, setSelectedTerrainKind] = useState<
+    CellData["terrainKind"]
+  >("stone");
+  const [selectedObstacleKind, setSelectedObstacleKind] = useState<
+    CellData["obstacleKind"]
+  >("stoneWall");
+  const [selectedTextureKind, setSelectedTextureKind] = useState<
+    CellData["textureKind"]
+  >("moss");
+  const [selectedFurnitureKind, setSelectedFurnitureKind] = useState<
+    CellData["furnitureKind"]
+  >("table");
   const [stampScale, setStampScale] = useState<"full" | "half" | "quarter">(
     "full",
   );
@@ -2937,6 +3044,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     return toolConfig?.layer
       ? layerPalette[toolConfig.layer]
       : layerPalette.terrain;
+  }, [tool]);
+  const activeBrushes = useMemo(() => {
+    if (tool === "terrain") return terrainBrushes;
+    if (tool === "obstacle") return obstacleBrushes;
+    if (tool === "texture") return textureBrushes;
+    if (tool === "furniture") return furnitureBrushes;
+    return [];
   }, [tool]);
 
   const playerVisibilityMask = useMemo(
@@ -3287,6 +3401,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
           terrain: selectedColor,
+          terrainKind: selectedTerrainKind,
         }));
         return;
       }
@@ -3295,6 +3410,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
           obstacle: selectedColor,
+          obstacleKind: selectedObstacleKind,
           obstacleScale: stampScale,
           obstacleAnchor: stampAnchor,
         }));
@@ -3305,6 +3421,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
           texture: selectedColor,
+          textureKind: selectedTextureKind,
         }));
         return;
       }
@@ -3313,6 +3430,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
           furniture: selectedColor,
+          furnitureKind: selectedFurnitureKind,
           furnitureScale: stampScale,
           furnitureAnchor: stampAnchor,
         }));
@@ -3336,6 +3454,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       applyCellChange,
       cols,
       selectedColor,
+      selectedFurnitureKind,
+      selectedObstacleKind,
+      selectedTerrainKind,
+      selectedTextureKind,
       stampAnchor,
       stampScale,
       tool,
@@ -5050,10 +5172,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                 key={item.value}
                                 onClick={() => {
                                   setTool(item.value);
-                                  if (item.layer)
-                                    setSelectedColor(
-                                      layerPalette[item.layer][0],
-                                    );
+                                  if (item.value === "terrain") {
+                                    setSelectedTerrainKind("stone");
+                                    setSelectedColor(terrainBrushes[0].color);
+                                  } else if (item.value === "obstacle") {
+                                    setSelectedObstacleKind("stoneWall");
+                                    setSelectedColor(obstacleBrushes[0].color);
+                                  } else if (item.value === "texture") {
+                                    setSelectedTextureKind("moss");
+                                    setSelectedColor(textureBrushes[0].color);
+                                  } else if (item.value === "furniture") {
+                                    setSelectedFurnitureKind("table");
+                                    setSelectedColor(furnitureBrushes[0].color);
+                                  } else if (item.layer) {
+                                    setSelectedColor(layerPalette[item.layer][0]);
+                                  }
                                 }}
                                 className={`min-w-0 rounded-2xl border px-3 py-2 ${tool === item.value ? "border-fuchsia-400 bg-fuchsia-500/15 text-white" : "border-white/10 text-slate-300"}`}
                               >
@@ -5080,6 +5213,46 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                             ))}
                           </div>
                           <div className="mt-4">
+                            {activeBrushes.length ? (
+                              <div className="mb-3">
+                                <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">
+                                  Готовые текстуры/объекты
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {activeBrushes.map((brush) => (
+                                    <button
+                                      key={brush.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedColor(brush.color);
+                                        if (tool === "terrain")
+                                          setSelectedTerrainKind(
+                                            brush.id as CellData["terrainKind"],
+                                          );
+                                        if (tool === "obstacle")
+                                          setSelectedObstacleKind(
+                                            brush.id as CellData["obstacleKind"],
+                                          );
+                                        if (tool === "texture")
+                                          setSelectedTextureKind(
+                                            brush.id as CellData["textureKind"],
+                                          );
+                                        if (tool === "furniture")
+                                          setSelectedFurnitureKind(
+                                            brush.id as CellData["furnitureKind"],
+                                          );
+                                      }}
+                                      className="rounded-xl border border-white/10 px-2.5 py-1.5 text-xs text-slate-200 transition hover:border-white/30"
+                                      style={{
+                                        backgroundImage: `linear-gradient(130deg, ${brush.color}66, rgba(15,23,42,0.5))`,
+                                      }}
+                                    >
+                                      {brush.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
                             <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">
                               Палитра активного слоя
                             </div>
