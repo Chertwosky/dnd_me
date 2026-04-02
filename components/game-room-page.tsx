@@ -5543,8 +5543,33 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           ) : null}
                           <div className="mt-4 space-y-3 text-sm text-slate-300">
                             <label className="block">
-                              <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">
-                                Zoom
+                              <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
+                                <span>Zoom</span>
+                                <span>{Math.round(zoom * 100)}%</span>
+                              </div>
+                              <div className="mb-2 flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setZoom((current) =>
+                                      clamp(Number((current - 0.1).toFixed(2)), 0.2, 1.8),
+                                    )
+                                  }
+                                  className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-slate-200"
+                                >
+                                  Zoom out
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setZoom((current) =>
+                                      clamp(Number((current + 0.1).toFixed(2)), 0.2, 1.8),
+                                    )
+                                  }
+                                  className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-slate-200"
+                                >
+                                  Zoom in
+                                </button>
                               </div>
                               <input
                                 type="range"
