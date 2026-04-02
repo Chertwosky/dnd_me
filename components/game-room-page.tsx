@@ -185,8 +185,12 @@ type InitiativeState = {
 type CellData = {
   terrain: string;
   obstacle: string | null;
+  obstacleScale?: "full" | "half" | "quarter";
+  obstacleAnchor?: "center" | "tl" | "tr" | "bl" | "br";
   texture: string | null;
   furniture: string | null;
+  furnitureScale?: "full" | "half" | "quarter";
+  furnitureAnchor?: "center" | "tl" | "tr" | "bl" | "br";
   fog: boolean;
 };
 
@@ -1636,10 +1640,40 @@ function createCell(): CellData {
   return {
     terrain: DEFAULT_TERRAIN,
     obstacle: null,
+    obstacleScale: "full",
+    obstacleAnchor: "center",
     texture: null,
     furniture: null,
+    furnitureScale: "full",
+    furnitureAnchor: "center",
     fog: false,
   };
+}
+
+function getStampStyle(
+  scale: "full" | "half" | "quarter" = "full",
+  anchor: "center" | "tl" | "tr" | "bl" | "br" = "center",
+): CSSProperties {
+  if (scale === "full") return { inset: "12%" };
+
+  const size = scale === "half" ? "50%" : "25%";
+  if (anchor === "center") {
+    return {
+      width: size,
+      height: size,
+      left: "50%",
+      top: "50%",
+      transform: "translate(-50%, -50%)",
+    };
+  }
+
+  const inset = "14%";
+  const style: CSSProperties = { width: size, height: size };
+  if (anchor.includes("t")) style.top = inset;
+  if (anchor.includes("b")) style.bottom = inset;
+  if (anchor.includes("l")) style.left = inset;
+  if (anchor.includes("r")) style.right = inset;
+  return style;
 }
 
 function createEmptyMap(cols: number, rows: number) {
@@ -2595,27 +2629,43 @@ function Board({
               <div
                 key={`${title}-${x}-${y}`}
                 className="relative border border-white/10"
-                style={{ backgroundColor: cell.terrain }}
+                style={{
+                  backgroundColor: cell.terrain,
+                  backgroundImage:
+                    "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.09), transparent 35%), radial-gradient(circle at 80% 70%, rgba(15,23,42,0.24), transparent 42%)",
+                }}
               >
                 {cell.texture ? (
                   <div
-                    className="absolute inset-[18%] rounded-md opacity-40"
-                    style={{ backgroundColor: cell.texture }}
+                    className="absolute inset-0 opacity-55"
+                    style={{
+                      backgroundImage:
+                        "repeating-linear-gradient(45deg, transparent 0 7px, currentColor 7px 9px)",
+                      color: cell.texture,
+                      mixBlendMode: "screen",
+                    }}
                   />
                 ) : null}
                 {cell.obstacle ? (
                   <div
-                    className="absolute inset-x-[15%] bottom-[15%] top-[15%] rounded-md border-2 opacity-90"
+                    className="absolute rounded-md border-2 opacity-90"
                     style={{
+                      ...getStampStyle(cell.obstacleScale, cell.obstacleAnchor),
                       borderColor: cell.obstacle,
-                      backgroundColor: `${cell.obstacle}33`,
+                      backgroundColor: `${cell.obstacle}4D`,
+                      boxShadow: `inset 0 0 0 1px ${cell.obstacle}AA`,
                     }}
                   />
                 ) : null}
                 {cell.furniture ? (
                   <div
-                    className="absolute inset-x-[20%] inset-y-[32%] rounded-sm"
-                    style={{ backgroundColor: cell.furniture }}
+                    className="absolute rounded-sm"
+                    style={{
+                      ...getStampStyle(cell.furnitureScale, cell.furnitureAnchor),
+                      backgroundColor: cell.furniture,
+                      backgroundImage:
+                        "linear-gradient(120deg, rgba(255,255,255,0.2), rgba(15,23,42,0.22))",
+                    }}
                   />
                 ) : null}
                 {cell.fog ? (
@@ -2712,6 +2762,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [selectedTokenId, setSelectedTokenId] = useState("elira");
   const [tool, setTool] = useState<DrawingTool>("move");
   const [selectedColor, setSelectedColor] = useState(layerPalette.terrain[1]);
+  const [stampScale, setStampScale] = useState<"full" | "half" | "quarter">(
+    "full",
+  );
+  const [stampAnchor, setStampAnchor] = useState<
+    "center" | "tl" | "tr" | "bl" | "br"
+  >("center");
   const [activeBoard, setActiveBoard] = useState<BoardKind>("public");
   const [isPointerDown, setIsPointerDown] = useState(false);
   const [draggingTokenId, setDraggingTokenId] = useState<string | null>(null);
@@ -3239,6 +3295,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
           obstacle: selectedColor,
+          obstacleScale: stampScale,
+          obstacleAnchor: stampAnchor,
         }));
         return;
       }
@@ -3255,6 +3313,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
           furniture: selectedColor,
+          furnitureScale: stampScale,
+          furnitureAnchor: stampAnchor,
         }));
         return;
       }
@@ -3271,7 +3331,15 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         applyCellChange(activeBoard, index, () => createCell());
       }
     },
-    [activeBoard, applyCellChange, cols, selectedColor, tool],
+    [
+      activeBoard,
+      applyCellChange,
+      cols,
+      selectedColor,
+      stampAnchor,
+      stampScale,
+      tool,
+    ],
   );
 
   const canMoveToken = useCallback(
@@ -5027,6 +5095,63 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               ))}
                             </div>
                           </div>
+                          {tool === "obstacle" || tool === "furniture" ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300">
+                              <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                Размер и привязка объекта
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {[
+                                  { value: "full", label: "1×1" },
+                                  { value: "half", label: "1/2" },
+                                  { value: "quarter", label: "1/4" },
+                                ].map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() =>
+                                      setStampScale(
+                                        option.value as
+                                          | "full"
+                                          | "half"
+                                          | "quarter",
+                                      )
+                                    }
+                                    className={`rounded-xl border px-2.5 py-1.5 ${stampScale === option.value ? "border-fuchsia-400 bg-fuchsia-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {[
+                                  { value: "center", label: "Центр" },
+                                  { value: "tl", label: "↖" },
+                                  { value: "tr", label: "↗" },
+                                  { value: "bl", label: "↙" },
+                                  { value: "br", label: "↘" },
+                                ].map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() =>
+                                      setStampAnchor(
+                                        option.value as
+                                          | "center"
+                                          | "tl"
+                                          | "tr"
+                                          | "bl"
+                                          | "br",
+                                      )
+                                    }
+                                    className={`rounded-xl border px-2.5 py-1.5 ${stampAnchor === option.value ? "border-cyan-400 bg-cyan-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="mt-4 space-y-3 text-sm text-slate-300">
                             <label className="block">
                               <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">
