@@ -67,6 +67,7 @@ type RoomToken = {
   roleOwner?: RoomRole;
   sheetId?: string;
   gmOnly?: boolean;
+  hiddenFromPlayers?: boolean;
   visionRadius?: number;
   statuses?: TokenStatusKey[];
 };
@@ -195,6 +196,7 @@ type CellData = {
   furnitureScale?: "full" | "half" | "quarter";
   furnitureAnchor?: "center" | "tl" | "tr" | "bl" | "br";
   furniturePreset?: "table" | "chair" | "stage" | "crate" | "altar";
+  furnitureVariant?: "wood" | "stone" | "velvet";
   fog: boolean;
 };
 
@@ -229,6 +231,8 @@ type SavedRoomState = {
   savedMaps?: SavedMapPreset[];
   activeSavedMapId?: string | null;
   widgetUrl?: string;
+  useFogOfWar?: boolean;
+  useSharedGmMapForPlayers?: boolean;
   tokens: RoomToken[];
   sheets: CharacterSheet[];
   journal: JournalEntry[];
@@ -1686,6 +1690,7 @@ function createCell(): CellData {
     furnitureScale: "full",
     furnitureAnchor: "center",
     furniturePreset: undefined,
+    furnitureVariant: "wood",
     fog: false,
   };
 }
@@ -2356,6 +2361,8 @@ function buildSavedRoomState({
   savedMaps,
   activeSavedMapId,
   widgetUrl,
+  useFogOfWar,
+  useSharedGmMapForPlayers,
   tokens,
   sheets,
   journal,
@@ -2367,6 +2374,8 @@ function buildSavedRoomState({
     savedMaps,
     activeSavedMapId,
     widgetUrl,
+    useFogOfWar,
+    useSharedGmMapForPlayers,
     tokens,
     sheets,
     journal,
@@ -2795,7 +2804,13 @@ function Board({
                       ...getStampStyle(cell.furnitureScale, cell.furnitureAnchor),
                       backgroundColor: cell.furniture,
                       backgroundImage:
-                        "linear-gradient(120deg, rgba(255,255,255,0.2), rgba(15,23,42,0.22))",
+                        cell.furniturePreset === "stage"
+                          ? cell.furnitureVariant === "stone"
+                            ? "linear-gradient(180deg, rgba(226,232,240,0.6), rgba(71,85,105,0.45))"
+                            : cell.furnitureVariant === "velvet"
+                              ? "repeating-linear-gradient(90deg, rgba(244,114,182,0.6) 0 3px, rgba(131,24,67,0.5) 3px 6px)"
+                              : "repeating-linear-gradient(90deg, rgba(245,158,11,0.45) 0 4px, rgba(120,53,15,0.45) 4px 8px)"
+                          : "linear-gradient(120deg, rgba(255,255,255,0.2), rgba(15,23,42,0.22))",
                     }}
                   >
                     {cell.furniturePreset === "table" ? "▭" : null}
@@ -2911,6 +2926,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [selectedFurniturePreset, setSelectedFurniturePreset] = useState<
     (typeof furnitureBrushes)[number]["id"]
   >("table");
+  const [selectedStageVariant, setSelectedStageVariant] = useState<
+    "wood" | "stone" | "velvet"
+  >("wood");
   const [stampScale, setStampScale] = useState<"full" | "half" | "quarter">(
     "full",
   );
@@ -2928,6 +2946,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [zoom, setZoom] = useState(1);
   const [gridColsInput, setGridColsInput] = useState(String(DEFAULT_COLS));
   const [gridRowsInput, setGridRowsInput] = useState(String(DEFAULT_ROWS));
+  const [useFogOfWar, setUseFogOfWar] = useState(true);
+  const [useSharedGmMapForPlayers, setUseSharedGmMapForPlayers] =
+    useState(true);
   const [mapPresetName, setMapPresetName] = useState("Сцена 1");
   const [widgetUrl, setWidgetUrl] = useState(DEFAULT_WIDGET_URL);
   const [npcNameInput, setNpcNameInput] = useState("Ночной информатор");
@@ -2995,6 +3016,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const cols = mapState.cols;
   const rows = mapState.rows;
+  const playerTiles = useSharedGmMapForPlayers
+    ? mapState.gmTiles
+    : mapState.publicTiles;
   const activeTiles =
     activeBoard === "public" ? mapState.publicTiles : mapState.gmTiles;
 
@@ -3091,9 +3115,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const playerVisibilityMask = useMemo(
     () =>
       Array.from({ length: cols * rows }, (_, index) =>
-        isCellVisibleToPlayers(index % cols, Math.floor(index / cols), tokens),
+        !(
+          useFogOfWar &&
+          (playerTiles[index] ?? createCell()).fog
+        ) && isCellVisibleToPlayers(index % cols, Math.floor(index / cols), tokens),
       ),
-    [cols, rows, tokens],
+    [cols, playerTiles, rows, tokens, useFogOfWar],
   );
 
   const visibleTokensForPlayers = useMemo(
@@ -3101,6 +3128,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       tokens.filter(
         (token) =>
           !token.gmOnly &&
+          !token.hiddenFromPlayers &&
           playerVisibilityMask[getCellIndex(token.x, token.y, cols)],
       ),
     [cols, playerVisibilityMask, tokens],
@@ -3141,6 +3169,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         setMapName(parsed.mapName);
         setMapPresetName(parsed.mapName);
       }
+      if (typeof parsed.useFogOfWar === "boolean")
+        setUseFogOfWar(parsed.useFogOfWar);
+      if (typeof parsed.useSharedGmMapForPlayers === "boolean")
+        setUseSharedGmMapForPlayers(parsed.useSharedGmMapForPlayers);
       if (
         parsed.mapState?.cols &&
         parsed.mapState?.rows &&
@@ -3186,6 +3218,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       savedMaps,
       activeSavedMapId,
       widgetUrl,
+      useFogOfWar,
+      useSharedGmMapForPlayers,
       tokens: tokens.map(normalizeToken),
       sheets,
       journal,
@@ -3203,6 +3237,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     savedMaps,
     sheets,
     tokens,
+    useFogOfWar,
+    useSharedGmMapForPlayers,
     widgetUrl,
   ]);
 
@@ -3484,6 +3520,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           furnitureScale: stampScale,
           furnitureAnchor: stampAnchor,
           furniturePreset: selectedFurniturePreset,
+          furnitureVariant:
+            selectedFurniturePreset === "stage" ? selectedStageVariant : "wood",
         }));
         return;
       }
@@ -3507,6 +3545,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       selectedColor,
       selectedFurniturePreset,
       selectedObstaclePreset,
+      selectedStageVariant,
       selectedTerrainPreset,
       selectedTexturePreset,
       stampAnchor,
@@ -3683,6 +3722,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         sheets,
         journal: nextJournal,
         widgetUrl,
+        useFogOfWar,
+        useSharedGmMapForPlayers,
         initiative,
       });
       window.localStorage.setItem(
@@ -3717,6 +3758,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       sheets,
       journal,
       widgetUrl,
+      useFogOfWar,
+      useSharedGmMapForPlayers,
       initiative,
     });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
@@ -3749,6 +3792,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       sheets,
       journal,
       widgetUrl,
+      useFogOfWar,
+      useSharedGmMapForPlayers,
       initiative,
     });
 
@@ -4745,7 +4790,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const handleTokenSetting = (
     tokenId: string,
-    key: "gmOnly" | "visionRadius",
+    key: "gmOnly" | "hiddenFromPlayers" | "visionRadius",
     value: boolean | number,
   ) => {
     if (role !== "gm") return;
@@ -5217,6 +5262,45 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               Скрытая карта мастера
                             </button>
                           </div>
+                          <div className="mt-3 grid gap-2 text-xs text-slate-300 sm:grid-cols-2">
+                            <label className="flex items-center justify-between rounded-xl border border-white/10 px-3 py-2">
+                              <span>Fog of war для игроков</span>
+                              <input
+                                type="checkbox"
+                                checked={useFogOfWar}
+                                onChange={(event) =>
+                                  setUseFogOfWar(event.target.checked)
+                                }
+                              />
+                            </label>
+                            <label className="flex items-center justify-between rounded-xl border border-white/10 px-3 py-2">
+                              <span>Игроки смотрят карту мастера</span>
+                              <input
+                                type="checkbox"
+                                checked={useSharedGmMapForPlayers}
+                                onChange={(event) =>
+                                  setUseSharedGmMapForPlayers(
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                            </label>
+                          </div>
+                          {!useSharedGmMapForPlayers ? (
+                            <button
+                              type="button"
+                              className="mt-3 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100"
+                              onClick={() => {
+                                setTilesForBoard("public", [...mapState.gmTiles]);
+                                addJournalEntry(
+                                  "map",
+                                  "Публичная карта синхронизирована с картой мастера.",
+                                );
+                              }}
+                            >
+                              Синхронизировать: карта мастера → карта игроков
+                            </button>
+                          ) : null}
                           <div className="mt-4 grid grid-cols-2 gap-2 text-sm [&>*]:min-w-0">
                             {toolMeta.map((item) => (
                               <button
@@ -5354,6 +5438,36 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                   </button>
                                 ))}
                               </div>
+                              {selectedFurniturePreset === "stage" ? (
+                                <div className="mt-3">
+                                  <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                    Текстура сцены
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {[
+                                      { id: "wood", label: "Доски" },
+                                      { id: "stone", label: "Камень" },
+                                      { id: "velvet", label: "Бархат" },
+                                    ].map((variant) => (
+                                      <button
+                                        key={variant.id}
+                                        type="button"
+                                        onClick={() =>
+                                          setSelectedStageVariant(
+                                            variant.id as
+                                              | "wood"
+                                              | "stone"
+                                              | "velvet",
+                                          )
+                                        }
+                                        className={`rounded-xl border px-2.5 py-1.5 ${selectedStageVariant === variant.id ? "border-violet-400 bg-violet-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                      >
+                                        {variant.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
                           {tool === "obstacle" || tool === "furniture" ? (
@@ -5527,6 +5641,20 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                         handleTokenSetting(
                                           token.id,
                                           "gmOnly",
+                                          event.target.checked,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                  <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2">
+                                    <span>В скрытности (не виден)</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(token.hiddenFromPlayers)}
+                                      onChange={(event) =>
+                                        handleTokenSetting(
+                                          token.id,
+                                          "hiddenFromPlayers",
                                           event.target.checked,
                                         )
                                       }
@@ -7575,6 +7703,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 .map((token) => `${token.name} ${token.visionRadius ?? 3}`)
                 .join(" • ") || "нет"}
             </span>
+            <span className="badge">
+              Fog: {useFogOfWar ? "вкл" : "выкл"} • Режим карты:{" "}
+              {useSharedGmMapForPlayers ? "как у мастера" : "отдельная"}
+            </span>
           </div>
 
           {role === "gm" ? (
@@ -7582,10 +7714,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               <div id="battle-board-public">
                 <Board
                   title="Публичная карта"
-                  subtitle="То, что увидят игроки с учётом публичных слоёв, fog of war и радиуса обзора игроков."
+                  subtitle="Превью того, что увидят игроки: туман войны, радиус обзора и скрытность."
                   cols={cols}
                   rows={rows}
-                  tiles={mapState.publicTiles}
+                  tiles={playerTiles}
                   tokens={visibleTokensForPlayers}
                   visibleMask={playerVisibilityMask}
                   zoom={zoom}
@@ -7613,10 +7745,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             <div id="battle-board-public">
               <Board
                 title="Игровое поле"
-                subtitle="Игрок видит только публичную карту и только те клетки, которые открывает обзор персонажей."
+                subtitle="Игрок видит карту с учётом fog of war, обзора и скрытых токенов."
                 cols={cols}
                 rows={rows}
-                tiles={mapState.publicTiles}
+                tiles={playerTiles}
                 tokens={visibleTokensForPlayers}
                 visibleMask={playerVisibilityMask}
                 zoom={zoom}
