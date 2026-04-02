@@ -184,9 +184,17 @@ type InitiativeState = {
 
 type CellData = {
   terrain: string;
+  terrainPreset?: "stone" | "wood" | "water" | "earth" | "grass";
   obstacle: string | null;
+  obstacleScale?: "full" | "half" | "quarter";
+  obstacleAnchor?: "center" | "tl" | "tr" | "bl" | "br";
+  obstaclePreset?: "stone-wall" | "wood-wall" | "door" | "column" | "light";
   texture: string | null;
+  texturePreset?: "moss" | "rubble" | "sand" | "blood" | "tiles";
   furniture: string | null;
+  furnitureScale?: "full" | "half" | "quarter";
+  furnitureAnchor?: "center" | "tl" | "tr" | "bl" | "br";
+  furniturePreset?: "table" | "chair" | "stage" | "crate" | "altar";
   fog: boolean;
 };
 
@@ -274,6 +282,38 @@ const layerPalette: Record<LayerKind, string[]> = {
   texture: ["#22c55e", "#06b6d4", "#a855f7", "#f43f5e"],
   furniture: ["#f8fafc", "#cbd5e1", "#94a3b8", "#fde68a"],
 };
+
+const terrainBrushes = [
+  { id: "stone", label: "Камень", color: "#475569" },
+  { id: "wood", label: "Дерево", color: "#92400e" },
+  { id: "water", label: "Вода", color: "#1d4ed8" },
+  { id: "earth", label: "Земля", color: "#7c2d12" },
+  { id: "grass", label: "Трава", color: "#166534" },
+] as const;
+
+const textureBrushes = [
+  { id: "moss", label: "Мох", color: "#22c55e" },
+  { id: "rubble", label: "Щебень", color: "#a1a1aa" },
+  { id: "sand", label: "Песок", color: "#facc15" },
+  { id: "blood", label: "Кровь", color: "#dc2626" },
+  { id: "tiles", label: "Плитка", color: "#94a3b8" },
+] as const;
+
+const obstacleBrushes = [
+  { id: "stone-wall", label: "Стена (кам.)", color: "#64748b" },
+  { id: "wood-wall", label: "Стена (дер.)", color: "#a16207" },
+  { id: "door", label: "Дверь", color: "#f59e0b" },
+  { id: "column", label: "Колонна", color: "#cbd5e1" },
+  { id: "light", label: "Источник света", color: "#fde047" },
+] as const;
+
+const furnitureBrushes = [
+  { id: "table", label: "Стол", color: "#d6d3d1" },
+  { id: "chair", label: "Стул", color: "#e7e5e4" },
+  { id: "stage", label: "Сцена/возвыш.", color: "#a78bfa" },
+  { id: "crate", label: "Ящик", color: "#b45309" },
+  { id: "altar", label: "Алтарь", color: "#e2e8f0" },
+] as const;
 
 const toolMeta: Array<{
   value: DrawingTool;
@@ -1635,10 +1675,130 @@ const initialSheets: CharacterSheet[] = [
 function createCell(): CellData {
   return {
     terrain: DEFAULT_TERRAIN,
+    terrainPreset: "stone",
     obstacle: null,
+    obstacleScale: "full",
+    obstacleAnchor: "center",
+    obstaclePreset: undefined,
     texture: null,
+    texturePreset: undefined,
     furniture: null,
+    furnitureScale: "full",
+    furnitureAnchor: "center",
+    furniturePreset: undefined,
     fog: false,
+  };
+}
+
+function getStampStyle(
+  scale: "full" | "half" | "quarter" = "full",
+  anchor: "center" | "tl" | "tr" | "bl" | "br" = "center",
+): CSSProperties {
+  if (scale === "full") return { inset: "12%" };
+
+  const size = scale === "half" ? "50%" : "25%";
+  if (anchor === "center") {
+    return {
+      width: size,
+      height: size,
+      left: "50%",
+      top: "50%",
+      transform: "translate(-50%, -50%)",
+    };
+  }
+
+  const inset = "14%";
+  const style: CSSProperties = { width: size, height: size };
+  if (anchor.includes("t")) style.top = inset;
+  if (anchor.includes("b")) style.bottom = inset;
+  if (anchor.includes("l")) style.left = inset;
+  if (anchor.includes("r")) style.right = inset;
+  return style;
+}
+
+function findBrushColor<
+  T extends ReadonlyArray<{ id: string; color: string }>,
+>(catalog: T, id: string | undefined, fallback: string) {
+  return catalog.find((item) => item.id === id)?.color ?? fallback;
+}
+
+function getTerrainBackground(cell: CellData): CSSProperties {
+  const preset = cell.terrainPreset;
+  if (preset === "water") {
+    return {
+      backgroundColor: "#1d4ed8",
+      backgroundImage:
+        "repeating-radial-gradient(circle at 30% 30%, rgba(255,255,255,0.16) 0 5px, transparent 5px 13px)",
+    };
+  }
+  if (preset === "wood") {
+    return {
+      backgroundColor: "#92400e",
+      backgroundImage:
+        "repeating-linear-gradient(90deg, rgba(255,255,255,0.1) 0 3px, rgba(0,0,0,0.08) 3px 10px)",
+    };
+  }
+  if (preset === "earth") {
+    return {
+      backgroundColor: "#7c2d12",
+      backgroundImage:
+        "radial-gradient(circle at 25% 20%, rgba(255,255,255,0.1), transparent 40%), radial-gradient(circle at 70% 80%, rgba(0,0,0,0.2), transparent 45%)",
+    };
+  }
+  if (preset === "grass") {
+    return {
+      backgroundColor: "#166534",
+      backgroundImage:
+        "repeating-linear-gradient(65deg, rgba(255,255,255,0.1) 0 1px, transparent 1px 6px)",
+    };
+  }
+  return {
+    backgroundColor: cell.terrain,
+    backgroundImage:
+      "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.09), transparent 35%), radial-gradient(circle at 80% 70%, rgba(15,23,42,0.24), transparent 42%)",
+  };
+}
+
+function getTextureOverlay(cell: CellData): CSSProperties | null {
+  if (!cell.texture && !cell.texturePreset) return null;
+  if (cell.texturePreset === "moss") {
+    return {
+      backgroundImage:
+        "radial-gradient(circle, rgba(34,197,94,0.35) 0 30%, transparent 35%)",
+      backgroundSize: "12px 12px",
+    };
+  }
+  if (cell.texturePreset === "rubble") {
+    return {
+      backgroundImage:
+        "repeating-linear-gradient(130deg, rgba(161,161,170,0.5) 0 2px, transparent 2px 8px)",
+    };
+  }
+  if (cell.texturePreset === "sand") {
+    return {
+      backgroundImage:
+        "radial-gradient(circle, rgba(250,204,21,0.35) 0 20%, transparent 24%)",
+      backgroundSize: "8px 8px",
+    };
+  }
+  if (cell.texturePreset === "blood") {
+    return {
+      backgroundImage:
+        "radial-gradient(circle at 35% 40%, rgba(220,38,38,0.6), transparent 36%), radial-gradient(circle at 65% 65%, rgba(153,27,27,0.5), transparent 30%)",
+    };
+  }
+  if (cell.texturePreset === "tiles") {
+    return {
+      backgroundImage:
+        "linear-gradient(rgba(148,163,184,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.5) 1px, transparent 1px)",
+      backgroundSize: "10px 10px",
+    };
+  }
+  return {
+    backgroundImage:
+      "repeating-linear-gradient(45deg, transparent 0 7px, currentColor 7px 9px)",
+    color: cell.texture ?? "#22c55e",
+    mixBlendMode: "screen",
   };
 }
 
@@ -2595,28 +2755,55 @@ function Board({
               <div
                 key={`${title}-${x}-${y}`}
                 className="relative border border-white/10"
-                style={{ backgroundColor: cell.terrain }}
+                style={getTerrainBackground(cell)}
               >
-                {cell.texture ? (
+                {getTextureOverlay(cell) ? (
                   <div
-                    className="absolute inset-[18%] rounded-md opacity-40"
-                    style={{ backgroundColor: cell.texture }}
+                    className="absolute inset-0 opacity-55"
+                    style={getTextureOverlay(cell) ?? undefined}
                   />
                 ) : null}
                 {cell.obstacle ? (
                   <div
-                    className="absolute inset-x-[15%] bottom-[15%] top-[15%] rounded-md border-2 opacity-90"
+                    className="absolute flex items-center justify-center rounded-md border-2 opacity-90"
                     style={{
+                      ...getStampStyle(cell.obstacleScale, cell.obstacleAnchor),
                       borderColor: cell.obstacle,
-                      backgroundColor: `${cell.obstacle}33`,
+                      backgroundColor: `${cell.obstacle}4D`,
+                      boxShadow: `inset 0 0 0 1px ${cell.obstacle}AA`,
                     }}
-                  />
+                  >
+                    {cell.obstaclePreset === "door" ? (
+                      <span className="text-[10px] font-black text-amber-100">
+                        🚪
+                      </span>
+                    ) : cell.obstaclePreset === "column" ? (
+                      <span className="text-[10px] font-black text-slate-100">
+                        ◉
+                      </span>
+                    ) : cell.obstaclePreset === "light" ? (
+                      <span className="text-[10px] font-black text-yellow-100">
+                        ✦
+                      </span>
+                    ) : null}
+                  </div>
                 ) : null}
                 {cell.furniture ? (
                   <div
-                    className="absolute inset-x-[20%] inset-y-[32%] rounded-sm"
-                    style={{ backgroundColor: cell.furniture }}
-                  />
+                    className="absolute flex items-center justify-center rounded-sm"
+                    style={{
+                      ...getStampStyle(cell.furnitureScale, cell.furnitureAnchor),
+                      backgroundColor: cell.furniture,
+                      backgroundImage:
+                        "linear-gradient(120deg, rgba(255,255,255,0.2), rgba(15,23,42,0.22))",
+                    }}
+                  >
+                    {cell.furniturePreset === "table" ? "▭" : null}
+                    {cell.furniturePreset === "chair" ? "◍" : null}
+                    {cell.furniturePreset === "stage" ? "▤" : null}
+                    {cell.furniturePreset === "crate" ? "▣" : null}
+                    {cell.furniturePreset === "altar" ? "✢" : null}
+                  </div>
                 ) : null}
                 {cell.fog ? (
                   <div className="absolute inset-0 bg-slate-950/70" />
@@ -2712,6 +2899,24 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [selectedTokenId, setSelectedTokenId] = useState("elira");
   const [tool, setTool] = useState<DrawingTool>("move");
   const [selectedColor, setSelectedColor] = useState(layerPalette.terrain[1]);
+  const [selectedTerrainPreset, setSelectedTerrainPreset] = useState<
+    (typeof terrainBrushes)[number]["id"]
+  >("stone");
+  const [selectedTexturePreset, setSelectedTexturePreset] = useState<
+    (typeof textureBrushes)[number]["id"]
+  >("moss");
+  const [selectedObstaclePreset, setSelectedObstaclePreset] = useState<
+    (typeof obstacleBrushes)[number]["id"]
+  >("stone-wall");
+  const [selectedFurniturePreset, setSelectedFurniturePreset] = useState<
+    (typeof furnitureBrushes)[number]["id"]
+  >("table");
+  const [stampScale, setStampScale] = useState<"full" | "half" | "quarter">(
+    "full",
+  );
+  const [stampAnchor, setStampAnchor] = useState<
+    "center" | "tl" | "tr" | "bl" | "br"
+  >("center");
   const [activeBoard, setActiveBoard] = useState<BoardKind>("public");
   const [isPointerDown, setIsPointerDown] = useState(false);
   const [draggingTokenId, setDraggingTokenId] = useState<string | null>(null);
@@ -3230,7 +3435,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (tool === "terrain") {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
-          terrain: selectedColor,
+          terrain: findBrushColor(
+            terrainBrushes,
+            selectedTerrainPreset,
+            selectedColor,
+          ),
+          terrainPreset: selectedTerrainPreset,
         }));
         return;
       }
@@ -3238,7 +3448,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (tool === "obstacle") {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
-          obstacle: selectedColor,
+          obstacle: findBrushColor(
+            obstacleBrushes,
+            selectedObstaclePreset,
+            selectedColor,
+          ),
+          obstacleScale: stampScale,
+          obstacleAnchor: stampAnchor,
+          obstaclePreset: selectedObstaclePreset,
         }));
         return;
       }
@@ -3246,7 +3463,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (tool === "texture") {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
-          texture: selectedColor,
+          texture: findBrushColor(
+            textureBrushes,
+            selectedTexturePreset,
+            selectedColor,
+          ),
+          texturePreset: selectedTexturePreset,
         }));
         return;
       }
@@ -3254,7 +3476,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (tool === "furniture") {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
-          furniture: selectedColor,
+          furniture: findBrushColor(
+            furnitureBrushes,
+            selectedFurniturePreset,
+            selectedColor,
+          ),
+          furnitureScale: stampScale,
+          furnitureAnchor: stampAnchor,
+          furniturePreset: selectedFurniturePreset,
         }));
         return;
       }
@@ -3271,7 +3500,19 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         applyCellChange(activeBoard, index, () => createCell());
       }
     },
-    [activeBoard, applyCellChange, cols, selectedColor, tool],
+    [
+      activeBoard,
+      applyCellChange,
+      cols,
+      selectedColor,
+      selectedFurniturePreset,
+      selectedObstaclePreset,
+      selectedTerrainPreset,
+      selectedTexturePreset,
+      stampAnchor,
+      stampScale,
+      tool,
+    ],
   );
 
   const canMoveToken = useCallback(
@@ -5027,6 +5268,151 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               ))}
                             </div>
                           </div>
+                          {tool === "terrain" ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300">
+                              <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                Готовые покрытия
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {terrainBrushes.map((brush) => (
+                                  <button
+                                    key={brush.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedTerrainPreset(brush.id);
+                                      setSelectedColor(brush.color);
+                                    }}
+                                    className={`rounded-xl border px-2.5 py-1.5 ${selectedTerrainPreset === brush.id ? "border-emerald-400 bg-emerald-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {brush.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {tool === "texture" ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300">
+                              <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                Готовые текстуры
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {textureBrushes.map((brush) => (
+                                  <button
+                                    key={brush.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedTexturePreset(brush.id);
+                                      setSelectedColor(brush.color);
+                                    }}
+                                    className={`rounded-xl border px-2.5 py-1.5 ${selectedTexturePreset === brush.id ? "border-emerald-400 bg-emerald-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {brush.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {tool === "obstacle" ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300">
+                              <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                Библиотека препятствий
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {obstacleBrushes.map((brush) => (
+                                  <button
+                                    key={brush.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedObstaclePreset(brush.id);
+                                      setSelectedColor(brush.color);
+                                    }}
+                                    className={`rounded-xl border px-2.5 py-1.5 ${selectedObstaclePreset === brush.id ? "border-emerald-400 bg-emerald-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {brush.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {tool === "furniture" ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300">
+                              <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                Библиотека объектов
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {furnitureBrushes.map((brush) => (
+                                  <button
+                                    key={brush.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedFurniturePreset(brush.id);
+                                      setSelectedColor(brush.color);
+                                    }}
+                                    className={`rounded-xl border px-2.5 py-1.5 ${selectedFurniturePreset === brush.id ? "border-emerald-400 bg-emerald-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {brush.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {tool === "obstacle" || tool === "furniture" ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300">
+                              <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                Размер и привязка объекта
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {[
+                                  { value: "full", label: "1×1" },
+                                  { value: "half", label: "1/2" },
+                                  { value: "quarter", label: "1/4" },
+                                ].map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() =>
+                                      setStampScale(
+                                        option.value as
+                                          | "full"
+                                          | "half"
+                                          | "quarter",
+                                      )
+                                    }
+                                    className={`rounded-xl border px-2.5 py-1.5 ${stampScale === option.value ? "border-fuchsia-400 bg-fuchsia-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {[
+                                  { value: "center", label: "Центр" },
+                                  { value: "tl", label: "↖" },
+                                  { value: "tr", label: "↗" },
+                                  { value: "bl", label: "↙" },
+                                  { value: "br", label: "↘" },
+                                ].map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() =>
+                                      setStampAnchor(
+                                        option.value as
+                                          | "center"
+                                          | "tl"
+                                          | "tr"
+                                          | "bl"
+                                          | "br",
+                                      )
+                                    }
+                                    className={`rounded-xl border px-2.5 py-1.5 ${stampAnchor === option.value ? "border-cyan-400 bg-cyan-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="mt-4 space-y-3 text-sm text-slate-300">
                             <label className="block">
                               <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">
