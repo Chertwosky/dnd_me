@@ -256,7 +256,8 @@ type SavedCharacterPreset = {
 const DEFAULT_COLS = 16;
 const DEFAULT_ROWS = 10;
 const MIN_GRID = 4;
-const MAX_GRID = 40;
+const MAX_GRID = 99;
+const BOARD_CELL_SIZE = 44;
 const DEFAULT_TERRAIN = "#0f172a";
 const roomAccessRegistry = new Map<string, RoomAccessState>();
 
@@ -2726,8 +2727,9 @@ function Board({
   ) => (event: ReactPointerEvent<HTMLButtonElement>) => void;
   activeTokenId?: string | null;
 }) {
-  const aspectRatio = `${cols} / ${rows}`;
-  const minWidth = Math.max(600, cols * 44);
+  const scaledCell = BOARD_CELL_SIZE * zoom;
+  const boardWidth = Math.max(cols * scaledCell, 320);
+  const boardHeight = Math.max(rows * scaledCell, 220);
 
   return (
     <div className="card p-4">
@@ -2746,16 +2748,18 @@ function Board({
           onPointerDown={onBoardPointerDown}
           className="relative touch-none select-none overflow-hidden rounded-2xl border border-white/10 bg-slate-900"
           style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-            gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-            transform: `scale(${zoom})`,
-            transformOrigin: "top left",
-            aspectRatio,
-            minWidth,
+            width: boardWidth,
+            height: boardHeight,
           }}
         >
-          {Array.from({ length: cols * rows }, (_, index) => {
+          <div
+            className="absolute inset-0 grid"
+            style={{
+              gridTemplateColumns: `repeat(${cols}, ${scaledCell}px)`,
+              gridTemplateRows: `repeat(${rows}, ${scaledCell}px)`,
+            }}
+          >
+            {Array.from({ length: cols * rows }, (_, index) => {
             const x = index % cols;
             const y = Math.floor(index / cols);
             const cell = tiles[index] ?? createCell();
@@ -2832,7 +2836,8 @@ function Board({
                 ) : null}
               </div>
             );
-          })}
+            })}
+          </div>
           <div
             className="pointer-events-none absolute inset-0"
             style={{
@@ -2843,8 +2848,8 @@ function Board({
           />
 
           {tokens.map((token) => {
-            const left = `calc(${((token.x + 0.5) / cols) * 100}% - 1.5rem)`;
-            const top = `calc(${((token.y + 0.5) / rows) * 100}% - 1.5rem)`;
+            const left = `${(token.x + 0.5) * scaledCell - 24}px`;
+            const top = `${(token.y + 0.5) * scaledCell - 24}px`;
             const isActive = activeTokenId === token.id;
             const visibleStatuses = (token.statuses ?? [])
               .slice(0, 2)
@@ -5546,8 +5551,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               </div>
                               <input
                                 type="range"
-                                min="60"
-                                max="180"
+                                min="10"
+                                max="220"
                                 value={Math.round(zoom * 100)}
                                 onChange={(event) =>
                                   setZoom(Number(event.target.value) / 100)
