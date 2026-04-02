@@ -68,6 +68,7 @@ type RoomToken = {
   sheetId?: string;
   gmOnly?: boolean;
   visionRadius?: number;
+  footprint?: number;
   statuses?: TokenStatusKey[];
 };
 
@@ -245,6 +246,8 @@ const DEFAULT_COLS = 16;
 const DEFAULT_ROWS = 10;
 const MIN_GRID = 4;
 const MAX_GRID = 40;
+const MIN_TOKEN_FOOTPRINT = 0.25;
+const MAX_TOKEN_FOOTPRINT = 2;
 const DEFAULT_TERRAIN = "#0f172a";
 const roomAccessRegistry = new Map<string, RoomAccessState>();
 
@@ -1556,6 +1559,7 @@ const initialTokens: RoomToken[] = [
     speed: 0,
     owner: "GM",
     roleOwner: "gm",
+    footprint: 0.5,
     statuses: [],
   },
 ];
@@ -1896,6 +1900,35 @@ function hexFromColorString(color: string) {
     .join("")}`;
 }
 
+function clampTokenFootprint(size?: number) {
+  const next =
+    typeof size === "number" && Number.isFinite(size) ? size : 1;
+  return clamp(next, MIN_TOKEN_FOOTPRINT, MAX_TOKEN_FOOTPRINT);
+}
+
+function getTerrainStyle(cell: CellData): CSSProperties {
+  return {
+    backgroundColor: cell.terrain,
+    backgroundImage: [
+      "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.12), transparent 38%)",
+      "radial-gradient(circle at 75% 80%, rgba(0,0,0,0.18), transparent 42%)",
+      "repeating-linear-gradient(135deg, rgba(255,255,255,0.04) 0 3px, transparent 3px 9px)",
+    ].join(", "),
+    backgroundBlendMode: "screen, multiply, normal",
+  };
+}
+
+function getTextureStyle(color: string): CSSProperties {
+  return {
+    backgroundColor: `${color}44`,
+    backgroundImage: [
+      `repeating-linear-gradient(45deg, ${color}88 0 2px, transparent 2px 7px)`,
+      `repeating-linear-gradient(-45deg, ${color}55 0 2px, transparent 2px 8px)`,
+    ].join(", "),
+    mixBlendMode: "screen",
+  };
+}
+
 function buildRumorTable(prompt: string) {
   const topic = prompt.trim() || "город на грани неприятностей";
   const normalizedTopic = topic.replace(/[.!?]+$/u, "");
@@ -2180,6 +2213,7 @@ function createEmptyInitiativeState(): InitiativeState {
 function normalizeToken(token: RoomToken): RoomToken {
   return {
     ...token,
+    footprint: clampTokenFootprint(token.footprint),
     statuses: Array.isArray(token.statuses)
       ? Array.from(new Set(token.statuses))
       : [],
@@ -2595,27 +2629,31 @@ function Board({
               <div
                 key={`${title}-${x}-${y}`}
                 className="relative border border-white/10"
-                style={{ backgroundColor: cell.terrain }}
+                style={getTerrainStyle(cell)}
               >
                 {cell.texture ? (
                   <div
-                    className="absolute inset-[18%] rounded-md opacity-40"
-                    style={{ backgroundColor: cell.texture }}
+                    className="absolute inset-[6%] rounded-md opacity-75"
+                    style={getTextureStyle(cell.texture)}
                   />
                 ) : null}
                 {cell.obstacle ? (
                   <div
-                    className="absolute inset-x-[15%] bottom-[15%] top-[15%] rounded-md border-2 opacity-90"
+                    className="absolute inset-x-[12%] bottom-[12%] top-[12%] rounded-md border-2 opacity-95"
                     style={{
                       borderColor: cell.obstacle,
-                      backgroundColor: `${cell.obstacle}33`,
+                      backgroundColor: `${cell.obstacle}4d`,
+                      boxShadow: `inset 0 0 0 1px ${cell.obstacle}66`,
                     }}
                   />
                 ) : null}
                 {cell.furniture ? (
                   <div
-                    className="absolute inset-x-[20%] inset-y-[32%] rounded-sm"
-                    style={{ backgroundColor: cell.furniture }}
+                    className="absolute inset-x-[20%] inset-y-[30%] rounded-sm border border-black/30"
+                    style={{
+                      backgroundColor: cell.furniture,
+                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.22)",
+                    }}
                   />
                 ) : null}
                 {cell.fog ? (
@@ -2629,8 +2667,11 @@ function Board({
           })}
 
           {tokens.map((token) => {
-            const left = `calc(${((token.x + 0.5) / cols) * 100}% - 1.5rem)`;
-            const top = `calc(${((token.y + 0.5) / rows) * 100}% - 1.5rem)`;
+            const footprint = clampTokenFootprint(token.footprint);
+            const widthPercent = (footprint / cols) * 100;
+            const heightPercent = (footprint / rows) * 100;
+            const left = `${((token.x + 0.5) / cols) * 100 - widthPercent / 2}%`;
+            const top = `${((token.y + 0.5) / rows) * 100 - heightPercent / 2}%`;
             const isActive = activeTokenId === token.id;
             const visibleStatuses = (token.statuses ?? [])
               .slice(0, 2)
@@ -2645,8 +2686,11 @@ function Board({
             const style: CSSProperties = {
               left,
               top,
+              width: `max(${widthPercent}%, 0.9rem)`,
+              height: `max(${heightPercent}%, 0.9rem)`,
               borderColor: token.color,
               backgroundColor: `${token.color}33`,
+              fontSize: footprint < 0.75 ? "0.55rem" : "0.75rem",
               boxShadow: isActive
                 ? `0 0 0 3px rgba(250, 204, 21, 0.9), 0 0 30px ${token.color}88`
                 : `0 0 24px ${token.color}55`,
@@ -2661,7 +2705,7 @@ function Board({
                 onPointerDown={
                   onTokenPointerDown ? onTokenPointerDown(token.id) : undefined
                 }
-                className="absolute flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-semibold text-white shadow-lg transition"
+                className={`absolute flex items-center justify-center border-2 text-sm font-semibold text-white shadow-lg transition ${token.kind === "object" ? "rounded-md" : "rounded-full"}`}
                 style={style}
                 title={
                   (token.statuses ?? []).length
@@ -2707,7 +2751,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [mapState, setMapState] = useState<MapState>(createInitialMapState);
   const [savedMaps, setSavedMaps] = useState<SavedMapPreset[]>([]);
   const [activeSavedMapId, setActiveSavedMapId] = useState<string | null>(null);
-  const [tokens, setTokens] = useState<RoomToken[]>(initialTokens);
+  const [tokens, setTokens] = useState<RoomToken[]>(
+    initialTokens.map(normalizeToken),
+  );
   const [sheets, setSheets] = useState<CharacterSheet[]>(initialSheets);
   const [selectedTokenId, setSelectedTokenId] = useState("elira");
   const [tool, setTool] = useState<DrawingTool>("move");
@@ -2731,6 +2777,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [npcHpInput, setNpcHpInput] = useState("11");
   const [npcAcInput, setNpcAcInput] = useState("12");
   const [npcSpeedInput, setNpcSpeedInput] = useState("30");
+  const [npcFootprintInput, setNpcFootprintInput] = useState("1");
   const [npcPlacementBoard, setNpcPlacementBoard] = useState<BoardKind>("gm");
   const [rumorPromptInput, setRumorPromptInput] = useState(
     "контрабанда в доках и пропавший сборщик налогов",
@@ -4384,6 +4431,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       roleOwner: "gm",
       gmOnly: npcPlacementBoard === "gm",
       visionRadius: npcPlacementBoard === "gm" ? 0 : 3,
+      footprint:
+        npcKindInput === "object"
+          ? clampTokenFootprint(Number(npcFootprintInput))
+          : 1,
       statuses: [],
     };
 
@@ -4402,6 +4453,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     npcHpInput,
     npcKindInput,
     npcNameInput,
+    npcFootprintInput,
     npcPlacementBoard,
     npcSpeedInput,
     role,
@@ -4504,7 +4556,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const handleTokenSetting = (
     tokenId: string,
-    key: "gmOnly" | "visionRadius",
+    key: "gmOnly" | "visionRadius" | "footprint",
     value: boolean | number,
   ) => {
     if (role !== "gm") return;
@@ -4513,7 +4565,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         token.id === tokenId
           ? {
               ...token,
-              [key]: key === "visionRadius" ? Number(value) : value,
+              [key]:
+                key === "visionRadius"
+                  ? Number(value)
+                  : key === "footprint"
+                    ? clampTokenFootprint(Number(value))
+                    : value,
             }
           : token,
       ),
@@ -5161,6 +5218,30 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                           handleTokenSetting(
                                             token.id,
                                             "visionRadius",
+                                            Number(event.target.value),
+                                          )
+                                        }
+                                        className="w-full"
+                                      />
+                                    </label>
+                                  ) : null}
+                                  {token.kind === "object" ? (
+                                    <label className="rounded-xl border border-white/10 px-3 py-2">
+                                      <div className="mb-2">
+                                        Размер объекта:{" "}
+                                        {(token.footprint ?? 1).toFixed(2)}{" "}
+                                        клетки
+                                      </div>
+                                      <input
+                                        type="range"
+                                        min={String(MIN_TOKEN_FOOTPRINT)}
+                                        max={String(MAX_TOKEN_FOOTPRINT)}
+                                        step="0.25"
+                                        value={token.footprint ?? 1}
+                                        onChange={(event) =>
+                                          handleTokenSetting(
+                                            token.id,
+                                            "footprint",
                                             Number(event.target.value),
                                           )
                                         }
@@ -6972,6 +7053,22 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                 </option>
                                 <option value="public">Публичная карта</option>
                               </select>
+                              {npcKindInput === "object" ? (
+                                <select
+                                  value={npcFootprintInput}
+                                  onChange={(event) =>
+                                    setNpcFootprintInput(event.target.value)
+                                  }
+                                  className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                                >
+                                  <option value="0.25">1/4 клетки</option>
+                                  <option value="0.5">1/2 клетки</option>
+                                  <option value="0.75">3/4 клетки</option>
+                                  <option value="1">1 клетка</option>
+                                  <option value="1.5">1.5 клетки</option>
+                                  <option value="2">2 клетки</option>
+                                </select>
+                              ) : null}
                             </div>
                             <div className="mt-3 flex items-center gap-3">
                               <label className="flex-1 rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-xs uppercase tracking-wide text-slate-400">
