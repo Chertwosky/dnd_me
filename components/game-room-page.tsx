@@ -68,6 +68,7 @@ type RoomToken = {
   sheetId?: string;
   gmOnly?: boolean;
   visionRadius?: number;
+  footprint?: 1 | 0.5 | 0.25;
   statuses?: TokenStatusKey[];
 };
 
@@ -2178,11 +2179,37 @@ function createEmptyInitiativeState(): InitiativeState {
 }
 
 function normalizeToken(token: RoomToken): RoomToken {
+  const normalizedFootprint =
+    token.footprint === 0.5 || token.footprint === 0.25 ? token.footprint : 1;
   return {
     ...token,
+    footprint: normalizedFootprint,
     statuses: Array.isArray(token.statuses)
       ? Array.from(new Set(token.statuses))
       : [],
+  };
+}
+
+function withAlpha(color: string, alpha: string) {
+  const hex = hexFromColorString(color).replace("#", "");
+  if (hex.length !== 6) return color;
+  return `#${hex}${alpha}`;
+}
+
+function getTexturePatternStyle(
+  textureColor: string,
+  x: number,
+  y: number,
+): CSSProperties {
+  const offset = (x * 7 + y * 13) % 19;
+  return {
+    backgroundImage: `
+      radial-gradient(circle at ${18 + offset}% ${22 + (offset % 9)}%, ${withAlpha(textureColor, "66")} 0 12%, transparent 13%),
+      radial-gradient(circle at ${72 - (offset % 11)}% ${68 - (offset % 7)}%, ${withAlpha(textureColor, "55")} 0 10%, transparent 11%),
+      repeating-linear-gradient(45deg, ${withAlpha(textureColor, "44")} 0 3px, transparent 3px 8px),
+      repeating-linear-gradient(-45deg, ${withAlpha(textureColor, "33")} 0 2px, transparent 2px 7px)
+    `,
+    backgroundBlendMode: "screen",
   };
 }
 
@@ -2599,13 +2626,13 @@ function Board({
               >
                 {cell.texture ? (
                   <div
-                    className="absolute inset-[18%] rounded-md opacity-40"
-                    style={{ backgroundColor: cell.texture }}
+                    className="absolute inset-[8%] rounded-md opacity-80"
+                    style={getTexturePatternStyle(cell.texture, x, y)}
                   />
                 ) : null}
                 {cell.obstacle ? (
                   <div
-                    className="absolute inset-x-[15%] bottom-[15%] top-[15%] rounded-md border-2 opacity-90"
+                    className="absolute inset-x-[18%] bottom-[18%] top-[18%] rounded-md border-2 opacity-90"
                     style={{
                       borderColor: cell.obstacle,
                       backgroundColor: `${cell.obstacle}33`,
@@ -2614,8 +2641,14 @@ function Board({
                 ) : null}
                 {cell.furniture ? (
                   <div
-                    className="absolute inset-x-[20%] inset-y-[32%] rounded-sm"
-                    style={{ backgroundColor: cell.furniture }}
+                    className="absolute inset-x-[28%] inset-y-[28%] rounded-sm shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+                    style={{
+                      backgroundColor: cell.furniture,
+                      clipPath:
+                        x % 2 === 0
+                          ? "polygon(0 15%, 80% 0, 100% 85%, 20% 100%)"
+                          : "polygon(20% 0, 100% 20%, 80% 100%, 0 80%)",
+                    }}
                   />
                 ) : null}
                 {cell.fog ? (
@@ -2629,9 +2662,12 @@ function Board({
           })}
 
           {tokens.map((token) => {
-            const left = `calc(${((token.x + 0.5) / cols) * 100}% - 1.5rem)`;
-            const top = `calc(${((token.y + 0.5) / rows) * 100}% - 1.5rem)`;
+            const tokenFootprint = token.footprint ?? 1;
+            const left = `${((token.x + 0.5) / cols) * 100}%`;
+            const top = `${((token.y + 0.5) / rows) * 100}%`;
             const isActive = activeTokenId === token.id;
+            const tokenWidth = `calc((100% / ${cols}) * ${tokenFootprint})`;
+            const tokenHeight = `calc((100% / ${rows}) * ${tokenFootprint})`;
             const visibleStatuses = (token.statuses ?? [])
               .slice(0, 2)
               .flatMap((status) => {
@@ -2645,6 +2681,9 @@ function Board({
             const style: CSSProperties = {
               left,
               top,
+              width: tokenWidth,
+              height: tokenHeight,
+              transform: "translate(-50%, -50%)",
               borderColor: token.color,
               backgroundColor: `${token.color}33`,
               boxShadow: isActive
@@ -2661,7 +2700,7 @@ function Board({
                 onPointerDown={
                   onTokenPointerDown ? onTokenPointerDown(token.id) : undefined
                 }
-                className="absolute flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-semibold text-white shadow-lg transition"
+                className={`absolute flex items-center justify-center border-2 text-sm font-semibold text-white shadow-lg transition ${token.kind === "object" ? "rounded-md" : "rounded-full"}`}
                 style={style}
                 title={
                   (token.statuses ?? []).length
@@ -2669,7 +2708,9 @@ function Board({
                     : token.name
                 }
               >
-                {token.short}
+                <span className="pointer-events-none text-[clamp(8px,0.95vw,14px)]">
+                  {token.short}
+                </span>
                 {visibleStatuses.length ? (
                   <span className="absolute -bottom-5 left-1/2 flex -translate-x-1/2 gap-1">
                     {visibleStatuses.map((status) => (
@@ -4504,8 +4545,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const handleTokenSetting = (
     tokenId: string,
-    key: "gmOnly" | "visionRadius",
-    value: boolean | number,
+    key: "gmOnly" | "visionRadius" | "footprint",
+    value: boolean | number | RoomToken["footprint"],
   ) => {
     if (role !== "gm") return;
     setTokens((current) =>
@@ -4513,7 +4554,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         token.id === tokenId
           ? {
               ...token,
-              [key]: key === "visionRadius" ? Number(value) : value,
+              [key]:
+                key === "visionRadius"
+                  ? Number(value)
+                  : key === "footprint"
+                    ? value === 0.5 || value === 0.25
+                      ? value
+                      : 1
+                    : value,
             }
           : token,
       ),
@@ -5145,6 +5193,27 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                         )
                                       }
                                     />
+                                  </label>
+                                  <label className="rounded-xl border border-white/10 px-3 py-2">
+                                    <div className="mb-1">Размер на сетке</div>
+                                    <select
+                                      value={String(token.footprint ?? 1)}
+                                      onChange={(event) =>
+                                        handleTokenSetting(
+                                          token.id,
+                                          "footprint",
+                                          Number(event.target.value) as
+                                            | 1
+                                            | 0.5
+                                            | 0.25,
+                                        )
+                                      }
+                                      className="w-full rounded-lg border border-white/10 bg-slate-950/80 px-2 py-1.5 text-xs text-slate-100"
+                                    >
+                                      <option value="1">1 клетка</option>
+                                      <option value="0.5">1/2 клетки</option>
+                                      <option value="0.25">1/4 клетки</option>
+                                    </select>
                                   </label>
                                   {token.kind === "player" ? (
                                     <label className="rounded-xl border border-white/10 px-3 py-2">
