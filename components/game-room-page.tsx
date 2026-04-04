@@ -3107,6 +3107,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   });
   const [isLeftMasterDrawerOpen, setIsLeftMasterDrawerOpen] = useState(true);
   const [isRightMasterDrawerOpen, setIsRightMasterDrawerOpen] = useState(true);
+  const leftDrawerContentWidth = Math.max(gmPanelWidths.admin, gmPanelWidths.tokens);
+  const rightDrawerContentWidth = gmPanelWidths.party;
 
   const cols = mapState.cols;
   const rows = mapState.rows;
@@ -5512,7 +5514,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               <div
                 className={`fixed inset-0 z-30 overflow-y-auto border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isLeftMasterDrawerOpen ? "translate-x-0" : "-translate-x-[110%]"}`}
               >
-                <div className="w-full max-w-6xl space-y-2">
+                <div
+                  className="w-full space-y-2"
+                  style={{ maxWidth: `${leftDrawerContentWidth}px` }}
+                >
                   {gmPanelOrder
                   .filter(
                     (panelId): panelId is "admin" | "tokens" =>
@@ -6120,6 +6125,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 <div
                   className={
                     role === "gm" ? "ml-auto w-full max-w-6xl space-y-2" : ""
+                  }
+                  style={
+                    role === "gm"
+                      ? { maxWidth: `${rightDrawerContentWidth}px` }
+                      : undefined
                   }
                 >
                 {role === "gm" ? (
