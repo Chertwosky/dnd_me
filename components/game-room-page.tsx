@@ -3303,6 +3303,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         setUseSharedGmMapForPlayers(parsed.useSharedGmMapForPlayers);
       if (parsed.mainMapSnapshot?.mapName && parsed.mainMapSnapshot?.mapState) {
         setMainMapSnapshot(parsed.mainMapSnapshot);
+      } else if (parsed.mapName && parsed.mapState) {
+        setMainMapSnapshot({
+          mapName: parsed.mapName,
+          mapState: parsed.mapState as MapState,
+        });
       }
       if (
         parsed.mapState?.cols &&
@@ -3384,6 +3389,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           : preset,
       ),
     );
+  }, [activeSavedMapId, mapName, mapState]);
+
+  useEffect(() => {
+    if (activeSavedMapId) return;
+    setMainMapSnapshot({ mapName, mapState });
   }, [activeSavedMapId, mapName, mapState]);
 
   useEffect(() => {
@@ -4021,6 +4031,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setActiveSavedMapId(parsed.activeSavedMapId ?? null);
       if (parsed.mainMapSnapshot?.mapName && parsed.mainMapSnapshot?.mapState) {
         setMainMapSnapshot(parsed.mainMapSnapshot);
+      } else {
+        setMainMapSnapshot({
+          mapName: parsed.mapName,
+          mapState: parsed.mapState,
+        });
       }
       setWidgetUrl(parsed.widgetUrl ?? DEFAULT_WIDGET_URL);
       if (parsed.tokens) setTokens(parsed.tokens.map(normalizeToken));
