@@ -250,6 +250,7 @@ type SavedMapPreset = {
   name: string;
   mapName: string;
   mapState: MapState;
+  soundtrack?: SceneTrack[];
 };
 
 type SavedCharacterPreset = {
@@ -257,6 +258,12 @@ type SavedCharacterPreset = {
   name: string;
   savedAt: string;
   sheet: CharacterSheet;
+};
+
+type SceneTrack = {
+  id: string;
+  title: string;
+  url: string;
 };
 
 const DEFAULT_COLS = 16;
@@ -2361,6 +2368,23 @@ function getStatusMeta(status: TokenStatusKey) {
   return tokenStatusCatalog.find((item) => item.key === status);
 }
 
+function normalizeSceneSoundtrack(tracks?: SceneTrack[]): SceneTrack[] {
+  if (!Array.isArray(tracks)) return [];
+  return tracks
+    .filter((track) => track && typeof track.url === "string")
+    .map((track, index) => ({
+      id:
+        typeof track.id === "string" && track.id.trim()
+          ? track.id
+          : `track-${index}-${Date.now()}`,
+      title:
+        typeof track.title === "string" && track.title.trim()
+          ? track.title
+          : `Трек ${index + 1}`,
+      url: track.url,
+    }));
+}
+
 function buildSavedRoomState({
   mapName,
   mapState,
@@ -3040,6 +3064,15 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [useSharedGmMapForPlayers, setUseSharedGmMapForPlayers] =
     useState(true);
   const [mapPresetName, setMapPresetName] = useState("Сцена 1");
+  const [trackDraftByScene, setTrackDraftByScene] = useState<
+    Record<string, { title: string; url: string }>
+  >({});
+  const [activeTrackByScene, setActiveTrackByScene] = useState<
+    Record<string, string | undefined>
+  >({});
+  const [loopTrackByScene, setLoopTrackByScene] = useState<
+    Record<string, boolean>
+  >({});
   const [quickMapTabName, setQuickMapTabName] = useState("");
   const [quickTabAsToken, setQuickTabAsToken] = useState(true);
   const [widgetUrl, setWidgetUrl] = useState(DEFAULT_WIDGET_URL);
@@ -3314,7 +3347,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         setGridColsInput(String(parsed.mapState.cols));
         setGridRowsInput(String(parsed.mapState.rows));
       }
-      if (parsed.savedMaps) setSavedMaps(parsed.savedMaps);
+      if (parsed.savedMaps)
+        setSavedMaps(
+          parsed.savedMaps.map((preset) => ({
+            ...preset,
+            soundtrack: normalizeSceneSoundtrack(preset.soundtrack),
+          })),
+        );
       if (parsed.activeSavedMapId) setActiveSavedMapId(parsed.activeSavedMapId);
       if (parsed.widgetUrl) setWidgetUrl(parsed.widgetUrl);
       if (parsed.tokens) setTokens(parsed.tokens.map(normalizeToken));
@@ -3882,6 +3921,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       name: nextName,
       mapName: nextName,
       mapState: nextMapState,
+      soundtrack: [],
     };
     const nextSavedMaps = [...savedMaps, nextPreset];
     const nextJournal = [
@@ -3932,6 +3972,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       name: mapPresetName.trim() || mapName || "Новая сцена",
       mapName,
       mapState,
+      soundtrack: [],
     };
 
     const nextSavedMaps = [...savedMaps, nextPreset];
@@ -4027,7 +4068,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setMapState(parsed.mapState);
       setGridColsInput(String(parsed.mapState.cols));
       setGridRowsInput(String(parsed.mapState.rows));
-      setSavedMaps(parsed.savedMaps ?? []);
+      setSavedMaps(
+        (parsed.savedMaps ?? []).map((preset) => ({
+          ...preset,
+          soundtrack: normalizeSceneSoundtrack(preset.soundtrack),
+        })),
+      );
       setActiveSavedMapId(parsed.activeSavedMapId ?? null);
       if (parsed.mainMapSnapshot?.mapName && parsed.mainMapSnapshot?.mapState) {
         setMainMapSnapshot(parsed.mainMapSnapshot);
@@ -4116,6 +4162,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         publicTiles: createEmptyMap(cols, rows),
         gmTiles: createEmptyMap(cols, rows),
       },
+      soundtrack: [],
     };
     setSavedMaps((current) => [...current, nextPreset]);
     setActiveSavedMapId(presetId);
@@ -4191,6 +4238,63 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
     addJournalEntry("map", "Вкладка карты удалена.");
   };
+
+  const handleAddTrackToScene = useCallback(
+    (presetId: string) => {
+      const draft = trackDraftByScene[presetId] ?? { title: "", url: "" };
+      const nextUrl = draft.url.trim();
+      if (!nextUrl) return;
+      const nextTitle = draft.title.trim() || "Без названия";
+      const nextTrack: SceneTrack = {
+        id: `track-${Date.now()}`,
+        title: nextTitle,
+        url: nextUrl,
+      };
+
+      setSavedMaps((current) =>
+        current.map((preset) =>
+          preset.id === presetId
+            ? {
+                ...preset,
+                soundtrack: [
+                  ...normalizeSceneSoundtrack(preset.soundtrack),
+                  nextTrack,
+                ],
+              }
+            : preset,
+        ),
+      );
+      setActiveTrackByScene((current) => ({
+        ...current,
+        [presetId]: current[presetId] ?? nextTrack.id,
+      }));
+      setTrackDraftByScene((current) => ({
+        ...current,
+        [presetId]: { title: "", url: "" },
+      }));
+      addJournalEntry("map", `В сцену добавлен трек «${nextTitle}».`);
+    },
+    [addJournalEntry, trackDraftByScene],
+  );
+
+  const handleDeleteTrackFromScene = useCallback((presetId: string, trackId: string) => {
+    setSavedMaps((current) =>
+      current.map((preset) =>
+        preset.id === presetId
+          ? {
+              ...preset,
+              soundtrack: normalizeSceneSoundtrack(preset.soundtrack).filter(
+                (track) => track.id !== trackId,
+              ),
+            }
+          : preset,
+      ),
+    );
+    setActiveTrackByScene((current) => {
+      if (current[presetId] !== trackId) return current;
+      return { ...current, [presetId]: undefined };
+    });
+  }, []);
 
   const handleResizeMap = () => {
     const nextCols = clamp(
@@ -5275,24 +5379,137 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             <div className="mt-4 flex flex-wrap gap-2">
               {savedMaps.length ? (
                 savedMaps.map((preset, index) => (
-                  <div key={preset.id} className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleLoadSavedMap(preset)}
-                      className={boardButtonClass(
-                        activeSavedMapId === preset.id,
-                      )}
-                    >
-                      {preset.name}
-                    </button>
-                    {index > 0 ? (
+                  <div
+                    key={preset.id}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-900/50 p-3"
+                  >
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleDeleteSavedMap(preset.id)}
-                        className="rounded-full border border-white/10 px-3 py-2 text-sm text-rose-300"
-                        aria-label={`Удалить вкладку ${preset.name}`}
+                        onClick={() => handleLoadSavedMap(preset)}
+                        className={boardButtonClass(
+                          activeSavedMapId === preset.id,
+                        )}
                       >
-                        ×
+                        {preset.name}
                       </button>
-                    ) : null}
+                      {index > 0 ? (
+                        <button
+                          onClick={() => handleDeleteSavedMap(preset.id)}
+                          className="rounded-full border border-white/10 px-3 py-2 text-sm text-rose-300"
+                          aria-label={`Удалить вкладку ${preset.name}`}
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/50 p-3">
+                      <div className="text-xs uppercase tracking-wide text-slate-400">
+                        MP3-плейлист сцены
+                      </div>
+                      <div className="mt-2 grid gap-2 md:grid-cols-[1fr_2fr_auto]">
+                        <input
+                          value={trackDraftByScene[preset.id]?.title ?? ""}
+                          onChange={(event) =>
+                            setTrackDraftByScene((current) => ({
+                              ...current,
+                              [preset.id]: {
+                                title: event.target.value,
+                                url: current[preset.id]?.url ?? "",
+                              },
+                            }))
+                          }
+                          placeholder="Название темы"
+                          className="rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white"
+                        />
+                        <input
+                          value={trackDraftByScene[preset.id]?.url ?? ""}
+                          onChange={(event) =>
+                            setTrackDraftByScene((current) => ({
+                              ...current,
+                              [preset.id]: {
+                                title: current[preset.id]?.title ?? "",
+                                url: event.target.value,
+                              },
+                            }))
+                          }
+                          placeholder="https://.../theme.mp3"
+                          className="rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white"
+                        />
+                        <button
+                          onClick={() => handleAddTrackToScene(preset.id)}
+                          className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200"
+                        >
+                          Добавить
+                        </button>
+                      </div>
+                      {normalizeSceneSoundtrack(preset.soundtrack).length ? (
+                        <div className="mt-3 space-y-2">
+                          <select
+                            value={
+                              activeTrackByScene[preset.id] ??
+                              normalizeSceneSoundtrack(preset.soundtrack)[0]?.id ??
+                              ""
+                            }
+                            onChange={(event) =>
+                              setActiveTrackByScene((current) => ({
+                                ...current,
+                                [preset.id]: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-white"
+                          >
+                            {normalizeSceneSoundtrack(preset.soundtrack).map((track) => (
+                              <option key={track.id} value={track.id}>
+                                {track.title}
+                              </option>
+                            ))}
+                          </select>
+                          <label className="flex items-center gap-2 text-sm text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(loopTrackByScene[preset.id])}
+                              onChange={(event) =>
+                                setLoopTrackByScene((current) => ({
+                                  ...current,
+                                  [preset.id]: event.target.checked,
+                                }))
+                              }
+                            />
+                            Зациклить текущий трек
+                          </label>
+                          <audio
+                            controls
+                            loop={Boolean(loopTrackByScene[preset.id])}
+                            src={
+                              normalizeSceneSoundtrack(preset.soundtrack).find(
+                                (track) =>
+                                  track.id ===
+                                  (activeTrackByScene[preset.id] ??
+                                    normalizeSceneSoundtrack(preset.soundtrack)[0]?.id),
+                              )?.url
+                            }
+                            className="w-full"
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            {normalizeSceneSoundtrack(preset.soundtrack).map((track) => (
+                              <button
+                                key={`${preset.id}-${track.id}`}
+                                onClick={() =>
+                                  handleDeleteTrackFromScene(preset.id, track.id)
+                                }
+                                className="rounded-full border border-white/10 px-3 py-1 text-xs text-rose-300"
+                              >
+                                Удалить «{track.title}»
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-slate-400">
+                          Добавьте ссылки на mp3, чтобы собрать атмосферный набор для этой сцены.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))
               ) : (
