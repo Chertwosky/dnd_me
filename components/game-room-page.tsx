@@ -2700,6 +2700,7 @@ function characterSections(sheet: CharacterSheet) {
 }
 
 function Board({
+  boardId,
   title,
   subtitle,
   cols,
@@ -2717,6 +2718,7 @@ function Board({
   onTokenPointerDown,
   activeTokenId,
 }: {
+  boardId: string;
   title: string;
   subtitle: string;
   cols: number;
@@ -2787,6 +2789,7 @@ function Board({
             </div>
           ) : null}
           <div
+            id={boardId}
             onPointerDown={onBoardPointerDown}
             className="relative touch-none select-none overflow-hidden rounded-2xl border border-white/10 bg-slate-900"
           style={{
@@ -3643,7 +3646,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const applyPointerToBoard = useCallback(
     (clientX: number, clientY: number, board: BoardKind) => {
-      const boardElement = document.getElementById(`battle-board-${board}`);
+      const boardElement = document.getElementById(`battle-grid-${board}`);
       if (!boardElement) return;
 
       const rect = boardElement.getBoundingClientRect();
@@ -7780,6 +7783,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             <div className="space-y-4">
               <div id="battle-board-public">
                 <Board
+                  boardId="battle-grid-public"
                   title="Публичная карта"
                   subtitle="Превью того, что увидят игроки: туман войны, радиус обзора и скрытность."
                   cols={cols}
@@ -7800,6 +7804,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               </div>
               <div id="battle-board-gm">
                 <Board
+                  boardId="battle-grid-gm"
                   title="Скрытая карта мастера"
                   subtitle="Здесь мастер держит НПС, ловушки, тайники и будущие сцены до их открытия игрокам."
                   cols={cols}
@@ -7821,6 +7826,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           ) : (
             <div id="battle-board-public">
               <Board
+                boardId="battle-grid-public"
                 title="Игровое поле"
                 subtitle="Игрок видит карту с учётом fog of war, обзора и скрытых токенов."
                 cols={cols}
