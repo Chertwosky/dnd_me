@@ -67,6 +67,9 @@ type RoomToken = {
   roleOwner?: RoomRole;
   sheetId?: string;
   gmOnly?: boolean;
+  hiddenFromPlayers?: boolean;
+  linkedMapId?: string;
+  mapKey?: string;
   visionRadius?: number;
   statuses?: TokenStatusKey[];
 };
@@ -184,9 +187,18 @@ type InitiativeState = {
 
 type CellData = {
   terrain: string;
+  terrainPreset?: "stone" | "wood" | "water" | "earth" | "grass";
   obstacle: string | null;
+  obstacleScale?: "full" | "half" | "quarter";
+  obstacleAnchor?: "center" | "tl" | "tr" | "bl" | "br";
+  obstaclePreset?: "stone-wall" | "wood-wall" | "door" | "column" | "light";
   texture: string | null;
+  texturePreset?: "moss" | "rubble" | "sand" | "blood" | "tiles";
   furniture: string | null;
+  furnitureScale?: "full" | "half" | "quarter";
+  furnitureAnchor?: "center" | "tl" | "tr" | "bl" | "br";
+  furniturePreset?: "table" | "chair" | "stage" | "crate" | "altar";
+  furnitureVariant?: "wood" | "stone" | "velvet";
   fog: boolean;
 };
 
@@ -221,6 +233,12 @@ type SavedRoomState = {
   savedMaps?: SavedMapPreset[];
   activeSavedMapId?: string | null;
   widgetUrl?: string;
+  useFogOfWar?: boolean;
+  useSharedGmMapForPlayers?: boolean;
+  mainMapSnapshot?: {
+    mapName: string;
+    mapState: MapState;
+  };
   tokens: RoomToken[];
   sheets: CharacterSheet[];
   journal: JournalEntry[];
@@ -244,7 +262,7 @@ type SavedCharacterPreset = {
 const DEFAULT_COLS = 16;
 const DEFAULT_ROWS = 10;
 const MIN_GRID = 4;
-const MAX_GRID = 40;
+const MAX_GRID = 99;
 const DEFAULT_TERRAIN = "#0f172a";
 const roomAccessRegistry = new Map<string, RoomAccessState>();
 
@@ -274,6 +292,38 @@ const layerPalette: Record<LayerKind, string[]> = {
   texture: ["#22c55e", "#06b6d4", "#a855f7", "#f43f5e"],
   furniture: ["#f8fafc", "#cbd5e1", "#94a3b8", "#fde68a"],
 };
+
+const terrainBrushes = [
+  { id: "stone", label: "Камень", color: "#475569" },
+  { id: "wood", label: "Дерево", color: "#92400e" },
+  { id: "water", label: "Вода", color: "#1d4ed8" },
+  { id: "earth", label: "Земля", color: "#7c2d12" },
+  { id: "grass", label: "Трава", color: "#166534" },
+] as const;
+
+const textureBrushes = [
+  { id: "moss", label: "Мох", color: "#22c55e" },
+  { id: "rubble", label: "Щебень", color: "#a1a1aa" },
+  { id: "sand", label: "Песок", color: "#facc15" },
+  { id: "blood", label: "Кровь", color: "#dc2626" },
+  { id: "tiles", label: "Плитка", color: "#94a3b8" },
+] as const;
+
+const obstacleBrushes = [
+  { id: "stone-wall", label: "Стена (кам.)", color: "#64748b" },
+  { id: "wood-wall", label: "Стена (дер.)", color: "#a16207" },
+  { id: "door", label: "Дверь", color: "#f59e0b" },
+  { id: "column", label: "Колонна", color: "#cbd5e1" },
+  { id: "light", label: "Источник света", color: "#fde047" },
+] as const;
+
+const furnitureBrushes = [
+  { id: "table", label: "Стол", color: "#d6d3d1" },
+  { id: "chair", label: "Стул", color: "#e7e5e4" },
+  { id: "stage", label: "Сцена/возвыш.", color: "#a78bfa" },
+  { id: "crate", label: "Ящик", color: "#b45309" },
+  { id: "altar", label: "Алтарь", color: "#e2e8f0" },
+] as const;
 
 const toolMeta: Array<{
   value: DrawingTool;
@@ -1635,10 +1685,131 @@ const initialSheets: CharacterSheet[] = [
 function createCell(): CellData {
   return {
     terrain: DEFAULT_TERRAIN,
+    terrainPreset: "stone",
     obstacle: null,
+    obstacleScale: "full",
+    obstacleAnchor: "center",
+    obstaclePreset: undefined,
     texture: null,
+    texturePreset: undefined,
     furniture: null,
+    furnitureScale: "full",
+    furnitureAnchor: "center",
+    furniturePreset: undefined,
+    furnitureVariant: "wood",
     fog: false,
+  };
+}
+
+function getStampStyle(
+  scale: "full" | "half" | "quarter" = "full",
+  anchor: "center" | "tl" | "tr" | "bl" | "br" = "center",
+): CSSProperties {
+  if (scale === "full") return { inset: "12%" };
+
+  const size = scale === "half" ? "50%" : "25%";
+  if (anchor === "center") {
+    return {
+      width: size,
+      height: size,
+      left: "50%",
+      top: "50%",
+      transform: "translate(-50%, -50%)",
+    };
+  }
+
+  const inset = "14%";
+  const style: CSSProperties = { width: size, height: size };
+  if (anchor.includes("t")) style.top = inset;
+  if (anchor.includes("b")) style.bottom = inset;
+  if (anchor.includes("l")) style.left = inset;
+  if (anchor.includes("r")) style.right = inset;
+  return style;
+}
+
+function findBrushColor<
+  T extends ReadonlyArray<{ id: string; color: string }>,
+>(catalog: T, id: string | undefined, fallback: string) {
+  return catalog.find((item) => item.id === id)?.color ?? fallback;
+}
+
+function getTerrainBackground(cell: CellData): CSSProperties {
+  const preset = cell.terrainPreset;
+  if (preset === "water") {
+    return {
+      backgroundColor: "#1d4ed8",
+      backgroundImage:
+        "repeating-radial-gradient(circle at 30% 30%, rgba(255,255,255,0.16) 0 5px, transparent 5px 13px)",
+    };
+  }
+  if (preset === "wood") {
+    return {
+      backgroundColor: "#92400e",
+      backgroundImage:
+        "repeating-linear-gradient(90deg, rgba(255,255,255,0.1) 0 3px, rgba(0,0,0,0.08) 3px 10px)",
+    };
+  }
+  if (preset === "earth") {
+    return {
+      backgroundColor: "#7c2d12",
+      backgroundImage:
+        "radial-gradient(circle at 25% 20%, rgba(255,255,255,0.1), transparent 40%), radial-gradient(circle at 70% 80%, rgba(0,0,0,0.2), transparent 45%)",
+    };
+  }
+  if (preset === "grass") {
+    return {
+      backgroundColor: "#166534",
+      backgroundImage:
+        "repeating-linear-gradient(65deg, rgba(255,255,255,0.1) 0 1px, transparent 1px 6px)",
+    };
+  }
+  return {
+    backgroundColor: cell.terrain,
+    backgroundImage:
+      "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.09), transparent 35%), radial-gradient(circle at 80% 70%, rgba(15,23,42,0.24), transparent 42%)",
+  };
+}
+
+function getTextureOverlay(cell: CellData): CSSProperties | null {
+  if (!cell.texture && !cell.texturePreset) return null;
+  if (cell.texturePreset === "moss") {
+    return {
+      backgroundImage:
+        "radial-gradient(circle, rgba(34,197,94,0.35) 0 30%, transparent 35%)",
+      backgroundSize: "12px 12px",
+    };
+  }
+  if (cell.texturePreset === "rubble") {
+    return {
+      backgroundImage:
+        "repeating-linear-gradient(130deg, rgba(161,161,170,0.5) 0 2px, transparent 2px 8px)",
+    };
+  }
+  if (cell.texturePreset === "sand") {
+    return {
+      backgroundImage:
+        "radial-gradient(circle, rgba(250,204,21,0.35) 0 20%, transparent 24%)",
+      backgroundSize: "8px 8px",
+    };
+  }
+  if (cell.texturePreset === "blood") {
+    return {
+      backgroundImage:
+        "radial-gradient(circle at 35% 40%, rgba(220,38,38,0.6), transparent 36%), radial-gradient(circle at 65% 65%, rgba(153,27,27,0.5), transparent 30%)",
+    };
+  }
+  if (cell.texturePreset === "tiles") {
+    return {
+      backgroundImage:
+        "linear-gradient(rgba(148,163,184,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.5) 1px, transparent 1px)",
+      backgroundSize: "10px 10px",
+    };
+  }
+  return {
+    backgroundImage:
+      "repeating-linear-gradient(45deg, transparent 0 7px, currentColor 7px 9px)",
+    color: cell.texture ?? "#22c55e",
+    mixBlendMode: "screen",
   };
 }
 
@@ -2180,6 +2351,7 @@ function createEmptyInitiativeState(): InitiativeState {
 function normalizeToken(token: RoomToken): RoomToken {
   return {
     ...token,
+    mapKey: token.mapKey ?? "main",
     statuses: Array.isArray(token.statuses)
       ? Array.from(new Set(token.statuses))
       : [],
@@ -2196,6 +2368,9 @@ function buildSavedRoomState({
   savedMaps,
   activeSavedMapId,
   widgetUrl,
+  useFogOfWar,
+  useSharedGmMapForPlayers,
+  mainMapSnapshot,
   tokens,
   sheets,
   journal,
@@ -2207,6 +2382,9 @@ function buildSavedRoomState({
     savedMaps,
     activeSavedMapId,
     widgetUrl,
+    useFogOfWar,
+    useSharedGmMapForPlayers,
+    mainMapSnapshot,
     tokens,
     sheets,
     journal,
@@ -2531,6 +2709,7 @@ function characterSections(sheet: CharacterSheet) {
 }
 
 function Board({
+  boardId,
   title,
   subtitle,
   cols,
@@ -2538,11 +2717,19 @@ function Board({
   tiles,
   tokens,
   zoom,
+  showZoomOverlay,
+  onZoomOut,
+  onZoomIn,
+  onZoomChange,
+  onZoomFit,
+  onReturnToMain,
+  showReturnToMain,
   visibleMask,
   onBoardPointerDown,
   onTokenPointerDown,
   activeTokenId,
 }: {
+  boardId: string;
   title: string;
   subtitle: string;
   cols: number;
@@ -2550,6 +2737,13 @@ function Board({
   tiles: CellData[];
   tokens: RoomToken[];
   zoom: number;
+  showZoomOverlay?: boolean;
+  onZoomOut?: () => void;
+  onZoomIn?: () => void;
+  onZoomChange?: (value: number) => void;
+  onZoomFit?: () => void;
+  onReturnToMain?: () => void;
+  showReturnToMain?: boolean;
   visibleMask?: boolean[];
   onBoardPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onTokenPointerDown?: (
@@ -2573,9 +2767,53 @@ function Board({
       </div>
 
       <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/70 p-3">
-        <div
-          onPointerDown={onBoardPointerDown}
-          className="relative touch-none select-none overflow-hidden rounded-2xl border border-white/10 bg-slate-900"
+        <div className="relative">
+          {showZoomOverlay ? (
+            <div className="absolute right-2 top-2 z-20 flex items-center gap-2 rounded-xl border border-white/15 bg-slate-950/85 px-2 py-2 backdrop-blur">
+              <button
+                type="button"
+                onClick={onZoomOut}
+                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-100"
+              >
+                −
+              </button>
+              <input
+                type="range"
+                min="20"
+                max="180"
+                value={Math.round(zoom * 100)}
+                onChange={(event) => onZoomChange?.(Number(event.target.value) / 100)}
+                className="w-24"
+              />
+              <button
+                type="button"
+                onClick={onZoomIn}
+                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-100"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                onClick={onZoomFit}
+                className="rounded-lg border border-white/15 px-2 py-1 text-[11px] text-slate-200"
+              >
+                fit
+              </button>
+              {showReturnToMain ? (
+                <button
+                  type="button"
+                  onClick={onReturnToMain}
+                  className="rounded-lg border border-emerald-300/30 px-2 py-1 text-[11px] text-emerald-200"
+                >
+                  main
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          <div
+            id={boardId}
+            onPointerDown={onBoardPointerDown}
+            className="relative touch-none select-none overflow-hidden rounded-2xl border border-white/10 bg-slate-900"
           style={{
             display: "grid",
             gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
@@ -2591,32 +2829,69 @@ function Board({
             const y = Math.floor(index / cols);
             const cell = tiles[index] ?? createCell();
             const isVisible = visibleMask ? visibleMask[index] : true;
+            const textureOverlay = getTextureOverlay(cell);
             return (
               <div
                 key={`${title}-${x}-${y}`}
-                className="relative border border-white/10"
-                style={{ backgroundColor: cell.terrain }}
+                className="relative"
+                style={getTerrainBackground(cell)}
               >
-                {cell.texture ? (
+                {textureOverlay ? (
                   <div
-                    className="absolute inset-[18%] rounded-md opacity-40"
-                    style={{ backgroundColor: cell.texture }}
+                    className="absolute inset-0 opacity-55"
+                    style={{
+                      ...textureOverlay,
+                      backgroundPosition: `${x * 10}px ${y * 10}px`,
+                    }}
                   />
                 ) : null}
                 {cell.obstacle ? (
                   <div
-                    className="absolute inset-x-[15%] bottom-[15%] top-[15%] rounded-md border-2 opacity-90"
+                    className="absolute flex items-center justify-center rounded-md border-2 opacity-90"
                     style={{
+                      ...getStampStyle(cell.obstacleScale, cell.obstacleAnchor),
                       borderColor: cell.obstacle,
-                      backgroundColor: `${cell.obstacle}33`,
+                      backgroundColor: `${cell.obstacle}4D`,
+                      boxShadow: `inset 0 0 0 1px ${cell.obstacle}AA`,
                     }}
-                  />
+                  >
+                    {cell.obstaclePreset === "door" ? (
+                      <span className="text-[10px] font-black text-amber-100">
+                        🚪
+                      </span>
+                    ) : cell.obstaclePreset === "column" ? (
+                      <span className="text-[10px] font-black text-slate-100">
+                        ◉
+                      </span>
+                    ) : cell.obstaclePreset === "light" ? (
+                      <span className="text-[10px] font-black text-yellow-100">
+                        ✦
+                      </span>
+                    ) : null}
+                  </div>
                 ) : null}
                 {cell.furniture ? (
                   <div
-                    className="absolute inset-x-[20%] inset-y-[32%] rounded-sm"
-                    style={{ backgroundColor: cell.furniture }}
-                  />
+                    className="absolute flex items-center justify-center rounded-sm"
+                    style={{
+                      ...getStampStyle(cell.furnitureScale, cell.furnitureAnchor),
+                      backgroundColor: cell.furniture,
+                      backgroundImage:
+                        cell.furniturePreset === "stage"
+                          ? cell.furnitureVariant === "stone"
+                            ? "linear-gradient(180deg, rgba(226,232,240,0.6), rgba(71,85,105,0.45))"
+                            : cell.furnitureVariant === "velvet"
+                              ? "repeating-linear-gradient(90deg, rgba(244,114,182,0.6) 0 3px, rgba(131,24,67,0.5) 3px 6px)"
+                              : "repeating-linear-gradient(90deg, rgba(245,158,11,0.45) 0 4px, rgba(120,53,15,0.45) 4px 8px)"
+                          : "linear-gradient(120deg, rgba(255,255,255,0.2), rgba(15,23,42,0.22))",
+                    }}
+                  >
+                    {cell.furniturePreset === "table" ? "▭" : null}
+                    {cell.furniturePreset === "chair" ? "◍" : null}
+                    {cell.furniturePreset === "stage" ? "▤" : null}
+                    {cell.furniturePreset === "crate" ? "▣" : null}
+                    {cell.furniturePreset === "altar" ? "✢" : null}
+                  </div>
                 ) : null}
                 {cell.fog ? (
                   <div className="absolute inset-0 bg-slate-950/70" />
@@ -2627,10 +2902,18 @@ function Board({
               </div>
             );
           })}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage:
+                "linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.14) 1px, transparent 1px)",
+              backgroundSize: `${100 / cols}% ${100 / rows}%`,
+            }}
+          />
 
           {tokens.map((token) => {
-            const left = `calc(${((token.x + 0.5) / cols) * 100}% - 1.5rem)`;
-            const top = `calc(${((token.y + 0.5) / rows) * 100}% - 1.5rem)`;
+            const left = `${((token.x + 0.5) / cols) * 100}%`;
+            const top = `${((token.y + 0.5) / rows) * 100}%`;
             const isActive = activeTokenId === token.id;
             const visibleStatuses = (token.statuses ?? [])
               .slice(0, 2)
@@ -2645,6 +2928,8 @@ function Board({
             const style: CSSProperties = {
               left,
               top,
+              transform: `translate(-50%, -50%) scale(${1 / zoom})`,
+              transformOrigin: "center",
               borderColor: token.color,
               backgroundColor: `${token.color}33`,
               boxShadow: isActive
@@ -2690,6 +2975,7 @@ function Board({
               </button>
             );
           })}
+          </div>
         </div>
       </div>
     </div>
@@ -2705,6 +2991,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [authError, setAuthError] = useState("");
   const [mapName, setMapName] = useState("Руины старой башни");
   const [mapState, setMapState] = useState<MapState>(createInitialMapState);
+  const [mainMapSnapshot, setMainMapSnapshot] = useState<{
+    mapName: string;
+    mapState: MapState;
+  }>({
+    mapName: "Руины старой башни",
+    mapState: createInitialMapState(),
+  });
   const [savedMaps, setSavedMaps] = useState<SavedMapPreset[]>([]);
   const [activeSavedMapId, setActiveSavedMapId] = useState<string | null>(null);
   const [tokens, setTokens] = useState<RoomToken[]>(initialTokens);
@@ -2712,6 +3005,27 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [selectedTokenId, setSelectedTokenId] = useState("elira");
   const [tool, setTool] = useState<DrawingTool>("move");
   const [selectedColor, setSelectedColor] = useState(layerPalette.terrain[1]);
+  const [selectedTerrainPreset, setSelectedTerrainPreset] = useState<
+    (typeof terrainBrushes)[number]["id"]
+  >("stone");
+  const [selectedTexturePreset, setSelectedTexturePreset] = useState<
+    (typeof textureBrushes)[number]["id"]
+  >("moss");
+  const [selectedObstaclePreset, setSelectedObstaclePreset] = useState<
+    (typeof obstacleBrushes)[number]["id"]
+  >("stone-wall");
+  const [selectedFurniturePreset, setSelectedFurniturePreset] = useState<
+    (typeof furnitureBrushes)[number]["id"]
+  >("table");
+  const [selectedStageVariant, setSelectedStageVariant] = useState<
+    "wood" | "stone" | "velvet"
+  >("wood");
+  const [stampScale, setStampScale] = useState<"full" | "half" | "quarter">(
+    "full",
+  );
+  const [stampAnchor, setStampAnchor] = useState<
+    "center" | "tl" | "tr" | "bl" | "br"
+  >("center");
   const [activeBoard, setActiveBoard] = useState<BoardKind>("public");
   const [isPointerDown, setIsPointerDown] = useState(false);
   const [draggingTokenId, setDraggingTokenId] = useState<string | null>(null);
@@ -2723,7 +3037,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [zoom, setZoom] = useState(1);
   const [gridColsInput, setGridColsInput] = useState(String(DEFAULT_COLS));
   const [gridRowsInput, setGridRowsInput] = useState(String(DEFAULT_ROWS));
+  const [useFogOfWar, setUseFogOfWar] = useState(true);
+  const [useSharedGmMapForPlayers, setUseSharedGmMapForPlayers] =
+    useState(true);
   const [mapPresetName, setMapPresetName] = useState("Сцена 1");
+  const [quickMapTabName, setQuickMapTabName] = useState("");
+  const [quickTabAsToken, setQuickTabAsToken] = useState(true);
   const [widgetUrl, setWidgetUrl] = useState(DEFAULT_WIDGET_URL);
   const [npcNameInput, setNpcNameInput] = useState("Ночной информатор");
   const [npcKindInput, setNpcKindInput] = useState<TokenKind>("npc");
@@ -2790,18 +3109,51 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const cols = mapState.cols;
   const rows = mapState.rows;
+  const currentMapKey = activeSavedMapId ?? "main";
+  const playerTiles = useSharedGmMapForPlayers
+    ? mapState.gmTiles
+    : mapState.publicTiles;
   const activeTiles =
     activeBoard === "public" ? mapState.publicTiles : mapState.gmTiles;
+  const handleZoomOut = useCallback(
+    () =>
+      setZoom((current) =>
+        clamp(Number((current - 0.1).toFixed(2)), 0.2, 1.8),
+      ),
+    [],
+  );
+  const handleZoomIn = useCallback(
+    () =>
+      setZoom((current) =>
+        clamp(Number((current + 0.1).toFixed(2)), 0.2, 1.8),
+      ),
+    [],
+  );
+  const handleZoomFit = useCallback(() => {
+    const fitByWidth = 1200 / (cols * 44);
+    const fitByHeight = 700 / (rows * 44);
+    setZoom(clamp(Math.min(fitByWidth, fitByHeight), 0.2, 1.8));
+  }, [cols, rows]);
 
+  const mapScopedTokens = useMemo(
+    () =>
+      tokens.filter(
+        (token) => (token.mapKey ?? "main") === currentMapKey || token.mapKey === "all",
+      ),
+    [currentMapKey, tokens],
+  );
   const selectedToken = useMemo(
-    () => tokens.find((token) => token.id === selectedTokenId) ?? tokens[0],
-    [selectedTokenId, tokens],
+    () =>
+      mapScopedTokens.find((token) => token.id === selectedTokenId) ??
+      mapScopedTokens[0] ??
+      tokens[0],
+    [mapScopedTokens, selectedTokenId, tokens],
   );
   const selectedSheet = useMemo(
     () => sheets.find((sheet) => sheet.tokenId === selectedToken?.id),
     [selectedToken?.id, sheets],
   );
-  const playerTokens = useMemo(() => getPlayerTokens(tokens), [tokens]);
+  const playerTokens = useMemo(() => getPlayerTokens(mapScopedTokens), [mapScopedTokens]);
   const groupSheets = useMemo(
     () =>
       sheets.filter((sheet) =>
@@ -2886,19 +3238,24 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const playerVisibilityMask = useMemo(
     () =>
       Array.from({ length: cols * rows }, (_, index) =>
-        isCellVisibleToPlayers(index % cols, Math.floor(index / cols), tokens),
+        !(
+          useFogOfWar &&
+          (playerTiles[index] ?? createCell()).fog
+        ) &&
+        isCellVisibleToPlayers(index % cols, Math.floor(index / cols), mapScopedTokens),
       ),
-    [cols, rows, tokens],
+    [cols, mapScopedTokens, playerTiles, rows, useFogOfWar],
   );
 
   const visibleTokensForPlayers = useMemo(
     () =>
-      tokens.filter(
+      mapScopedTokens.filter(
         (token) =>
           !token.gmOnly &&
+          !token.hiddenFromPlayers &&
           playerVisibilityMask[getCellIndex(token.x, token.y, cols)],
       ),
-    [cols, playerVisibilityMask, tokens],
+    [cols, mapScopedTokens, playerVisibilityMask],
   );
   const visibleTokenIdsForPlayers = useMemo(
     () => new Set(visibleTokensForPlayers.map((token) => token.id)),
@@ -2935,6 +3292,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (parsed.mapName) {
         setMapName(parsed.mapName);
         setMapPresetName(parsed.mapName);
+      }
+      if (typeof parsed.useFogOfWar === "boolean")
+        setUseFogOfWar(parsed.useFogOfWar);
+      if (typeof parsed.useSharedGmMapForPlayers === "boolean")
+        setUseSharedGmMapForPlayers(parsed.useSharedGmMapForPlayers);
+      if (parsed.mainMapSnapshot?.mapName && parsed.mainMapSnapshot?.mapState) {
+        setMainMapSnapshot(parsed.mainMapSnapshot);
       }
       if (
         parsed.mapState?.cols &&
@@ -2981,6 +3345,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       savedMaps,
       activeSavedMapId,
       widgetUrl,
+      useFogOfWar,
+      useSharedGmMapForPlayers,
+      mainMapSnapshot,
       tokens: tokens.map(normalizeToken),
       sheets,
       journal,
@@ -2998,6 +3365,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     savedMaps,
     sheets,
     tokens,
+    useFogOfWar,
+    useSharedGmMapForPlayers,
+    mainMapSnapshot,
     widgetUrl,
   ]);
 
@@ -3010,6 +3380,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       // ignore corrupted character library
     }
   }, [roomId]);
+
+  useEffect(() => {
+    if (!activeSavedMapId) return;
+    setSavedMaps((current) =>
+      current.map((preset) =>
+        preset.id === activeSavedMapId
+          ? { ...preset, mapName, mapState }
+          : preset,
+      ),
+    );
+  }, [activeSavedMapId, mapName, mapState]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -3230,7 +3611,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (tool === "terrain") {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
-          terrain: selectedColor,
+          terrain: findBrushColor(
+            terrainBrushes,
+            selectedTerrainPreset,
+            selectedColor,
+          ),
+          terrainPreset: selectedTerrainPreset,
         }));
         return;
       }
@@ -3238,7 +3624,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (tool === "obstacle") {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
-          obstacle: selectedColor,
+          obstacle: findBrushColor(
+            obstacleBrushes,
+            selectedObstaclePreset,
+            selectedColor,
+          ),
+          obstacleScale: stampScale,
+          obstacleAnchor: stampAnchor,
+          obstaclePreset: selectedObstaclePreset,
         }));
         return;
       }
@@ -3246,7 +3639,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (tool === "texture") {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
-          texture: selectedColor,
+          texture: findBrushColor(
+            textureBrushes,
+            selectedTexturePreset,
+            selectedColor,
+          ),
+          texturePreset: selectedTexturePreset,
         }));
         return;
       }
@@ -3254,7 +3652,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (tool === "furniture") {
         applyCellChange(activeBoard, index, (cell) => ({
           ...cell,
-          furniture: selectedColor,
+          furniture: findBrushColor(
+            furnitureBrushes,
+            selectedFurniturePreset,
+            selectedColor,
+          ),
+          furnitureScale: stampScale,
+          furnitureAnchor: stampAnchor,
+          furniturePreset: selectedFurniturePreset,
+          furnitureVariant:
+            selectedFurniturePreset === "stage" ? selectedStageVariant : "wood",
         }));
         return;
       }
@@ -3271,7 +3678,20 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         applyCellChange(activeBoard, index, () => createCell());
       }
     },
-    [activeBoard, applyCellChange, cols, selectedColor, tool],
+    [
+      activeBoard,
+      applyCellChange,
+      cols,
+      selectedColor,
+      selectedFurniturePreset,
+      selectedObstaclePreset,
+      selectedStageVariant,
+      selectedTerrainPreset,
+      selectedTexturePreset,
+      stampAnchor,
+      stampScale,
+      tool,
+    ],
   );
 
   const canMoveToken = useCallback(
@@ -3285,7 +3705,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const applyPointerToBoard = useCallback(
     (clientX: number, clientY: number, board: BoardKind) => {
-      const boardElement = document.getElementById(`battle-board-${board}`);
+      const boardElement = document.getElementById(`battle-grid-${board}`);
       if (!boardElement) return;
 
       const rect = boardElement.getBoundingClientRect();
@@ -3389,6 +3809,38 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
       setSelectedTokenId(tokenId);
 
+      if (token.linkedMapId) {
+        if (token.linkedMapId === "main") {
+          setActiveSavedMapId(null);
+          setMapName(mainMapSnapshot.mapName);
+          setMapPresetName(mainMapSnapshot.mapName);
+          setMapState(mainMapSnapshot.mapState);
+          setGridColsInput(String(mainMapSnapshot.mapState.cols));
+          setGridRowsInput(String(mainMapSnapshot.mapState.rows));
+          addJournalEntry(
+            "map",
+            `${token.name}: быстрый возврат на основную карту.`,
+          );
+          return;
+        }
+        const linkedPreset = savedMaps.find(
+          (preset) => preset.id === token.linkedMapId,
+        );
+        if (linkedPreset) {
+          setActiveSavedMapId(linkedPreset.id);
+          setMapPresetName(linkedPreset.name);
+          setMapName(linkedPreset.mapName);
+          setMapState(linkedPreset.mapState);
+          setGridColsInput(String(linkedPreset.mapState.cols));
+          setGridRowsInput(String(linkedPreset.mapState.rows));
+          addJournalEntry(
+            "map",
+            `${token.name}: переход на карту «${linkedPreset.name}».`,
+          );
+          return;
+        }
+      }
+
       if (!canMoveToken(token)) return;
 
       setTool("move");
@@ -3442,6 +3894,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         sheets,
         journal: nextJournal,
         widgetUrl,
+        useFogOfWar,
+        useSharedGmMapForPlayers,
+        mainMapSnapshot,
         initiative,
       });
       window.localStorage.setItem(
@@ -3476,6 +3931,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       sheets,
       journal,
       widgetUrl,
+      useFogOfWar,
+      useSharedGmMapForPlayers,
+      mainMapSnapshot,
       initiative,
     });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
@@ -3508,6 +3966,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       sheets,
       journal,
       widgetUrl,
+      useFogOfWar,
+      useSharedGmMapForPlayers,
+      mainMapSnapshot,
       initiative,
     });
 
@@ -3551,6 +4012,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setGridRowsInput(String(parsed.mapState.rows));
       setSavedMaps(parsed.savedMaps ?? []);
       setActiveSavedMapId(parsed.activeSavedMapId ?? null);
+      if (parsed.mainMapSnapshot?.mapName && parsed.mainMapSnapshot?.mapState) {
+        setMainMapSnapshot(parsed.mainMapSnapshot);
+      }
       setWidgetUrl(parsed.widgetUrl ?? DEFAULT_WIDGET_URL);
       if (parsed.tokens) setTokens(parsed.tokens.map(normalizeToken));
       if (parsed.sheets)
@@ -3589,6 +4053,91 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setGridRowsInput(String(preset.mapState.rows));
     addJournalEntry("map", `Загружена сохранённая сцена «${preset.name}».`);
   };
+
+  const handleReturnToMainMap = useCallback(() => {
+    setActiveSavedMapId(null);
+    setMapPresetName(mainMapSnapshot.mapName);
+    setMapName(mainMapSnapshot.mapName);
+    setMapState(mainMapSnapshot.mapState);
+    setGridColsInput(String(mainMapSnapshot.mapState.cols));
+    setGridRowsInput(String(mainMapSnapshot.mapState.rows));
+    addJournalEntry("map", "Возврат на основную карту.");
+  }, [addJournalEntry, mainMapSnapshot]);
+
+  const handleSetCurrentAsMainMap = useCallback(() => {
+    setMainMapSnapshot({ mapName, mapState });
+    addJournalEntry("map", `Текущая сцена «${mapName}» назначена основной.`);
+  }, [addJournalEntry, mapName, mapState]);
+
+  const handleQuickCreateMapTab = useCallback(() => {
+    if (role !== "gm") return;
+    const sourceMapKey = currentMapKey;
+    const name = quickMapTabName.trim() || `Сцена ${savedMaps.length + 1}`;
+    const presetId = `map-${Date.now()}`;
+    const nextPreset: SavedMapPreset = {
+      id: presetId,
+      name,
+      mapName: name,
+      mapState: {
+        cols,
+        rows,
+        publicTiles: createEmptyMap(cols, rows),
+        gmTiles: createEmptyMap(cols, rows),
+      },
+    };
+    setSavedMaps((current) => [...current, nextPreset]);
+    setActiveSavedMapId(presetId);
+    setMapName(name);
+    setMapPresetName(name);
+    setMapState(nextPreset.mapState);
+    setGridColsInput(String(cols));
+    setGridRowsInput(String(rows));
+    setQuickMapTabName("");
+
+    if (quickTabAsToken) {
+      const selected = tokens.find((token) => token.id === selectedTokenId);
+      const fallbackIndex = tokens.filter((token) => token.kind === "object").length;
+      const spawnX = selected ? selected.x : clamp(2 + (fallbackIndex % 4), 0, cols - 1);
+      const spawnY = selected ? selected.y : clamp(2 + Math.floor(fallbackIndex / 4), 0, rows - 1);
+      const portalToken: RoomToken = {
+        id: `portal-${presetId}`,
+        name: `Переход: ${name}`,
+        short: "↪",
+        kind: "object",
+        color: "rgb(34 211 238)",
+        x: spawnX,
+        y: spawnY,
+        hp: 1,
+        maxHp: 1,
+        ac: 10,
+        speed: 0,
+        owner: displayName,
+        roleOwner: "gm",
+        linkedMapId: presetId,
+        mapKey: sourceMapKey,
+        statuses: [],
+      };
+      setTokens((current) => [...current, portalToken]);
+      setSelectedTokenId(portalToken.id);
+    }
+
+    addJournalEntry(
+      "map",
+      `Создана вкладка «${name}»${quickTabAsToken ? " и токен-переход" : ""}.`,
+    );
+  }, [
+    addJournalEntry,
+    cols,
+    displayName,
+    quickMapTabName,
+    quickTabAsToken,
+    role,
+    rows,
+    savedMaps.length,
+    selectedTokenId,
+    currentMapKey,
+    tokens,
+  ]);
 
   const handleDeleteSavedMap = (presetId: string) => {
     const presetIndex = savedMaps.findIndex((preset) => preset.id === presetId);
@@ -4184,6 +4733,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         speed: sheet.speed,
         owner: displayName,
         roleOwner: "player",
+        mapKey: currentMapKey,
         sheetId,
         visionRadius: 3,
         statuses: [],
@@ -4197,7 +4747,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         `${preset.name}: карточка загружена из библиотеки в новую партию.`,
       );
     },
-    [addJournalEntry, cols, displayName, playerTokens.length, rows],
+    [addJournalEntry, cols, currentMapKey, displayName, playerTokens.length, rows],
   );
 
   const handleMoveGmPanel = useCallback(
@@ -4336,6 +4886,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       speed: 30,
       owner: displayName,
       roleOwner: "player",
+      mapKey: currentMapKey,
       sheetId,
       visionRadius: 3,
       statuses: [],
@@ -4382,6 +4933,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       speed: Number(npcSpeedInput) || 30,
       owner: displayName || "GM",
       roleOwner: "gm",
+      mapKey: currentMapKey,
       gmOnly: npcPlacementBoard === "gm",
       visionRadius: npcPlacementBoard === "gm" ? 0 : 3,
       statuses: [],
@@ -4396,6 +4948,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   }, [
     addJournalEntry,
     cols,
+    currentMapKey,
     displayName,
     npcAcInput,
     npcColorInput,
@@ -4468,6 +5021,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         speed,
         owner: displayName,
         roleOwner: "player",
+        mapKey: currentMapKey,
         sheetId,
         visionRadius: 3,
         statuses: [],
@@ -4504,7 +5058,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const handleTokenSetting = (
     tokenId: string,
-    key: "gmOnly" | "visionRadius",
+    key: "gmOnly" | "hiddenFromPlayers" | "visionRadius",
     value: boolean | number,
   ) => {
     if (role !== "gm") return;
@@ -4515,6 +5069,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               ...token,
               [key]: key === "visionRadius" ? Number(value) : value,
             }
+          : token,
+      ),
+    );
+  };
+
+  const handleTokenMapLinkChange = (tokenId: string, linkedMapId: string) => {
+    if (role !== "gm") return;
+    setTokens((current) =>
+      current.map((token) =>
+        token.id === tokenId
+          ? { ...token, linkedMapId: linkedMapId || undefined }
           : token,
       ),
     );
@@ -4976,6 +5541,45 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               Скрытая карта мастера
                             </button>
                           </div>
+                          <div className="mt-3 grid gap-2 text-xs text-slate-300 sm:grid-cols-2">
+                            <label className="flex items-center justify-between rounded-xl border border-white/10 px-3 py-2">
+                              <span>Fog of war для игроков</span>
+                              <input
+                                type="checkbox"
+                                checked={useFogOfWar}
+                                onChange={(event) =>
+                                  setUseFogOfWar(event.target.checked)
+                                }
+                              />
+                            </label>
+                            <label className="flex items-center justify-between rounded-xl border border-white/10 px-3 py-2">
+                              <span>Игроки смотрят карту мастера</span>
+                              <input
+                                type="checkbox"
+                                checked={useSharedGmMapForPlayers}
+                                onChange={(event) =>
+                                  setUseSharedGmMapForPlayers(
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                            </label>
+                          </div>
+                          {!useSharedGmMapForPlayers ? (
+                            <button
+                              type="button"
+                              className="mt-3 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100"
+                              onClick={() => {
+                                setTilesForBoard("public", [...mapState.gmTiles]);
+                                addJournalEntry(
+                                  "map",
+                                  "Публичная карта синхронизирована с картой мастера.",
+                                );
+                              }}
+                            >
+                              Синхронизировать: карта мастера → карта игроков
+                            </button>
+                          ) : null}
                           <div className="mt-4 grid grid-cols-2 gap-2 text-sm [&>*]:min-w-0">
                             {toolMeta.map((item) => (
                               <button
@@ -5027,22 +5631,186 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               ))}
                             </div>
                           </div>
-                          <div className="mt-4 space-y-3 text-sm text-slate-300">
-                            <label className="block">
-                              <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">
-                                Zoom
+                          {tool === "terrain" ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300">
+                              <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                Готовые покрытия
                               </div>
-                              <input
-                                type="range"
-                                min="60"
-                                max="180"
-                                value={Math.round(zoom * 100)}
-                                onChange={(event) =>
-                                  setZoom(Number(event.target.value) / 100)
-                                }
-                                className="w-full"
-                              />
-                            </label>
+                              <div className="flex flex-wrap gap-2">
+                                {terrainBrushes.map((brush) => (
+                                  <button
+                                    key={brush.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedTerrainPreset(brush.id);
+                                      setSelectedColor(brush.color);
+                                    }}
+                                    className={`rounded-xl border px-2.5 py-1.5 ${selectedTerrainPreset === brush.id ? "border-emerald-400 bg-emerald-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {brush.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {tool === "texture" ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300">
+                              <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                Готовые текстуры
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {textureBrushes.map((brush) => (
+                                  <button
+                                    key={brush.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedTexturePreset(brush.id);
+                                      setSelectedColor(brush.color);
+                                    }}
+                                    className={`rounded-xl border px-2.5 py-1.5 ${selectedTexturePreset === brush.id ? "border-emerald-400 bg-emerald-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {brush.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {tool === "obstacle" ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300">
+                              <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                Библиотека препятствий
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {obstacleBrushes.map((brush) => (
+                                  <button
+                                    key={brush.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedObstaclePreset(brush.id);
+                                      setSelectedColor(brush.color);
+                                    }}
+                                    className={`rounded-xl border px-2.5 py-1.5 ${selectedObstaclePreset === brush.id ? "border-emerald-400 bg-emerald-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {brush.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {tool === "furniture" ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300">
+                              <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                Библиотека объектов
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {furnitureBrushes.map((brush) => (
+                                  <button
+                                    key={brush.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedFurniturePreset(brush.id);
+                                      setSelectedColor(brush.color);
+                                    }}
+                                    className={`rounded-xl border px-2.5 py-1.5 ${selectedFurniturePreset === brush.id ? "border-emerald-400 bg-emerald-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {brush.label}
+                                  </button>
+                                ))}
+                              </div>
+                              {selectedFurniturePreset === "stage" ? (
+                                <div className="mt-3">
+                                  <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                    Текстура сцены
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {[
+                                      { id: "wood", label: "Доски" },
+                                      { id: "stone", label: "Камень" },
+                                      { id: "velvet", label: "Бархат" },
+                                    ].map((variant) => (
+                                      <button
+                                        key={variant.id}
+                                        type="button"
+                                        onClick={() =>
+                                          setSelectedStageVariant(
+                                            variant.id as
+                                              | "wood"
+                                              | "stone"
+                                              | "velvet",
+                                          )
+                                        }
+                                        className={`rounded-xl border px-2.5 py-1.5 ${selectedStageVariant === variant.id ? "border-violet-400 bg-violet-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                      >
+                                        {variant.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {tool === "obstacle" || tool === "furniture" ? (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-3 text-xs text-slate-300">
+                              <div className="mb-2 uppercase tracking-wide text-slate-400">
+                                Размер и привязка объекта
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {[
+                                  { value: "full", label: "1×1" },
+                                  { value: "half", label: "1/2" },
+                                  { value: "quarter", label: "1/4" },
+                                ].map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() =>
+                                      setStampScale(
+                                        option.value as
+                                          | "full"
+                                          | "half"
+                                          | "quarter",
+                                      )
+                                    }
+                                    className={`rounded-xl border px-2.5 py-1.5 ${stampScale === option.value ? "border-fuchsia-400 bg-fuchsia-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {[
+                                  { value: "center", label: "Центр" },
+                                  { value: "tl", label: "↖" },
+                                  { value: "tr", label: "↗" },
+                                  { value: "bl", label: "↙" },
+                                  { value: "br", label: "↘" },
+                                ].map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() =>
+                                      setStampAnchor(
+                                        option.value as
+                                          | "center"
+                                          | "tl"
+                                          | "tr"
+                                          | "bl"
+                                          | "br",
+                                      )
+                                    }
+                                    className={`rounded-xl border px-2.5 py-1.5 ${stampAnchor === option.value ? "border-cyan-400 bg-cyan-500/20 text-white" : "border-white/10 text-slate-300"}`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          <div className="mt-4 space-y-3 text-sm text-slate-300">
+                            <div className="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-400">
+                              Масштаб карты теперь закреплён поверх карты (кнопки +/−,
+                              слайдер и fit).
+                            </div>
                             <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
                               <div>Покрытие: {paintedCells}</div>
                               <div>Fog: {foggedCells}</div>
@@ -5145,6 +5913,70 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                         )
                                       }
                                     />
+                                  </label>
+                                  <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2">
+                                    <span>В скрытности (не виден)</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(token.hiddenFromPlayers)}
+                                      onChange={(event) =>
+                                        handleTokenSetting(
+                                          token.id,
+                                          "hiddenFromPlayers",
+                                          event.target.checked,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                  <label className="rounded-xl border border-white/10 px-3 py-2">
+                                    <div className="mb-1">Токен-переход по карте</div>
+                                    <select
+                                      value={token.linkedMapId ?? ""}
+                                      onChange={(event) =>
+                                        handleTokenMapLinkChange(
+                                          token.id,
+                                          event.target.value,
+                                        )
+                                      }
+                                      className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-2 py-1 text-xs text-white"
+                                    >
+                                      <option value="">нет</option>
+                                      <option value="main">Основная карта</option>
+                                      {savedMaps.map((preset) => (
+                                        <option
+                                          key={`token-link-${token.id}-${preset.id}`}
+                                          value={preset.id}
+                                        >
+                                          {preset.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="rounded-xl border border-white/10 px-3 py-2">
+                                    <div className="mb-1">Карта размещения токена</div>
+                                    <select
+                                      value={token.mapKey ?? "main"}
+                                      onChange={(event) =>
+                                        setTokens((current) =>
+                                          current.map((entry) =>
+                                            entry.id === token.id
+                                              ? { ...entry, mapKey: event.target.value }
+                                              : entry,
+                                          ),
+                                        )
+                                      }
+                                      className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-2 py-1 text-xs text-white"
+                                    >
+                                      <option value="main">Основная карта</option>
+                                      {savedMaps.map((preset) => (
+                                        <option
+                                          key={`token-map-${token.id}-${preset.id}`}
+                                          value={preset.id}
+                                        >
+                                          {preset.name}
+                                        </option>
+                                      ))}
+                                    </select>
                                   </label>
                                   {token.kind === "player" ? (
                                     <label className="rounded-xl border border-white/10 px-3 py-2">
@@ -7189,20 +8021,94 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 .map((token) => `${token.name} ${token.visionRadius ?? 3}`)
                 .join(" • ") || "нет"}
             </span>
+            <span className="badge">
+              Fog: {useFogOfWar ? "вкл" : "выкл"} • Режим карты:{" "}
+              {useSharedGmMapForPlayers ? "как у мастера" : "отдельная"}
+            </span>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {playerTokens.map((token) => (
+                <button
+                  key={`quick-player-${token.id}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTokenId(token.id);
+                    setTool("move");
+                  }}
+                  className={`rounded-full border px-2.5 py-1 text-xs ${selectedTokenId === token.id ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100" : "border-white/10 text-slate-200"}`}
+                >
+                  {token.short} {token.name}
+                </button>
+              ))}
+            </div>
           </div>
 
           {role === "gm" ? (
             <div className="space-y-4">
+              <div className="card flex flex-wrap items-center gap-2 px-3 py-2">
+                <button
+                  type="button"
+                  onClick={handleReturnToMainMap}
+                  className={boardButtonClass(activeSavedMapId === null)}
+                >
+                  Основная
+                </button>
+                {savedMaps.map((preset) => (
+                  <button
+                    key={`map-tab-${preset.id}`}
+                    type="button"
+                    onClick={() => handleLoadSavedMap(preset)}
+                    className={boardButtonClass(activeSavedMapId === preset.id)}
+                  >
+                    {preset.name}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={handleSetCurrentAsMainMap}
+                  className="ml-auto rounded-full border border-emerald-400/40 px-3 py-2 text-xs text-emerald-200"
+                >
+                  Сделать текущую основной
+                </button>
+                <input
+                  value={quickMapTabName}
+                  onChange={(event) => setQuickMapTabName(event.target.value)}
+                  placeholder="Новая вкладка"
+                  className="min-w-[11rem] rounded-full border border-white/10 bg-slate-900/80 px-3 py-2 text-xs text-white"
+                />
+                <label className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={quickTabAsToken}
+                    onChange={(event) => setQuickTabAsToken(event.target.checked)}
+                  />
+                  как токен-переход
+                </label>
+                <button
+                  type="button"
+                  onClick={handleQuickCreateMapTab}
+                  className="rounded-full border border-cyan-400/40 px-3 py-2 text-xs text-cyan-200"
+                >
+                  + вкладка
+                </button>
+              </div>
               <div id="battle-board-public">
                 <Board
+                  boardId="battle-grid-public"
                   title="Публичная карта"
-                  subtitle="То, что увидят игроки с учётом публичных слоёв, fog of war и радиуса обзора игроков."
+                  subtitle="Превью того, что увидят игроки: туман войны, радиус обзора и скрытность."
                   cols={cols}
                   rows={rows}
-                  tiles={mapState.publicTiles}
+                  tiles={playerTiles}
                   tokens={visibleTokensForPlayers}
                   visibleMask={playerVisibilityMask}
                   zoom={zoom}
+                  showZoomOverlay
+                  onZoomOut={handleZoomOut}
+                  onZoomIn={handleZoomIn}
+                  onZoomChange={setZoom}
+                  onZoomFit={handleZoomFit}
+                  onReturnToMain={handleReturnToMainMap}
+                  showReturnToMain={activeSavedMapId !== null}
                   onBoardPointerDown={handleBoardPointerDown("public")}
                   onTokenPointerDown={handleTokenPointerDown}
                   activeTokenId={activeInitiativeParticipant?.tokenId}
@@ -7210,13 +8116,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               </div>
               <div id="battle-board-gm">
                 <Board
+                  boardId="battle-grid-gm"
                   title="Скрытая карта мастера"
                   subtitle="Здесь мастер держит НПС, ловушки, тайники и будущие сцены до их открытия игрокам."
                   cols={cols}
                   rows={rows}
                   tiles={mapState.gmTiles}
-                  tokens={tokens}
+                  tokens={mapScopedTokens}
                   zoom={zoom}
+                  showZoomOverlay
+                  onZoomOut={handleZoomOut}
+                  onZoomIn={handleZoomIn}
+                  onZoomChange={setZoom}
+                  onZoomFit={handleZoomFit}
+                  onReturnToMain={handleReturnToMainMap}
+                  showReturnToMain={activeSavedMapId !== null}
                   onBoardPointerDown={handleBoardPointerDown("gm")}
                   onTokenPointerDown={handleTokenPointerDown}
                   activeTokenId={activeInitiativeParticipant?.tokenId}
@@ -7226,14 +8140,22 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           ) : (
             <div id="battle-board-public">
               <Board
+                boardId="battle-grid-public"
                 title="Игровое поле"
-                subtitle="Игрок видит только публичную карту и только те клетки, которые открывает обзор персонажей."
+                subtitle="Игрок видит карту с учётом fog of war, обзора и скрытых токенов."
                 cols={cols}
                 rows={rows}
-                tiles={mapState.publicTiles}
+                tiles={playerTiles}
                 tokens={visibleTokensForPlayers}
                 visibleMask={playerVisibilityMask}
                 zoom={zoom}
+                showZoomOverlay
+                onZoomOut={handleZoomOut}
+                onZoomIn={handleZoomIn}
+                onZoomChange={setZoom}
+                onZoomFit={handleZoomFit}
+                onReturnToMain={handleReturnToMainMap}
+                showReturnToMain={activeSavedMapId !== null}
                 onBoardPointerDown={handleBoardPointerDown("public")}
                 onTokenPointerDown={handleTokenPointerDown}
                 activeTokenId={activeInitiativeParticipant?.tokenId}
