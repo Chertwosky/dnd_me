@@ -3039,6 +3039,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [useSharedGmMapForPlayers, setUseSharedGmMapForPlayers] =
     useState(true);
   const [mapPresetName, setMapPresetName] = useState("Сцена 1");
+  const [quickMapTabName, setQuickMapTabName] = useState("Ванная");
   const [widgetUrl, setWidgetUrl] = useState(DEFAULT_WIDGET_URL);
   const [npcNameInput, setNpcNameInput] = useState("Ночной информатор");
   const [npcKindInput, setNpcKindInput] = useState<TokenKind>("npc");
@@ -4041,6 +4042,48 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setMainMapSnapshot({ mapName, mapState });
     addJournalEntry("map", `Текущая сцена «${mapName}» назначена основной.`);
   }, [addJournalEntry, mapName, mapState]);
+
+  const handleCreateMapTabWithPortalToken = useCallback(() => {
+    const nextName = quickMapTabName.trim() || `Сцена ${savedMaps.length + 1}`;
+    const nextPresetId = `map-${Date.now()}`;
+    const nextPreset: SavedMapPreset = {
+      id: nextPresetId,
+      name: nextName,
+      mapName: nextName,
+      mapState: {
+        cols,
+        rows,
+        publicTiles: createEmptyMap(cols, rows),
+        gmTiles: createEmptyMap(cols, rows),
+      },
+    };
+
+    setSavedMaps((current) => [...current, nextPreset]);
+    setTokens((current) => [
+      ...current,
+      {
+        id: `portal-${Date.now()}`,
+        name: `Переход: ${nextName}`,
+        short: "↦",
+        kind: "object",
+        color: "rgb(14 165 233)",
+        x: clamp(Math.floor(cols / 2), 0, cols - 1),
+        y: clamp(Math.floor(rows / 2), 0, rows - 1),
+        hp: 1,
+        maxHp: 1,
+        ac: 10,
+        speed: 0,
+        owner: displayName,
+        roleOwner: "gm",
+        linkedMapId: nextPresetId,
+        statuses: [],
+      },
+    ]);
+    addJournalEntry(
+      "map",
+      `Создана вкладка «${nextName}» и токен-переход на неё добавлен в центр карты.`,
+    );
+  }, [addJournalEntry, cols, displayName, quickMapTabName, rows, savedMaps.length]);
 
   const handleDeleteSavedMap = (presetId: string) => {
     const presetIndex = savedMaps.findIndex((preset) => preset.id === presetId);
@@ -7925,6 +7968,19 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   className="ml-auto rounded-full border border-emerald-400/40 px-3 py-2 text-xs text-emerald-200"
                 >
                   Сделать текущую основной
+                </button>
+                <input
+                  value={quickMapTabName}
+                  onChange={(event) => setQuickMapTabName(event.target.value)}
+                  className="min-w-[10rem] rounded-full border border-white/10 bg-slate-900/80 px-3 py-2 text-xs text-white"
+                  placeholder="Новая вкладка"
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateMapTabWithPortalToken}
+                  className="rounded-full border border-cyan-400/40 px-3 py-2 text-xs text-cyan-200"
+                >
+                  + вкладка и токен-переход
                 </button>
               </div>
               <div id="battle-board-public">
