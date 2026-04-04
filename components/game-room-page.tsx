@@ -1538,76 +1538,87 @@ const magicItemTables: Record<string, MagicItemRoll[]> = {
   ],
 };
 
+const SILK_MAIN_MAP_ID = "main";
+const SILK_MAIN_MAP_NAME = "Главный салон / зал Белой Вуали";
+
+type SilkLocationPreset = {
+  id: string;
+  name: string;
+  mapName: string;
+  terrainPreset: CellData["terrainPreset"];
+  texturePreset?: CellData["texturePreset"];
+  portalX: number;
+  portalY: number;
+};
+
+const silkLocationPresets: SilkLocationPreset[] = [
+  { id: "morrow-laundry", name: "Закрытая прачечная Морроу", mapName: "Сырость, свеча над картой дома", terrainPreset: "stone", texturePreset: "tiles", portalX: 2, portalY: 1 },
+  { id: "white-gloves-lobby", name: "Вестибюль белых перчаток", mapName: "Холодные зеркала и камердинеры", terrainPreset: "stone", texturePreset: "tiles", portalX: 5, portalY: 1 },
+  { id: "mirror-gallery", name: "Зеркальная галерея", mapName: "Свечи, лилии, сухое шампанское", terrainPreset: "stone", texturePreset: "tiles", portalX: 8, portalY: 1 },
+  { id: "jasmine-baths", name: "Жасминовые купальни", mapName: "Пар, масла, мрамор", terrainPreset: "water", texturePreset: "sand", portalX: 11, portalY: 1 },
+  { id: "winter-garden", name: "Зимний сад под тёплым стеклом", mapName: "Растения, настойки, дурманы", terrainPreset: "grass", texturePreset: "moss", portalX: 14, portalY: 1 },
+  { id: "velvet-chapel", name: "Бархатная часовня", mapName: "Шёпот исповеди и ладан", terrainPreset: "wood", texturePreset: "blood", portalX: 2, portalY: 4 },
+  { id: "cigar-room", name: "Сигарная комната", mapName: "Карты, бренди и расписки", terrainPreset: "wood", texturePreset: "rubble", portalX: 5, portalY: 4 },
+  { id: "cold-storage", name: "Холодная кладовая", mapName: "Ключи, уголь и кровь на рукаве", terrainPreset: "stone", texturePreset: "rubble", portalX: 8, portalY: 4 },
+  { id: "laundry-basement", name: "Прачечный подвал", mapName: "Щёлок, пар и узкие проходы", terrainPreset: "earth", texturePreset: "blood", portalX: 11, portalY: 4 },
+  { id: "silver-box-2", name: "Серебряный бокс №2", mapName: "Душный кабинет и тонкая перегородка", terrainPreset: "wood", texturePreset: "tiles", portalX: 14, portalY: 4 },
+  { id: "side-gallery", name: "Боковая галерея", mapName: "Полутень и служебные двери", terrainPreset: "stone", texturePreset: "rubble", portalX: 2, portalY: 7 },
+  { id: "map-room", name: "Комната карт / картотечная", mapName: "Пыль, шкафы и шифры", terrainPreset: "stone", texturePreset: "tiles", portalX: 5, portalY: 7 },
+  { id: "service-corridors", name: "Служебные коридоры и лестницы", mapName: "Тёмные маршруты прислуги", terrainPreset: "earth", texturePreset: "rubble", portalX: 8, portalY: 7 },
+  { id: "carriage-arch", name: "Каретная арка / выезд", mapName: "Ночной воздух и тени экипажей", terrainPreset: "stone", texturePreset: "sand", portalX: 11, portalY: 7 },
+  { id: "red-cabinet", name: "Красный кабинет", mapName: "Шёлк, сейф и завещание Барона", terrainPreset: "wood", texturePreset: "blood", portalX: 14, portalY: 7 },
+];
+
 const initialTokens: RoomToken[] = [
-  {
-    id: "elira",
-    name: "Элира",
-    short: "Э",
-    kind: "player",
-    color: "rgb(34 211 238)",
-    x: 2,
-    y: 4,
-    hp: 28,
-    maxHp: 32,
-    ac: 15,
-    speed: 30,
-    owner: "Игрок",
-    roleOwner: "player",
-    sheetId: "sheet-elira",
-    visionRadius: 3,
-    statuses: ["blessed"],
-  },
-  {
-    id: "borin",
-    name: "Борин",
-    short: "Б",
-    kind: "player",
-    color: "rgb(251 191 36)",
-    x: 4,
-    y: 5,
-    hp: 41,
-    maxHp: 41,
-    ac: 18,
-    speed: 25,
-    owner: "Игрок",
-    roleOwner: "player",
-    sheetId: "sheet-borin",
-    visionRadius: 3,
-    statuses: ["concentrating"],
-  },
-  {
-    id: "goblin",
-    name: "Гоблин-разведчик",
-    short: "G",
-    kind: "monster",
-    color: "rgb(244 63 94)",
-    x: 11,
-    y: 4,
-    hp: 7,
-    maxHp: 7,
-    ac: 13,
-    speed: 30,
-    owner: "GM",
-    roleOwner: "gm",
-    gmOnly: true,
-    statuses: ["poisoned"],
-  },
-  {
-    id: "table-1",
-    name: "Стол",
-    short: "⌂",
-    kind: "object",
-    color: "rgb(168 85 247)",
-    x: 8,
-    y: 6,
+  { id: "elira", name: "Элира", short: "Э", kind: "player", color: "rgb(34 211 238)", x: 6, y: 8, hp: 28, maxHp: 32, ac: 15, speed: 30, owner: "Игрок", roleOwner: "player", sheetId: "sheet-elira", visionRadius: 3, statuses: ["blessed"], mapId: SILK_MAIN_MAP_ID },
+  { id: "borin", name: "Борин", short: "Б", kind: "player", color: "rgb(251 191 36)", x: 9, y: 8, hp: 41, maxHp: 41, ac: 18, speed: 25, owner: "Игрок", roleOwner: "player", sheetId: "sheet-borin", visionRadius: 3, statuses: ["concentrating"], mapId: SILK_MAIN_MAP_ID },
+  { id: "verena-main", name: "Верена", short: "Ве", kind: "npc", color: "rgb(244 114 182)", x: 8, y: 5, hp: 26, maxHp: 26, ac: 14, speed: 30, owner: "GM", roleOwner: "gm", mapId: SILK_MAIN_MAP_ID },
+  { id: "vallis-main", name: "Валлис", short: "Ва", kind: "npc", color: "rgb(148 163 184)", x: 10, y: 4, hp: 22, maxHp: 22, ac: 13, speed: 30, owner: "GM", roleOwner: "gm", mapId: SILK_MAIN_MAP_ID },
+  { id: "oswin-main", name: "Освин Дрейк", short: "Ос", kind: "npc", color: "rgb(249 115 22)", x: 11, y: 6, hp: 30, maxHp: 30, ac: 15, speed: 30, owner: "GM", roleOwner: "gm", mapId: SILK_MAIN_MAP_ID },
+  { id: "marchel-main", name: "Марчел", short: "Ма", kind: "npc", color: "rgb(239 68 68)", x: 5, y: 6, hp: 24, maxHp: 24, ac: 13, speed: 30, owner: "GM", roleOwner: "gm", mapId: SILK_MAIN_MAP_ID },
+  ...silkLocationPresets.map((location, index) => ({
+    id: `portal-${location.id}`,
+    name: `Переход: ${location.name}`,
+    short: `↗${index + 1}`,
+    kind: "object" as TokenKind,
+    color: "rgb(196 181 253)",
+    x: location.portalX,
+    y: location.portalY,
     hp: 0,
     maxHp: 0,
-    ac: 12,
+    ac: 10,
     speed: 0,
     owner: "GM",
-    roleOwner: "gm",
+    roleOwner: "gm" as RoomRole,
+    linkedMapId: location.id,
+    mapId: SILK_MAIN_MAP_ID,
     statuses: [],
-  },
+  })),
+  ...silkLocationPresets.flatMap((location) => [
+    {
+      id: `return-${location.id}`,
+      name: `Назад в ${SILK_MAIN_MAP_NAME}`,
+      short: "↩",
+      kind: "object" as TokenKind,
+      color: "rgb(167 243 208)",
+      x: 1,
+      y: 1,
+      hp: 0,
+      maxHp: 0,
+      ac: 10,
+      speed: 0,
+      owner: "GM",
+      roleOwner: "gm" as RoomRole,
+      linkedMapId: "main",
+      mapId: location.id,
+      statuses: [],
+    },
+  ]),
+  { id: "arvena-morrow", name: "Арвена Морроу", short: "Ар", kind: "npc", color: "rgb(220 38 38)", x: 8, y: 5, hp: 34, maxHp: 34, ac: 15, speed: 30, owner: "GM", roleOwner: "gm", mapId: "morrow-laundry", statuses: ["exhausted"] },
+  { id: "ferreyn", name: "Феррейн", short: "Фе", kind: "npc", color: "rgb(34 197 94)", x: 9, y: 4, hp: 19, maxHp: 19, ac: 12, speed: 30, owner: "GM", roleOwner: "gm", mapId: "winter-garden" },
+  { id: "sera", name: "Сера", short: "Се", kind: "npc", color: "rgb(56 189 248)", x: 8, y: 5, hp: 21, maxHp: 21, ac: 12, speed: 30, owner: "GM", roleOwner: "gm", mapId: "laundry-basement" },
+  { id: "enna-veil", name: "Энна Вейл", short: "Эн", kind: "npc", color: "rgb(251 191 36)", x: 8, y: 5, hp: 12, maxHp: 12, ac: 11, speed: 30, owner: "GM", roleOwner: "gm", mapId: "silver-box-2", statuses: ["restrained"] },
+  { id: "miron", name: "Мирон", short: "Ми", kind: "npc", color: "rgb(192 132 252)", x: 8, y: 5, hp: 17, maxHp: 17, ac: 12, speed: 30, owner: "GM", roleOwner: "gm", mapId: "side-gallery" },
 ];
 
 const initialSheets: CharacterSheet[] = [
@@ -1825,6 +1836,51 @@ function createInitialMapState(): MapState {
     gmTiles: createEmptyMap(DEFAULT_COLS, DEFAULT_ROWS),
   };
 }
+
+function createSilkMapState(
+  terrainPreset: CellData["terrainPreset"],
+  texturePreset?: CellData["texturePreset"],
+): MapState {
+  const publicTiles = createEmptyMap(DEFAULT_COLS, DEFAULT_ROWS).map((cell) => ({
+    ...cell,
+    terrainPreset,
+    texturePreset,
+    obstaclePreset: undefined,
+    furniturePreset: undefined,
+  }));
+  const gmTiles = publicTiles.map((cell) => ({ ...cell }));
+  const indexAt = (x: number, y: number) => y * DEFAULT_COLS + x;
+
+  for (let x = 0; x < DEFAULT_COLS; x += 1) {
+    const top = indexAt(x, 0);
+    const bottom = indexAt(x, DEFAULT_ROWS - 1);
+    publicTiles[top] = { ...publicTiles[top], obstacle: "#334155", obstaclePreset: "stone-wall" };
+    publicTiles[bottom] = { ...publicTiles[bottom], obstacle: "#334155", obstaclePreset: "stone-wall" };
+  }
+  for (let y = 0; y < DEFAULT_ROWS; y += 1) {
+    const left = indexAt(0, y);
+    const right = indexAt(DEFAULT_COLS - 1, y);
+    publicTiles[left] = { ...publicTiles[left], obstacle: "#334155", obstaclePreset: "stone-wall" };
+    publicTiles[right] = { ...publicTiles[right], obstacle: "#334155", obstaclePreset: "stone-wall" };
+  }
+
+  publicTiles[indexAt(8, 5)] = {
+    ...publicTiles[indexAt(8, 5)],
+    furniture: "#a855f7",
+    furniturePreset: "stage",
+    furnitureVariant: "velvet",
+  };
+
+  return { cols: DEFAULT_COLS, rows: DEFAULT_ROWS, publicTiles, gmTiles };
+}
+
+const silkMainMapState = createSilkMapState("wood", "tiles");
+const silkSavedMaps: SavedMapPreset[] = silkLocationPresets.map((location) => ({
+  id: location.id,
+  name: location.name,
+  mapName: location.mapName,
+  mapState: createSilkMapState(location.terrainPreset, location.texturePreset),
+}));
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -2988,16 +3044,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [role, setRole] = useState<RoomRole | null>(null);
   const [joinStep, setJoinStep] = useState<JoinStep>("auth");
   const [authError, setAuthError] = useState("");
-  const [mapName, setMapName] = useState("Руины старой башни");
-  const [mapState, setMapState] = useState<MapState>(createInitialMapState);
+  const [mapName, setMapName] = useState(SILK_MAIN_MAP_NAME);
+  const [mapState, setMapState] = useState<MapState>(silkMainMapState);
   const [mainMapSnapshot, setMainMapSnapshot] = useState<{
     mapName: string;
     mapState: MapState;
   }>({
-    mapName: "Руины старой башни",
-    mapState: createInitialMapState(),
+    mapName: SILK_MAIN_MAP_NAME,
+    mapState: silkMainMapState,
   });
-  const [savedMaps, setSavedMaps] = useState<SavedMapPreset[]>([]);
+  const [savedMaps, setSavedMaps] = useState<SavedMapPreset[]>(silkSavedMaps);
   const [activeSavedMapId, setActiveSavedMapId] = useState<string | null>(null);
   const [tokens, setTokens] = useState<RoomToken[]>(initialTokens);
   const [sheets, setSheets] = useState<CharacterSheet[]>(initialSheets);
@@ -3039,7 +3095,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [useFogOfWar, setUseFogOfWar] = useState(true);
   const [useSharedGmMapForPlayers, setUseSharedGmMapForPlayers] =
     useState(true);
-  const [mapPresetName, setMapPresetName] = useState("Сцена 1");
+  const [mapPresetName, setMapPresetName] = useState(SILK_MAIN_MAP_NAME);
   const [quickMapTabName, setQuickMapTabName] = useState("");
   const [quickTabAsToken, setQuickTabAsToken] = useState(true);
   const [widgetUrl, setWidgetUrl] = useState(DEFAULT_WIDGET_URL);
@@ -3058,7 +3114,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     {
       id: "j1",
       type: "system",
-      text: "Комната работает как обычная комната с паролем: первый вход становится мастером, остальные — игроками.",
+      text: "Загружен сценарий «Шёлковый престол»: главный зал — хаб, переходы открываются токенами ↗1..↗15.",
       time: nowTime(),
     },
   ]);
@@ -3068,7 +3124,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   );
   const [campaignConfig, setCampaignConfig] = useState<CampaignConfig>({
     id: "room-campaign",
-    name: "Руины старой башни",
+    name: "Шёлковый престол",
     progressionMode: "xp",
     edition: "5e14",
     includeHomebrew: false,
