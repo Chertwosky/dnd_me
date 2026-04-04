@@ -42,7 +42,6 @@ type LayerKind = "terrain" | "obstacle" | "texture" | "furniture";
 type TokenKind = "player" | "npc" | "monster" | "object";
 type BoardKind = "public" | "gm";
 type LootCrBand = "0-4" | "5-10" | "11-16" | "17+";
-type SceneThemeId = "tavern" | "road" | "dungeon" | "forest" | "city";
 type TokenStatusKey =
   | "poisoned"
   | "stunned"
@@ -169,9 +168,17 @@ const getYandexPlaylistEmbedUrl = (value: string): string | null => {
   const match = input.match(
     /music\.yandex\.(?:ru|com)\/users\/([^/]+)\/playlists\/(\d+)/i,
   );
-  if (!match) return null;
-  const [, user, playlistId] = match;
-  return `https://music.yandex.ru/iframe/#playlist/${user}/${playlistId}`;
+  if (match) {
+    const [, user, playlistId] = match;
+    return `https://music.yandex.ru/iframe/#playlist/${user}/${playlistId}`;
+  }
+
+  const commonMatch = input.match(
+    /music\.yandex\.(?:ru|com)\/playlists\/([a-z0-9-]+)/i,
+  );
+  if (!commonMatch) return null;
+  const [, playlistId] = commonMatch;
+  return `https://music.yandex.ru/iframe/#playlist/${playlistId}`;
 };
 
 type JournalEntry = {
@@ -448,80 +455,14 @@ const randomEventPool = [
   },
 ];
 
-const sceneThemePlaylists: Array<{
-  id: SceneThemeId;
-  name: string;
-  tracks: SceneThemeTrack[];
-}> = [
+const defaultAmbientTracks: SceneThemeTrack[] = [
   {
-    id: "tavern",
-    name: "Таверна",
-    tracks: [
-      {
-        title: "Firelight Tales",
-        url: "https://cdn.pixabay.com/download/audio/2022/03/15/audio_4ee4df85f8.mp3",
-      },
-      {
-        title: "Old Oak Inn",
-        url: "https://cdn.pixabay.com/download/audio/2022/10/25/audio_9469f30449.mp3",
-      },
-    ],
+    title: "Базовая тема 1",
+    url: "https://cdn.pixabay.com/download/audio/2022/03/15/audio_4ee4df85f8.mp3",
   },
   {
-    id: "road",
-    name: "Дорога",
-    tracks: [
-      {
-        title: "Winds of Travel",
-        url: "https://cdn.pixabay.com/download/audio/2022/01/20/audio_9478f71f56.mp3",
-      },
-      {
-        title: "Campfire Journey",
-        url: "https://cdn.pixabay.com/download/audio/2022/08/02/audio_88447f9f22.mp3",
-      },
-    ],
-  },
-  {
-    id: "dungeon",
-    name: "Подземелье",
-    tracks: [
-      {
-        title: "Echoes Below",
-        url: "https://cdn.pixabay.com/download/audio/2022/03/24/audio_6f3d8a4b5f.mp3",
-      },
-      {
-        title: "Torchlit Corridors",
-        url: "https://cdn.pixabay.com/download/audio/2022/09/06/audio_0a3f0f24d8.mp3",
-      },
-    ],
-  },
-  {
-    id: "forest",
-    name: "Лес",
-    tracks: [
-      {
-        title: "Whispering Leaves",
-        url: "https://cdn.pixabay.com/download/audio/2022/02/10/audio_d1718ab5df.mp3",
-      },
-      {
-        title: "Moon over Pines",
-        url: "https://cdn.pixabay.com/download/audio/2022/07/26/audio_9f8a6d17c7.mp3",
-      },
-    ],
-  },
-  {
-    id: "city",
-    name: "Город",
-    tracks: [
-      {
-        title: "Crowded Market",
-        url: "https://cdn.pixabay.com/download/audio/2022/03/09/audio_a0f6d2d2bf.mp3",
-      },
-      {
-        title: "City at Dusk",
-        url: "https://cdn.pixabay.com/download/audio/2022/05/16/audio_0f5032fd7b.mp3",
-      },
-    ],
+    title: "Базовая тема 2",
+    url: "https://cdn.pixabay.com/download/audio/2022/10/25/audio_9469f30449.mp3",
   },
 ];
 
@@ -3133,22 +3074,20 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [lootCrBand, setLootCrBand] = useState<LootCrBand>("0-4");
   const [lootResult, setLootResult] = useState<LootResult>(randomLootDefault);
   const [eventResult, setEventResult] = useState(randomEventPool[0]);
-  const [selectedThemeSceneId, setSelectedThemeSceneId] = useState<SceneThemeId>(
-    sceneThemePlaylists[0].id,
-  );
+  const [selectedThemeSceneId, setSelectedThemeSceneId] = useState("main");
   const [selectedThemeTrackUrl, setSelectedThemeTrackUrl] = useState(
-    sceneThemePlaylists[0].tracks[0].url,
+    defaultAmbientTracks[0].url,
   );
   const [themeTrackLoop, setThemeTrackLoop] = useState(true);
   const [customThemeTitle, setCustomThemeTitle] = useState("");
   const [customThemeUrl, setCustomThemeUrl] = useState("");
   const [yandexPlaylistInput, setYandexPlaylistInput] = useState("");
   const [yandexScenePlaylists, setYandexScenePlaylists] = useState<
-    Partial<Record<SceneThemeId, string>>
+    Record<string, string | undefined>
   >({});
   const [themeConfigMessage, setThemeConfigMessage] = useState("");
   const [customSceneThemes, setCustomSceneThemes] = useState<
-    Partial<Record<SceneThemeId, SceneThemeTrack[]>>
+    Record<string, SceneThemeTrack[] | undefined>
   >({});
   const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -3268,18 +3207,28 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       }),
     [currentMapId, tokens],
   );
+  const sceneAudioOptions = useMemo(
+    () => [
+      { id: "main", name: mapName || "Текущая сцена" },
+      ...savedMaps.map((preset) => ({
+        id: preset.id,
+        name: preset.name || preset.mapName || "Сцена",
+      })),
+    ],
+    [mapName, savedMaps],
+  );
   const selectedThemeScene = useMemo(
     () =>
-      sceneThemePlaylists.find((scene) => scene.id === selectedThemeSceneId) ??
-      sceneThemePlaylists[0],
-    [selectedThemeSceneId],
+      sceneAudioOptions.find((scene) => scene.id === selectedThemeSceneId) ??
+      sceneAudioOptions[0] ?? { id: "main", name: mapName || "Текущая сцена" },
+    [mapName, sceneAudioOptions, selectedThemeSceneId],
   );
   const themeTracks = useMemo(
     () => [
-      ...selectedThemeScene.tracks,
+      ...defaultAmbientTracks,
       ...(customSceneThemes[selectedThemeScene.id] ?? []),
     ],
-    [customSceneThemes, selectedThemeScene],
+    [customSceneThemes, selectedThemeScene.id],
   );
   const selectedYandexPlaylist = yandexScenePlaylists[selectedThemeScene.id];
   const playerTokens = useMemo(
@@ -3427,7 +3376,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   useEffect(() => {
     setYandexPlaylistInput(yandexScenePlaylists[selectedThemeScene.id] ?? "");
     setThemeConfigMessage("");
-  }, [selectedThemeScene.id, yandexScenePlaylists]);
+  }, [selectedThemeScene, yandexScenePlaylists]);
+
+  useEffect(() => {
+    if (!sceneAudioOptions.some((scene) => scene.id === selectedThemeSceneId)) {
+      setSelectedThemeSceneId(sceneAudioOptions[0]?.id ?? "main");
+    }
+  }, [sceneAudioOptions, selectedThemeSceneId]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(getStorageKey(roomId));
@@ -7952,13 +7907,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                 <select
                                   value={selectedThemeSceneId}
                                   onChange={(event) =>
-                                    setSelectedThemeSceneId(
-                                      event.target.value as SceneThemeId,
-                                    )
+                                    setSelectedThemeSceneId(event.target.value)
                                   }
                                   className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
                                 >
-                                  {sceneThemePlaylists.map((scene) => (
+                                  {sceneAudioOptions.map((scene) => (
                                     <option key={scene.id} value={scene.id}>
                                       {scene.name}
                                     </option>
