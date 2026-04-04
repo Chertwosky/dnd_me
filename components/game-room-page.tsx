@@ -3105,6 +3105,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     initiative: 999,
     tools: 320,
   });
+  const [isLeftMasterDrawerOpen, setIsLeftMasterDrawerOpen] = useState(true);
+  const [isRightMasterDrawerOpen, setIsRightMasterDrawerOpen] = useState(false);
 
   const cols = mapState.cols;
   const rows = mapState.rows;
@@ -5467,6 +5469,37 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
         </section>
 
+        {role === "gm" ? (
+          <div className="sticky top-20 z-30 flex items-center justify-between gap-2 px-1">
+            <button
+              type="button"
+              onClick={() => {
+                setIsLeftMasterDrawerOpen((current) => {
+                  const next = !current;
+                  if (next) setIsRightMasterDrawerOpen(false);
+                  return next;
+                });
+              }}
+              className="rounded-full border border-white/10 bg-slate-950/90 px-4 py-2 text-xs text-slate-200"
+            >
+              {isLeftMasterDrawerOpen ? "Свернуть левую шторку" : "Открыть левую шторку"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsRightMasterDrawerOpen((current) => {
+                  const next = !current;
+                  if (next) setIsLeftMasterDrawerOpen(false);
+                  return next;
+                });
+              }}
+              className="rounded-full border border-white/10 bg-slate-950/90 px-4 py-2 text-xs text-slate-200"
+            >
+              {isRightMasterDrawerOpen ? "Свернуть правую шторку" : "Открыть правую шторку"}
+            </button>
+          </div>
+        ) : null}
+
         <section className="space-y-4">
           <div
             className={
@@ -5476,7 +5509,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             }
           >
             {role === "gm" ? (
-              <div className="contents">
+              <div
+                className={`fixed inset-0 z-40 overflow-y-auto border-r border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isLeftMasterDrawerOpen ? "translate-x-0" : "-translate-x-[110%]"}`}
+              >
                 {gmPanelOrder
                   .filter(
                     (panelId): panelId is "admin" | "tokens" =>
@@ -6078,7 +6113,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }
                     : undefined
                 }
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role === "gm" ? `fixed inset-0 z-40 overflow-y-auto border-l border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isRightMasterDrawerOpen ? "translate-x-0" : "translate-x-[110%]"}` : ""}`}
               >
                 {role === "gm" ? (
                   <div
