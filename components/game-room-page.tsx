@@ -6119,11 +6119,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }
                     : undefined
                 }
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role === "gm" ? `fixed inset-0 z-30 overflow-y-auto border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isRightMasterDrawerOpen ? "translate-x-0" : "translate-x-[110%]"}` : ""}`}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role === "gm" ? `fixed inset-0 z-30 flex justify-end transition-transform duration-300 ${isRightMasterDrawerOpen ? "translate-x-0" : "translate-x-[110%]"}` : ""}`}
               >
                 <div
                   className={
-                    role === "gm" ? "ml-auto w-full max-w-6xl space-y-2" : ""
+                    role === "gm"
+                      ? "h-full w-full max-w-6xl space-y-2 overflow-y-auto border-l border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur"
+                      : ""
                   }
                 >
                 {role === "gm" ? (
