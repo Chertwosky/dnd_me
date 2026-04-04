@@ -69,6 +69,7 @@ type RoomToken = {
   gmOnly?: boolean;
   hiddenFromPlayers?: boolean;
   linkedMapId?: string;
+  mapKey?: string;
   visionRadius?: number;
   statuses?: TokenStatusKey[];
 };
@@ -2350,6 +2351,7 @@ function createEmptyInitiativeState(): InitiativeState {
 function normalizeToken(token: RoomToken): RoomToken {
   return {
     ...token,
+    mapKey: token.mapKey ?? "main",
     statuses: Array.isArray(token.statuses)
       ? Array.from(new Set(token.statuses))
       : [],
@@ -3107,6 +3109,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const cols = mapState.cols;
   const rows = mapState.rows;
+  const currentMapKey = activeSavedMapId ?? "main";
   const playerTiles = useSharedGmMapForPlayers
     ? mapState.gmTiles
     : mapState.publicTiles;
@@ -3132,15 +3135,25 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setZoom(clamp(Math.min(fitByWidth, fitByHeight), 0.2, 1.8));
   }, [cols, rows]);
 
+  const mapScopedTokens = useMemo(
+    () =>
+      tokens.filter(
+        (token) => (token.mapKey ?? "main") === currentMapKey || token.mapKey === "all",
+      ),
+    [currentMapKey, tokens],
+  );
   const selectedToken = useMemo(
-    () => tokens.find((token) => token.id === selectedTokenId) ?? tokens[0],
-    [selectedTokenId, tokens],
+    () =>
+      mapScopedTokens.find((token) => token.id === selectedTokenId) ??
+      mapScopedTokens[0] ??
+      tokens[0],
+    [mapScopedTokens, selectedTokenId, tokens],
   );
   const selectedSheet = useMemo(
     () => sheets.find((sheet) => sheet.tokenId === selectedToken?.id),
     [selectedToken?.id, sheets],
   );
-  const playerTokens = useMemo(() => getPlayerTokens(tokens), [tokens]);
+  const playerTokens = useMemo(() => getPlayerTokens(mapScopedTokens), [mapScopedTokens]);
   const groupSheets = useMemo(
     () =>
       sheets.filter((sheet) =>
@@ -3228,20 +3241,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         !(
           useFogOfWar &&
           (playerTiles[index] ?? createCell()).fog
-        ) && isCellVisibleToPlayers(index % cols, Math.floor(index / cols), tokens),
+        ) &&
+        isCellVisibleToPlayers(index % cols, Math.floor(index / cols), mapScopedTokens),
       ),
-    [cols, playerTiles, rows, tokens, useFogOfWar],
+    [cols, mapScopedTokens, playerTiles, rows, useFogOfWar],
   );
 
   const visibleTokensForPlayers = useMemo(
     () =>
-      tokens.filter(
+      mapScopedTokens.filter(
         (token) =>
           !token.gmOnly &&
           !token.hiddenFromPlayers &&
           playerVisibilityMask[getCellIndex(token.x, token.y, cols)],
       ),
-    [cols, playerVisibilityMask, tokens],
+    [cols, mapScopedTokens, playerVisibilityMask],
   );
   const visibleTokenIdsForPlayers = useMemo(
     () => new Set(visibleTokensForPlayers.map((token) => token.id)),
@@ -3366,6 +3380,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       // ignore corrupted character library
     }
   }, [roomId]);
+
+  useEffect(() => {
+    if (!activeSavedMapId) return;
+    setSavedMaps((current) =>
+      current.map((preset) =>
+        preset.id === activeSavedMapId
+          ? { ...preset, mapName, mapState }
+          : preset,
+      ),
+    );
+  }, [activeSavedMapId, mapName, mapState]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -4046,6 +4071,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const handleQuickCreateMapTab = useCallback(() => {
     if (role !== "gm") return;
+    const sourceMapKey = currentMapKey;
     const name = quickMapTabName.trim() || `Сцена ${savedMaps.length + 1}`;
     const presetId = `map-${Date.now()}`;
     const nextPreset: SavedMapPreset = {
@@ -4088,6 +4114,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         owner: displayName,
         roleOwner: "gm",
         linkedMapId: presetId,
+        mapKey: sourceMapKey,
         statuses: [],
       };
       setTokens((current) => [...current, portalToken]);
@@ -4108,6 +4135,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     rows,
     savedMaps.length,
     selectedTokenId,
+    currentMapKey,
     tokens,
   ]);
 
@@ -4705,6 +4733,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         speed: sheet.speed,
         owner: displayName,
         roleOwner: "player",
+        mapKey: currentMapKey,
         sheetId,
         visionRadius: 3,
         statuses: [],
@@ -4718,7 +4747,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         `${preset.name}: карточка загружена из библиотеки в новую партию.`,
       );
     },
-    [addJournalEntry, cols, displayName, playerTokens.length, rows],
+    [addJournalEntry, cols, currentMapKey, displayName, playerTokens.length, rows],
   );
 
   const handleMoveGmPanel = useCallback(
@@ -4857,6 +4886,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       speed: 30,
       owner: displayName,
       roleOwner: "player",
+      mapKey: currentMapKey,
       sheetId,
       visionRadius: 3,
       statuses: [],
@@ -4903,6 +4933,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       speed: Number(npcSpeedInput) || 30,
       owner: displayName || "GM",
       roleOwner: "gm",
+      mapKey: currentMapKey,
       gmOnly: npcPlacementBoard === "gm",
       visionRadius: npcPlacementBoard === "gm" ? 0 : 3,
       statuses: [],
@@ -4917,6 +4948,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   }, [
     addJournalEntry,
     cols,
+    currentMapKey,
     displayName,
     npcAcInput,
     npcColorInput,
@@ -4989,6 +5021,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         speed,
         owner: displayName,
         roleOwner: "player",
+        mapKey: currentMapKey,
         sheetId,
         visionRadius: 3,
         statuses: [],
@@ -5912,6 +5945,32 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                       {savedMaps.map((preset) => (
                                         <option
                                           key={`token-link-${token.id}-${preset.id}`}
+                                          value={preset.id}
+                                        >
+                                          {preset.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="rounded-xl border border-white/10 px-3 py-2">
+                                    <div className="mb-1">Карта размещения токена</div>
+                                    <select
+                                      value={token.mapKey ?? "main"}
+                                      onChange={(event) =>
+                                        setTokens((current) =>
+                                          current.map((entry) =>
+                                            entry.id === token.id
+                                              ? { ...entry, mapKey: event.target.value }
+                                              : entry,
+                                          ),
+                                        )
+                                      }
+                                      className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-2 py-1 text-xs text-white"
+                                    >
+                                      <option value="main">Основная карта</option>
+                                      {savedMaps.map((preset) => (
+                                        <option
+                                          key={`token-map-${token.id}-${preset.id}`}
                                           value={preset.id}
                                         >
                                           {preset.name}
@@ -7966,6 +8025,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               Fog: {useFogOfWar ? "вкл" : "выкл"} • Режим карты:{" "}
               {useSharedGmMapForPlayers ? "как у мастера" : "отдельная"}
             </span>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {playerTokens.map((token) => (
+                <button
+                  key={`quick-player-${token.id}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTokenId(token.id);
+                    setTool("move");
+                  }}
+                  className={`rounded-full border px-2.5 py-1 text-xs ${selectedTokenId === token.id ? "border-cyan-300/60 bg-cyan-500/20 text-cyan-100" : "border-white/10 text-slate-200"}`}
+                >
+                  {token.short} {token.name}
+                </button>
+              ))}
+            </div>
           </div>
 
           {role === "gm" ? (
@@ -8048,7 +8122,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   cols={cols}
                   rows={rows}
                   tiles={mapState.gmTiles}
-                  tokens={tokens}
+                  tokens={mapScopedTokens}
                   zoom={zoom}
                   showZoomOverlay
                   onZoomOut={handleZoomOut}
