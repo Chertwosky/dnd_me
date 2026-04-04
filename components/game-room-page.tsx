@@ -68,6 +68,7 @@ type RoomToken = {
   sheetId?: string;
   gmOnly?: boolean;
   hiddenFromPlayers?: boolean;
+  linkedMapId?: string;
   visionRadius?: number;
   statuses?: TokenStatusKey[];
 };
@@ -233,6 +234,10 @@ type SavedRoomState = {
   widgetUrl?: string;
   useFogOfWar?: boolean;
   useSharedGmMapForPlayers?: boolean;
+  mainMapSnapshot?: {
+    mapName: string;
+    mapState: MapState;
+  };
   tokens: RoomToken[];
   sheets: CharacterSheet[];
   journal: JournalEntry[];
@@ -2363,6 +2368,7 @@ function buildSavedRoomState({
   widgetUrl,
   useFogOfWar,
   useSharedGmMapForPlayers,
+  mainMapSnapshot,
   tokens,
   sheets,
   journal,
@@ -2376,6 +2382,7 @@ function buildSavedRoomState({
     widgetUrl,
     useFogOfWar,
     useSharedGmMapForPlayers,
+    mainMapSnapshot,
     tokens,
     sheets,
     journal,
@@ -2713,6 +2720,8 @@ function Board({
   onZoomIn,
   onZoomChange,
   onZoomFit,
+  onReturnToMain,
+  showReturnToMain,
   visibleMask,
   onBoardPointerDown,
   onTokenPointerDown,
@@ -2731,6 +2740,8 @@ function Board({
   onZoomIn?: () => void;
   onZoomChange?: (value: number) => void;
   onZoomFit?: () => void;
+  onReturnToMain?: () => void;
+  showReturnToMain?: boolean;
   visibleMask?: boolean[];
   onBoardPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onTokenPointerDown?: (
@@ -2786,6 +2797,15 @@ function Board({
               >
                 fit
               </button>
+              {showReturnToMain ? (
+                <button
+                  type="button"
+                  onClick={onReturnToMain}
+                  className="rounded-lg border border-emerald-300/30 px-2 py-1 text-[11px] text-emerald-200"
+                >
+                  main
+                </button>
+              ) : null}
             </div>
           ) : null}
           <div
@@ -2969,6 +2989,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [authError, setAuthError] = useState("");
   const [mapName, setMapName] = useState("Руины старой башни");
   const [mapState, setMapState] = useState<MapState>(createInitialMapState);
+  const [mainMapSnapshot, setMainMapSnapshot] = useState<{
+    mapName: string;
+    mapState: MapState;
+  }>({
+    mapName: "Руины старой башни",
+    mapState: createInitialMapState(),
+  });
   const [savedMaps, setSavedMaps] = useState<SavedMapPreset[]>([]);
   const [activeSavedMapId, setActiveSavedMapId] = useState<string | null>(null);
   const [tokens, setTokens] = useState<RoomToken[]>(initialTokens);
@@ -3254,6 +3281,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         setUseFogOfWar(parsed.useFogOfWar);
       if (typeof parsed.useSharedGmMapForPlayers === "boolean")
         setUseSharedGmMapForPlayers(parsed.useSharedGmMapForPlayers);
+      if (parsed.mainMapSnapshot?.mapName && parsed.mainMapSnapshot?.mapState) {
+        setMainMapSnapshot(parsed.mainMapSnapshot);
+      }
       if (
         parsed.mapState?.cols &&
         parsed.mapState?.rows &&
@@ -3301,6 +3331,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       widgetUrl,
       useFogOfWar,
       useSharedGmMapForPlayers,
+      mainMapSnapshot,
       tokens: tokens.map(normalizeToken),
       sheets,
       journal,
@@ -3320,6 +3351,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     tokens,
     useFogOfWar,
     useSharedGmMapForPlayers,
+    mainMapSnapshot,
     widgetUrl,
   ]);
 
@@ -3750,6 +3782,38 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
       setSelectedTokenId(tokenId);
 
+      if (token.linkedMapId) {
+        if (token.linkedMapId === "main") {
+          setActiveSavedMapId(null);
+          setMapName(mainMapSnapshot.mapName);
+          setMapPresetName(mainMapSnapshot.mapName);
+          setMapState(mainMapSnapshot.mapState);
+          setGridColsInput(String(mainMapSnapshot.mapState.cols));
+          setGridRowsInput(String(mainMapSnapshot.mapState.rows));
+          addJournalEntry(
+            "map",
+            `${token.name}: быстрый возврат на основную карту.`,
+          );
+          return;
+        }
+        const linkedPreset = savedMaps.find(
+          (preset) => preset.id === token.linkedMapId,
+        );
+        if (linkedPreset) {
+          setActiveSavedMapId(linkedPreset.id);
+          setMapPresetName(linkedPreset.name);
+          setMapName(linkedPreset.mapName);
+          setMapState(linkedPreset.mapState);
+          setGridColsInput(String(linkedPreset.mapState.cols));
+          setGridRowsInput(String(linkedPreset.mapState.rows));
+          addJournalEntry(
+            "map",
+            `${token.name}: переход на карту «${linkedPreset.name}».`,
+          );
+          return;
+        }
+      }
+
       if (!canMoveToken(token)) return;
 
       setTool("move");
@@ -3805,6 +3869,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         widgetUrl,
         useFogOfWar,
         useSharedGmMapForPlayers,
+        mainMapSnapshot,
         initiative,
       });
       window.localStorage.setItem(
@@ -3841,6 +3906,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       widgetUrl,
       useFogOfWar,
       useSharedGmMapForPlayers,
+      mainMapSnapshot,
       initiative,
     });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
@@ -3875,6 +3941,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       widgetUrl,
       useFogOfWar,
       useSharedGmMapForPlayers,
+      mainMapSnapshot,
       initiative,
     });
 
@@ -3918,6 +3985,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setGridRowsInput(String(parsed.mapState.rows));
       setSavedMaps(parsed.savedMaps ?? []);
       setActiveSavedMapId(parsed.activeSavedMapId ?? null);
+      if (parsed.mainMapSnapshot?.mapName && parsed.mainMapSnapshot?.mapState) {
+        setMainMapSnapshot(parsed.mainMapSnapshot);
+      }
       setWidgetUrl(parsed.widgetUrl ?? DEFAULT_WIDGET_URL);
       if (parsed.tokens) setTokens(parsed.tokens.map(normalizeToken));
       if (parsed.sheets)
@@ -3956,6 +4026,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setGridRowsInput(String(preset.mapState.rows));
     addJournalEntry("map", `Загружена сохранённая сцена «${preset.name}».`);
   };
+
+  const handleReturnToMainMap = useCallback(() => {
+    setActiveSavedMapId(null);
+    setMapPresetName(mainMapSnapshot.mapName);
+    setMapName(mainMapSnapshot.mapName);
+    setMapState(mainMapSnapshot.mapState);
+    setGridColsInput(String(mainMapSnapshot.mapState.cols));
+    setGridRowsInput(String(mainMapSnapshot.mapState.rows));
+    addJournalEntry("map", "Возврат на основную карту.");
+  }, [addJournalEntry, mainMapSnapshot]);
+
+  const handleSetCurrentAsMainMap = useCallback(() => {
+    setMainMapSnapshot({ mapName, mapState });
+    addJournalEntry("map", `Текущая сцена «${mapName}» назначена основной.`);
+  }, [addJournalEntry, mapName, mapState]);
 
   const handleDeleteSavedMap = (presetId: string) => {
     const presetIndex = savedMaps.findIndex((preset) => preset.id === presetId);
@@ -4887,6 +4972,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     );
   };
 
+  const handleTokenMapLinkChange = (tokenId: string, linkedMapId: string) => {
+    if (role !== "gm") return;
+    setTokens((current) =>
+      current.map((token) =>
+        token.id === tokenId
+          ? { ...token, linkedMapId: linkedMapId || undefined }
+          : token,
+      ),
+    );
+  };
+
   const handleToggleTokenStatus = useCallback(
     (tokenId: string, status: TokenStatusKey) => {
       if (role !== "gm") return;
@@ -5729,6 +5825,30 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                         )
                                       }
                                     />
+                                  </label>
+                                  <label className="rounded-xl border border-white/10 px-3 py-2">
+                                    <div className="mb-1">Токен-переход по карте</div>
+                                    <select
+                                      value={token.linkedMapId ?? ""}
+                                      onChange={(event) =>
+                                        handleTokenMapLinkChange(
+                                          token.id,
+                                          event.target.value,
+                                        )
+                                      }
+                                      className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-2 py-1 text-xs text-white"
+                                    >
+                                      <option value="">нет</option>
+                                      <option value="main">Основная карта</option>
+                                      {savedMaps.map((preset) => (
+                                        <option
+                                          key={`token-link-${token.id}-${preset.id}`}
+                                          value={preset.id}
+                                        >
+                                          {preset.name}
+                                        </option>
+                                      ))}
+                                    </select>
                                   </label>
                                   {token.kind === "player" ? (
                                     <label className="rounded-xl border border-white/10 px-3 py-2">
@@ -7781,6 +7901,32 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
           {role === "gm" ? (
             <div className="space-y-4">
+              <div className="card flex flex-wrap items-center gap-2 px-3 py-2">
+                <button
+                  type="button"
+                  onClick={handleReturnToMainMap}
+                  className={boardButtonClass(activeSavedMapId === null)}
+                >
+                  Основная
+                </button>
+                {savedMaps.map((preset) => (
+                  <button
+                    key={`map-tab-${preset.id}`}
+                    type="button"
+                    onClick={() => handleLoadSavedMap(preset)}
+                    className={boardButtonClass(activeSavedMapId === preset.id)}
+                  >
+                    {preset.name}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={handleSetCurrentAsMainMap}
+                  className="ml-auto rounded-full border border-emerald-400/40 px-3 py-2 text-xs text-emerald-200"
+                >
+                  Сделать текущую основной
+                </button>
+              </div>
               <div id="battle-board-public">
                 <Board
                   boardId="battle-grid-public"
@@ -7797,6 +7943,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   onZoomIn={handleZoomIn}
                   onZoomChange={setZoom}
                   onZoomFit={handleZoomFit}
+                  onReturnToMain={handleReturnToMainMap}
+                  showReturnToMain={activeSavedMapId !== null}
                   onBoardPointerDown={handleBoardPointerDown("public")}
                   onTokenPointerDown={handleTokenPointerDown}
                   activeTokenId={activeInitiativeParticipant?.tokenId}
@@ -7817,6 +7965,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   onZoomIn={handleZoomIn}
                   onZoomChange={setZoom}
                   onZoomFit={handleZoomFit}
+                  onReturnToMain={handleReturnToMainMap}
+                  showReturnToMain={activeSavedMapId !== null}
                   onBoardPointerDown={handleBoardPointerDown("gm")}
                   onTokenPointerDown={handleTokenPointerDown}
                   activeTokenId={activeInitiativeParticipant?.tokenId}
@@ -7840,6 +7990,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 onZoomIn={handleZoomIn}
                 onZoomChange={setZoom}
                 onZoomFit={handleZoomFit}
+                onReturnToMain={handleReturnToMainMap}
+                showReturnToMain={activeSavedMapId !== null}
                 onBoardPointerDown={handleBoardPointerDown("public")}
                 onTokenPointerDown={handleTokenPointerDown}
                 activeTokenId={activeInitiativeParticipant?.tokenId}
