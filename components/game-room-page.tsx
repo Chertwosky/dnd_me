@@ -3105,6 +3105,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     initiative: 999,
     tools: 320,
   });
+  const [isLeftMasterDrawerOpen, setIsLeftMasterDrawerOpen] = useState(true);
+  const [isRightMasterDrawerOpen, setIsRightMasterDrawerOpen] = useState(true);
+  const leftDrawerContentWidth = Math.max(gmPanelWidths.admin, gmPanelWidths.tokens);
+  const rightDrawerContentWidth = gmPanelWidths.party;
 
   const cols = mapState.cols;
   const rows = mapState.rows;
@@ -5467,6 +5471,37 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
         </section>
 
+        {role === "gm" ? (
+          <div className="sticky top-20 z-40 flex items-center justify-between gap-2 px-1">
+            <button
+              type="button"
+              onClick={() => {
+                setIsLeftMasterDrawerOpen((current) => {
+                  const next = !current;
+                  if (next) setIsRightMasterDrawerOpen(false);
+                  return next;
+                });
+              }}
+              className="rounded-full border border-white/10 bg-slate-950/90 px-4 py-2 text-xs text-slate-200"
+            >
+              {isLeftMasterDrawerOpen ? "Свернуть левую шторку" : "Открыть левую шторку"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsRightMasterDrawerOpen((current) => {
+                  const next = !current;
+                  if (next) setIsLeftMasterDrawerOpen(false);
+                  return next;
+                });
+              }}
+              className="rounded-full border border-white/10 bg-slate-950/90 px-4 py-2 text-xs text-slate-200"
+            >
+              {isRightMasterDrawerOpen ? "Свернуть правую шторку" : "Открыть правую шторку"}
+            </button>
+          </div>
+        ) : null}
+
         <section className="space-y-4">
           <div
             className={
@@ -5476,8 +5511,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             }
           >
             {role === "gm" ? (
-              <div className="contents">
-                {gmPanelOrder
+              <div
+                className={`fixed inset-0 z-30 overflow-y-auto border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isLeftMasterDrawerOpen ? "translate-x-0" : "-translate-x-[110%]"}`}
+              >
+                <div
+                  className="w-full space-y-2"
+                  style={{ maxWidth: `${leftDrawerContentWidth}px` }}
+                >
+                  {gmPanelOrder
                   .filter(
                     (panelId): panelId is "admin" | "tokens" =>
                       panelId === "admin" || panelId === "tokens",
@@ -6049,6 +6090,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       )}
                     </div>
                   ))}
+                </div>
               </div>
             ) : null}
 
@@ -6078,8 +6120,18 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }
                     : undefined
                 }
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role === "gm" ? `fixed inset-0 z-30 overflow-y-auto border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isRightMasterDrawerOpen ? "translate-x-0" : "translate-x-[110%]"}` : ""}`}
               >
+                <div
+                  className={
+                    role === "gm" ? "ml-auto w-full max-w-6xl space-y-2" : ""
+                  }
+                  style={
+                    role === "gm"
+                      ? { maxWidth: `${rightDrawerContentWidth}px` }
+                      : undefined
+                  }
+                >
                 {role === "gm" ? (
                   <div
                     draggable
@@ -7215,6 +7267,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     </div>
                   </div>
                 </CompactSection>
+                </div>
               </div>
 
               <div
