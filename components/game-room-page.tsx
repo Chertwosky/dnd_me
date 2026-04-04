@@ -5510,9 +5510,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           >
             {role === "gm" ? (
               <div
-                className={`fixed bottom-0 left-0 top-0 z-30 w-[min(56rem,92vw)] overflow-y-auto border-r border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isLeftMasterDrawerOpen ? "translate-x-0" : "-translate-x-[110%]"}`}
+                className={`fixed inset-0 z-30 overflow-y-auto border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isLeftMasterDrawerOpen ? "translate-x-0" : "-translate-x-[110%]"}`}
               >
-                {gmPanelOrder
+                <div className="w-full max-w-6xl space-y-2">
+                  {gmPanelOrder
                   .filter(
                     (panelId): panelId is "admin" | "tokens" =>
                       panelId === "admin" || panelId === "tokens",
@@ -6084,6 +6085,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       )}
                     </div>
                   ))}
+                </div>
               </div>
             ) : null}
 
@@ -6113,8 +6115,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }
                     : undefined
                 }
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role === "gm" ? `fixed bottom-0 right-0 top-0 z-30 w-[min(56rem,92vw)] overflow-y-auto border-l border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isRightMasterDrawerOpen ? "translate-x-0" : "translate-x-[110%]"}` : ""}`}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role === "gm" ? `fixed inset-0 z-30 overflow-y-auto border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isRightMasterDrawerOpen ? "translate-x-0" : "translate-x-[110%]"}` : ""}`}
               >
+                <div
+                  className={
+                    role === "gm" ? "ml-auto w-full max-w-6xl space-y-2" : ""
+                  }
+                >
                 {role === "gm" ? (
                   <div
                     draggable
@@ -7250,6 +7257,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     </div>
                   </div>
                 </CompactSection>
+                </div>
               </div>
 
               <div
