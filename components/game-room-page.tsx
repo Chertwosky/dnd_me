@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type CSSProperties,
@@ -41,6 +42,7 @@ type LayerKind = "terrain" | "obstacle" | "texture" | "furniture";
 type TokenKind = "player" | "npc" | "monster" | "object";
 type BoardKind = "public" | "gm";
 type LootCrBand = "0-4" | "5-10" | "11-16" | "17+";
+type SceneThemeId = "tavern" | "road" | "dungeon" | "forest" | "city";
 type TokenStatusKey =
   | "poisoned"
   | "stunned"
@@ -149,6 +151,11 @@ type CharacterSheet = {
   takenFeatIds?: string[];
   selectedSubclassId?: string;
   knownSpellIds?: string[];
+};
+
+type SceneThemeTrack = {
+  title: string;
+  url: string;
 };
 
 type JournalEntry = {
@@ -424,6 +431,53 @@ const randomEventPool = [
     link: "https://dnd.su/",
   },
 ];
+
+const sceneThemePlaylists: Array<{
+  id: SceneThemeId;
+  name: string;
+  tracks: SceneThemeTrack[];
+}> = [
+  {
+    id: "tavern",
+    name: "Таверна",
+    tracks: [],
+  },
+  {
+    id: "road",
+    name: "Дорога",
+    tracks: [],
+  },
+  {
+    id: "dungeon",
+    name: "Подземелье",
+    tracks: [],
+  },
+  {
+    id: "forest",
+    name: "Лес",
+    tracks: [],
+  },
+  {
+    id: "city",
+    name: "Город",
+    tracks: [],
+  },
+];
+
+const normalizeYandexPlaylistEmbedUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.includes("music.yandex.ru/iframe/")) {
+    return trimmed;
+  }
+  if (!trimmed.includes("music.yandex.ru/")) return "";
+  const playlistMatch = trimmed.match(
+    /music\.yandex\.ru\/users\/([^/]+)\/playlists\/(\d+)/i,
+  );
+  if (!playlistMatch) return "";
+  const [, userId, playlistId] = playlistMatch;
+  return `https://music.yandex.ru/iframe/#playlist/${userId}/${playlistId}`;
+};
 
 const treasuryArticleLink =
   "https://www.dnd.su/articles/inventory/74-treasury/";
@@ -3033,6 +3087,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [lootCrBand, setLootCrBand] = useState<LootCrBand>("0-4");
   const [lootResult, setLootResult] = useState<LootResult>(randomLootDefault);
   const [eventResult, setEventResult] = useState(randomEventPool[0]);
+  const [selectedThemeSceneId, setSelectedThemeSceneId] = useState<SceneThemeId>(
+    sceneThemePlaylists[0].id,
+  );
+  const [selectedThemeTrackUrl, setSelectedThemeTrackUrl] = useState("");
+  const [themeTrackLoop, setThemeTrackLoop] = useState(true);
+  const [customThemeTitle, setCustomThemeTitle] = useState("");
+  const [customThemeUrl, setCustomThemeUrl] = useState("");
+  const [yandexPlaylistInput, setYandexPlaylistInput] = useState("");
+  const [sceneYandexPlaylists, setSceneYandexPlaylists] = useState<
+    Partial<Record<SceneThemeId, string>>
+  >({});
+  const [customSceneThemes, setCustomSceneThemes] = useState<
+    Partial<Record<SceneThemeId, SceneThemeTrack[]>>
+  >({});
+  const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [gridColsInput, setGridColsInput] = useState(String(DEFAULT_COLS));
   const [gridRowsInput, setGridRowsInput] = useState(String(DEFAULT_ROWS));
@@ -3152,6 +3221,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       }),
     [currentMapId, tokens],
   );
+  const selectedThemeScene = useMemo(
+    () =>
+      sceneThemePlaylists.find((scene) => scene.id === selectedThemeSceneId) ??
+      sceneThemePlaylists[0],
+    [selectedThemeSceneId],
+  );
+  const themeTracks = useMemo(
+    () => [
+      ...selectedThemeScene.tracks,
+      ...(customSceneThemes[selectedThemeScene.id] ?? []),
+    ],
+    [customSceneThemes, selectedThemeScene],
+  );
+  const activeSceneYandexPlaylist =
+    sceneYandexPlaylists[selectedThemeScene.id] ?? "";
   const playerTokens = useMemo(
     () => getPlayerTokens(tokensOnCurrentMap),
     [tokensOnCurrentMap],
@@ -3285,6 +3369,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       new Map(sheets.map((sheet) => [sheet.tokenId, sheet.avatarUrl ?? null])),
     [sheets],
   );
+
+  useEffect(() => {
+    const firstTrackUrl = themeTracks[0]?.url;
+    if (!firstTrackUrl) {
+      setSelectedThemeTrackUrl("");
+      return;
+    }
+    if (!themeTracks.some((track) => track.url === selectedThemeTrackUrl)) {
+      setSelectedThemeTrackUrl(firstTrackUrl);
+    }
+  }, [selectedThemeTrackUrl, themeTracks]);
+
+  useEffect(() => {
+    setYandexPlaylistInput(sceneYandexPlaylists[selectedThemeScene.id] ?? "");
+  }, [sceneYandexPlaylists, selectedThemeScene.id]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(getStorageKey(roomId));
@@ -4276,6 +4375,82 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       "event",
       `Событие из dnd.su: ${nextEvent.title}. Ссылка: ${nextEvent.link}`,
     );
+  };
+
+  const handleAddCustomTheme = () => {
+    const title = customThemeTitle.trim();
+    const url = customThemeUrl.trim();
+    if (!title || !url) return;
+
+    setCustomSceneThemes((current) => ({
+      ...current,
+      [selectedThemeScene.id]: [
+        ...(current[selectedThemeScene.id] ?? []),
+        { title, url },
+      ],
+    }));
+    setSelectedThemeTrackUrl(url);
+    setCustomThemeTitle("");
+    setCustomThemeUrl("");
+    addJournalEntry(
+      "system",
+      `Добавлена тема «${title}» для сцены «${selectedThemeScene.name}».`,
+    );
+  };
+
+  const handleUploadSceneThemes = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) return;
+    const uploadedTracks = files.map((file) => ({
+      title: file.name.replace(/\.[^.]+$/, ""),
+      url: URL.createObjectURL(file),
+    }));
+    setCustomSceneThemes((current) => ({
+      ...current,
+      [selectedThemeScene.id]: [
+        ...(current[selectedThemeScene.id] ?? []),
+        ...uploadedTracks,
+      ],
+    }));
+    setSelectedThemeTrackUrl(uploadedTracks[0]?.url ?? "");
+    addJournalEntry(
+      "system",
+      `Подгружено ${uploadedTracks.length} MP3 для сцены «${selectedThemeScene.name}».`,
+    );
+    event.target.value = "";
+  };
+
+  const handleSaveYandexPlaylist = () => {
+    const embedUrl = normalizeYandexPlaylistEmbedUrl(yandexPlaylistInput);
+    if (!embedUrl) {
+      addJournalEntry(
+        "system",
+        "Не удалось распознать ссылку Яндекс Музыки. Вставьте ссылку на плейлист или iframe-ссылку.",
+      );
+      return;
+    }
+    setSceneYandexPlaylists((current) => ({
+      ...current,
+      [selectedThemeScene.id]: embedUrl,
+    }));
+    addJournalEntry(
+      "system",
+      `Привязана Яндекс Музыка для сцены «${selectedThemeScene.name}».`,
+    );
+  };
+
+  const handleThemeTrackEnded = () => {
+    if (themeTrackLoop || themeTracks.length < 2) return;
+    const currentIndex = themeTracks.findIndex(
+      (track) => track.url === selectedThemeTrackUrl,
+    );
+    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextTrack = themeTracks[(safeIndex + 1) % themeTracks.length];
+    if (!nextTrack) return;
+    setSelectedThemeTrackUrl(nextTrack.url);
+    window.setTimeout(() => {
+      sceneAudioRef.current?.play().catch(() => {});
+    }, 0);
   };
 
   const updateSelectedSheet = useCallback(
@@ -7783,6 +7958,163 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           >
                             Случайное событие
                           </button>
+                          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/5 px-4 py-4">
+                            <div className="font-medium text-white">
+                              Темы сцен (MP3-плейлист)
+                            </div>
+                            <div className="mt-1 text-sm text-slate-400">
+                              Можно подгрузить свои MP3 (рекомендуется для
+                              гарантированного воспроизведения) или прикрепить
+                              плейлист Яндекс Музыки.
+                            </div>
+                            <div className="mt-3 grid gap-3 md:grid-cols-2">
+                              <label className="block">
+                                <div className="mb-1 text-xs uppercase tracking-wide text-slate-400">
+                                  Сцена
+                                </div>
+                                <select
+                                  value={selectedThemeSceneId}
+                                  onChange={(event) =>
+                                    setSelectedThemeSceneId(
+                                      event.target.value as SceneThemeId,
+                                    )
+                                  }
+                                  className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                                >
+                                  {sceneThemePlaylists.map((scene) => (
+                                    <option key={scene.id} value={scene.id}>
+                                      {scene.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="block">
+                                <div className="mb-1 text-xs uppercase tracking-wide text-slate-400">
+                                  Тема
+                                </div>
+                                <select
+                                  value={selectedThemeTrackUrl}
+                                  onChange={(event) =>
+                                    setSelectedThemeTrackUrl(event.target.value)
+                                  }
+                                  disabled={!themeTracks.length}
+                                  className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                                >
+                                  {!themeTracks.length ? (
+                                    <option value="">
+                                      Нет треков — подгрузите MP3 ниже
+                                    </option>
+                                  ) : null}
+                                  {themeTracks.map((track) => (
+                                    <option key={track.url} value={track.url}>
+                                      {track.title}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-3">
+                              <button
+                                onClick={() => {
+                                  sceneAudioRef.current?.play().catch(() => {});
+                                }}
+                                disabled={!selectedThemeTrackUrl}
+                                className="rounded-full bg-cyan-400 px-4 py-2 text-sm font-medium text-slate-950"
+                              >
+                                ▶ Включить
+                              </button>
+                              <button
+                                onClick={() => sceneAudioRef.current?.pause()}
+                                className="rounded-full border border-white/20 px-4 py-2 text-sm text-white"
+                              >
+                                ⏸ Пауза
+                              </button>
+                              <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  checked={themeTrackLoop}
+                                  onChange={(event) =>
+                                    setThemeTrackLoop(event.target.checked)
+                                  }
+                                />
+                                Зациклить текущую тему
+                              </label>
+                            </div>
+                            <audio
+                              key={selectedThemeTrackUrl}
+                              ref={sceneAudioRef}
+                              src={selectedThemeTrackUrl}
+                              controls
+                              loop={themeTrackLoop}
+                              onEnded={handleThemeTrackEnded}
+                              className="mt-3 w-full"
+                            />
+                            <label className="mt-3 block rounded-2xl border border-white/8 px-4 py-3">
+                              <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">
+                                Подгрузить MP3 файлы
+                              </div>
+                              <input
+                                type="file"
+                                accept=".mp3,audio/mpeg"
+                                multiple
+                                onChange={handleUploadSceneThemes}
+                                className="w-full text-sm text-slate-200 file:mr-3 file:rounded-full file:border-0 file:bg-cyan-500 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white"
+                              />
+                            </label>
+                            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                              <input
+                                value={customThemeTitle}
+                                onChange={(event) =>
+                                  setCustomThemeTitle(event.target.value)
+                                }
+                                placeholder="Название своей темы"
+                                className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                              />
+                              <input
+                                value={customThemeUrl}
+                                onChange={(event) =>
+                                  setCustomThemeUrl(event.target.value)
+                                }
+                                placeholder="https://.../theme.mp3"
+                                className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                              />
+                              <button
+                                onClick={handleAddCustomTheme}
+                                className="rounded-full bg-cyan-500 px-4 py-3 text-sm font-medium text-white"
+                              >
+                                Добавить MP3
+                              </button>
+                            </div>
+                            <div className="mt-4 rounded-2xl border border-white/8 px-4 py-3">
+                              <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">
+                                Плейлист Яндекс Музыки
+                              </div>
+                              <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                                <input
+                                  value={yandexPlaylistInput}
+                                  onChange={(event) =>
+                                    setYandexPlaylistInput(event.target.value)
+                                  }
+                                  placeholder="https://music.yandex.ru/users/.../playlists/..."
+                                  className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
+                                />
+                                <button
+                                  onClick={handleSaveYandexPlaylist}
+                                  className="rounded-full bg-slate-700 px-4 py-3 text-sm font-medium text-white"
+                                >
+                                  Сохранить ссылку
+                                </button>
+                              </div>
+                              {activeSceneYandexPlaylist ? (
+                                <iframe
+                                  title={`Яндекс Музыка: ${selectedThemeScene.name}`}
+                                  src={activeSceneYandexPlaylist}
+                                  className="mt-3 h-52 w-full rounded-2xl border border-white/10 bg-slate-950"
+                                  loading="lazy"
+                                />
+                              ) : null}
+                            </div>
+                          </div>
 
                           <div className="rounded-2xl border border-amber-400/20 bg-amber-500/5 px-4 py-4">
                             <div className="flex items-center justify-between gap-3">
