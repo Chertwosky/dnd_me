@@ -15,9 +15,7 @@ export function Header() {
         </Link>
 
         <nav className="hidden items-center gap-6 text-sm text-slate-300 md:flex">
-          <Link href="#features">Функции</Link>
-          <Link href="#scenarios">Сценарии</Link>
-          <Link href="#roadmap">Roadmap</Link>
+          <Link href="#implemented">Что работает</Link>
           <Link href="/rooms/demo-room" className="rounded-full bg-fuchsia-500 px-4 py-2 font-medium text-white">
             Открыть демо
           </Link>

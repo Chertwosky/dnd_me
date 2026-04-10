@@ -27,7 +27,7 @@ import {
   type LevelUpDraft,
 } from "@/lib/level-up";
 
-type RoomRole = "gm" | "player";
+type RoomRole = "gm" | "player" | "spectator";
 type JoinStep = "auth" | "player-sheet" | "ready";
 type DrawingTool =
   | "move"
@@ -2982,12 +2982,17 @@ function Board({
 }
 
 export function GameRoomPage({ roomId }: { roomId: string }) {
+  const inviteLink =
+    typeof window === "undefined"
+      ? ""
+      : `${window.location.origin}/rooms/${roomId}`;
   const [roomPassword, setRoomPassword] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [displayName, setDisplayName] = useState("Мастер Аркейн");
   const [role, setRole] = useState<RoomRole | null>(null);
   const [joinStep, setJoinStep] = useState<JoinStep>("auth");
   const [authError, setAuthError] = useState("");
+  const [inviteCopied, setInviteCopied] = useState(false);
   const [mapName, setMapName] = useState("Руины старой башни");
   const [mapState, setMapState] = useState<MapState>(createInitialMapState);
   const [mainMapSnapshot, setMainMapSnapshot] = useState<{
@@ -4900,6 +4905,26 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     addJournalEntry("room", `${name} присоединился к комнате как игрок.`);
   };
 
+  const handleJoinAsSpectator = () => {
+    const name = displayName.trim() || "Наблюдатель";
+    setRole("spectator");
+    setJoinStep("ready");
+    setAuthError("");
+    setDisplayName(name);
+    addJournalEntry("room", `${name} присоединился к комнате как наблюдатель.`);
+  };
+
+  const handleCopyInviteLink = async () => {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setInviteCopied(true);
+      window.setTimeout(() => setInviteCopied(false), 1600);
+    } catch {
+      setAuthError("Не удалось скопировать ссылку автоматически.");
+    }
+  };
+
   const createPlayerCharacter = () => {
     const nextIndex = playerTokens.length + 1;
     const tokenId = `player-${nextIndex}`;
@@ -5208,7 +5233,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             >
               На главную
             </Link>
-            {role !== "player" || joinStep !== "ready" ? (
+            <button
+              onClick={handleCopyInviteLink}
+              className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100"
+            >
+              {inviteCopied ? "Ссылка скопирована" : "Копировать invite-ссылку"}
+            </button>
+            {role === "gm" || joinStep !== "ready" ? (
               <>
                 <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
                   Загрузить карту
@@ -5239,7 +5270,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
         </header>
 
-        {role !== "player" || joinStep !== "ready" ? (
+        {role === "gm" || joinStep !== "ready" ? (
           <CompactSection
             title="Сохранённые сцены"
             description="Все карты и JSON на месте, но блок теперь можно свернуть, чтобы не занимал экран."
@@ -5312,7 +5343,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             <div className="card p-6">
               <span className="badge">Вход</span>
               <h2 className="mt-4 text-2xl font-semibold text-white">
-                Одна комната, один пароль, две роли
+                Одна комната, один пароль и режим наблюдателя
               </h2>
               <p className="mt-3 text-sm text-slate-300">
                 Если комната ещё не создана, введённый пароль будет сохранён и
@@ -5342,6 +5373,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 className="mt-5 rounded-full bg-fuchsia-500 px-5 py-3 text-sm font-medium text-white"
               >
                 Войти в комнату
+              </button>
+              <button
+                onClick={handleJoinAsSpectator}
+                className="mt-3 rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-slate-100"
+              >
+                Войти наблюдателем
               </button>
             </div>
 
@@ -5401,6 +5438,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         токеном.
                       </div>
                     </div>
+                    <div className="rounded-2xl border border-white/10 px-4 py-3">
+                      <div className="font-medium text-white">Наблюдатель</div>
+                      <div className="mt-1">
+                        Подключается в read-only режиме без создания персонажа:
+                        можно смотреть карту, инициативу и журнал, но нельзя
+                        двигать токены и менять состояние комнаты.
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
@@ -5428,7 +5473,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 ? "Мастер"
                 : role === "player"
                   ? "Игрок"
-                  : "Не выбрана"}
+                  : role === "spectator"
+                    ? "Наблюдатель"
+                    : "Не выбрана"}
             </div>
           </div>
           {role === "gm" ? (
