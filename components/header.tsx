@@ -10,13 +10,13 @@ export function Header() {
           </span>
           <div>
             <div>D&D Game Table</div>
-            <div className="text-xs font-normal text-slate-400">MVP virtual tabletop</div>
+            <div className="text-xs font-normal text-slate-400">Session-first tabletop</div>
           </div>
         </Link>
 
         <nav className="hidden items-center gap-6 text-sm text-slate-300 md:flex">
-          <Link href="#features">Функции</Link>
-          <Link href="#scenarios">Сценарии</Link>
+          <Link href="#quickstart">Быстрый старт</Link>
+          <Link href="#features">Что работает</Link>
           <Link href="#roadmap">Roadmap</Link>
           <Link href="/rooms/demo-room" className="rounded-full bg-fuchsia-500 px-4 py-2 font-medium text-white">
             Открыть демо
