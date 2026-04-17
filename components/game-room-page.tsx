@@ -5703,7 +5703,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 <div className="contents">
                   {gmLayoutOrder
                   .filter(
-                    (panelId): panelId is "admin" | "tokens" =>
+                    (panelId) =>
                       (panelId === "admin" || panelId === "tokens") &&
                       panelVisibility[panelId],
                   )
