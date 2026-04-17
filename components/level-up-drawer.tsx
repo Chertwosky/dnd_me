@@ -1,5 +1,6 @@
 import type { LevelUpDraft, LevelUpPreview } from '@/lib/level-up';
 import { classes, subclasses } from '@/lib/level-up';
+import { MasterOverlayShell } from './master-overlay-shell';
 import { LevelUpSummary } from './level-up-summary';
 
 function ExternalRuleLink({ href, label }: { href: string; label: string }) {
@@ -44,8 +45,14 @@ export function LevelUpDrawer({
   const hasBlocking = preview.blockedOptions.length > 0 || preview.missingSelections.length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/70 backdrop-blur-sm">
-      <div className="h-full w-full max-w-3xl overflow-y-auto border-l border-white/10 bg-slate-950 p-5">
+    <MasterOverlayShell
+      open={open}
+      onClose={onClose}
+      placement="right"
+      zIndexClass="z-[80]"
+      panelClassName="h-full w-full max-w-3xl overflow-hidden border-l border-white/10 bg-slate-950"
+      contentClassName="h-full overflow-y-auto p-5"
+    >
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-xs uppercase tracking-wide text-slate-500">Повышение уровня</div>
@@ -166,7 +173,6 @@ export function LevelUpDrawer({
             </div>
           </section>
         </div>
-      </div>
-    </div>
+    </MasterOverlayShell>
   );
 }

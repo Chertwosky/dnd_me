@@ -1,0 +1,55 @@
+"use client";
+
+import { type ReactNode } from "react";
+
+import {
+  type MasterPanelId,
+  type MasterPanelSize,
+  getMasterPanelSizeLabel,
+} from "@/lib/master-panel-layout";
+
+export function MasterPanelShell({
+  panelId,
+  sectionLabel = "Панель мастера",
+  title,
+  description,
+  size,
+  hidden = false,
+  style,
+  className,
+  children,
+}: {
+  panelId: MasterPanelId;
+  sectionLabel?: string;
+  title: string;
+  description: string;
+  size: MasterPanelSize;
+  hidden?: boolean;
+  style?: React.CSSProperties;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      data-master-panel={panelId}
+      style={style}
+      className={`master-panel-shell master-panel-shell--desk min-w-0 space-y-3 ${
+        hidden ? "hidden" : ""
+      } ${className ?? ""}`.trim()}
+    >
+      <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-white/8 bg-slate-950/70 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <div className="text-[11px] uppercase tracking-[0.24em] text-slate-500">
+            {sectionLabel}
+          </div>
+          <div className="break-words text-sm font-semibold text-white">
+            {title}
+          </div>
+          <p className="break-words text-xs text-slate-400">{description}</p>
+        </div>
+        <span className="badge w-fit shrink-0">{getMasterPanelSizeLabel(size)}</span>
+      </div>
+      <div className="min-w-0 overflow-hidden">{children}</div>
+    </section>
+  );
+}
