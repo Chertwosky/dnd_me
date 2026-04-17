@@ -14,7 +14,7 @@ export function CharacterXpCard({ progression, mode }: { progression: CharacterP
     <div className={`rounded-3xl border p-4 ${stateTone}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-wide text-slate-400">Progression</div>
+          <div className="text-xs uppercase tracking-wide text-slate-400">Прогрессия</div>
           <div className="mt-1 text-lg font-semibold text-white">Уровень {progression.currentLevel}</div>
           <div className="mt-1 text-sm text-slate-300">
             {mode === 'xp' && progression.nextLevelXp
@@ -25,7 +25,7 @@ export function CharacterXpCard({ progression, mode }: { progression: CharacterP
           </div>
         </div>
         <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200">
-          {progression.levelUpState === 'in_progress' ? 'level up in progress' : progression.canLevelUp ? 'ready to level up' : 'tracking'}
+          {progression.levelUpState === 'in_progress' ? 'повышение в процессе' : progression.canLevelUp ? 'готов к повышению' : 'отслеживание'}
         </span>
       </div>
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-900/90">

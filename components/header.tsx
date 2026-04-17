@@ -10,7 +10,7 @@ export function Header() {
           </span>
           <div>
             <div>D&D Game Table</div>
-            <div className="text-xs font-normal text-slate-400">MVP virtual tabletop</div>
+            <div className="text-xs font-normal text-slate-400">MVP виртуальный стол</div>
           </div>
         </Link>
 

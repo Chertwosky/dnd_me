@@ -29,6 +29,7 @@ import {
 
 type RoomRole = "gm" | "player" | "spectator";
 type JoinStep = "auth" | "player-sheet" | "ready";
+type JoinIntent = "gm" | "player" | null;
 type DrawingTool =
   | "move"
   | "terrain"
@@ -41,6 +42,7 @@ type LayerKind = "terrain" | "obstacle" | "texture" | "furniture";
 type TokenKind = "player" | "npc" | "monster" | "object";
 type BoardKind = "public" | "gm";
 type LootCrBand = "0-4" | "5-10" | "11-16" | "17+";
+type MasterViewPreset = "combat" | "explore" | "prep";
 type TokenStatusKey =
   | "poisoned"
   | "stunned"
@@ -166,6 +168,12 @@ type JournalEntry = {
     | "initiative";
   text: string;
   time: string;
+};
+
+type ToastMessage = {
+  id: string;
+  tone: "success" | "info" | "warning";
+  text: string;
 };
 
 type InitiativeParticipant = {
@@ -335,7 +343,7 @@ const toolMeta: Array<{
   { value: "obstacle", label: "Препятствия", layer: "obstacle" },
   { value: "texture", label: "Текстуры", layer: "texture" },
   { value: "furniture", label: "Столы/объекты", layer: "furniture" },
-  { value: "fog", label: "Fog" },
+  { value: "fog", label: "Туман" },
   { value: "erase", label: "Стереть" },
 ];
 
@@ -2989,9 +2997,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [roomPassword, setRoomPassword] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [displayName, setDisplayName] = useState("Мастер Аркейн");
+  const [joinIntent, setJoinIntent] = useState<JoinIntent>("player");
   const [role, setRole] = useState<RoomRole | null>(null);
   const [joinStep, setJoinStep] = useState<JoinStep>("auth");
   const [authError, setAuthError] = useState("");
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [mapName, setMapName] = useState("Руины старой башни");
   const [mapState, setMapState] = useState<MapState>(createInitialMapState);
@@ -3068,6 +3078,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     },
   ]);
   const [isLoadedFromStorage, setIsLoadedFromStorage] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [masterPreset, setMasterPreset] = useState<MasterViewPreset>("combat");
+  const [journalFilter, setJournalFilter] = useState<JournalEntry["type"] | "all">(
+    "all",
+  );
+  const [journalSearch, setJournalSearch] = useState("");
   const [initiative, setInitiative] = useState<InitiativeState>(
     createEmptyInitiativeState,
   );
@@ -3364,7 +3381,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       journal,
       initiative,
     });
-    window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
+    try {
+      window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
+      setSaveState("saved");
+      setLastSavedAt(nowTime());
+    } catch {
+      setSaveState("error");
+    }
   }, [
     activeSavedMapId,
     initiative,
@@ -3432,6 +3455,62 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     [],
   );
 
+  const pushToast = useCallback(
+    (text: string, tone: ToastMessage["tone"] = "info") => {
+      const id = `${Date.now()}-${Math.random()}`;
+      setToasts((current) => [...current, { id, tone, text }].slice(-4));
+      window.setTimeout(() => {
+        setToasts((current) => current.filter((toast) => toast.id !== id));
+      }, 2200);
+    },
+    [],
+  );
+
+  const onboardingSteps = useMemo(() => {
+    const isAuthDone = joinStep === "ready";
+    const hasPlayerSheet = sheets.some((sheet) => sheet.playerName === displayName || sheet.name === displayName);
+    const hasOwnedToken = tokens.some((token) => token.owner === displayName && token.kind === "player");
+    const hasDiceRoll = journal.some((entry) => entry.type === "dice" && entry.text.includes(displayName));
+    const hasMapLoaded = mapName.trim().length > 0;
+    const hasAnyToken = tokens.length > 0;
+    const hasInitiativeRun = initiative.participants.length > 0 || initiative.active;
+    if (role === "gm") {
+      return [
+        { id: "auth", label: "Войти в комнату как мастер", done: isAuthDone },
+        { id: "map", label: "Загрузить или выбрать карту", done: hasMapLoaded },
+        { id: "tokens", label: "Расставить токены на сцене", done: hasAnyToken },
+        { id: "initiative", label: "Запустить инициативу", done: hasInitiativeRun },
+      ];
+    }
+    return [
+      { id: "auth", label: "Войти в комнату", done: isAuthDone },
+      { id: "sheet", label: "Создать или импортировать лист", done: hasPlayerSheet },
+      { id: "token", label: "Выбрать и проверить свой токен", done: hasOwnedToken },
+      { id: "dice", label: "Сделать первый бросок", done: hasDiceRoll },
+    ];
+  }, [displayName, initiative.active, initiative.participants.length, joinStep, journal, mapName, role, sheets, tokens]);
+
+  const filteredJournal = useMemo(() => {
+    return journal.filter((entry) => {
+      const byType = journalFilter === "all" ? true : entry.type === journalFilter;
+      const byText = journalSearch.trim()
+        ? entry.text.toLowerCase().includes(journalSearch.trim().toLowerCase())
+        : true;
+      return byType && byText;
+    });
+  }, [journal, journalFilter, journalSearch]);
+
+  const panelVisibility = useMemo(
+    () => ({
+      admin: masterPreset === "prep" || masterPreset === "explore",
+      tokens: true,
+      party: true,
+      initiative: masterPreset === "combat",
+      tools: masterPreset !== "combat",
+    }),
+    [masterPreset],
+  );
+
   const buildInitiativeParticipants = useCallback(
     (mode: "players" | "visible" | "all") => {
       const scope = tokens.filter((token) => {
@@ -3493,6 +3572,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           "initiative",
           "Не удалось запустить инициативу: нет подходящих участников.",
         );
+        pushToast("Инициатива не запущена: нет участников.", "warning");
         return;
       }
 
@@ -3507,8 +3587,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         "initiative",
         `Инициатива запущена (${mode === "all" ? "все токены" : mode === "visible" ? "видимые участники" : "только игроки"}): ${participants.map((participant) => `${participant.name} ${participant.initiative}`).join(", ")}.`,
       );
+      pushToast("Инициатива запущена.", "success");
     },
-    [addJournalEntry, buildInitiativeParticipants, role],
+    [addJournalEntry, buildInitiativeParticipants, pushToast, role],
   );
 
   const handleAdvanceTurn = useCallback(() => {
@@ -3523,19 +3604,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         "initiative",
         `Ход переходит к ${nextParticipant.name}. Раунд ${nextRound}.`,
       );
+      pushToast(`Следующий ход: ${nextParticipant.name}.`, "info");
       return {
         ...current,
         currentTurnIndex: nextIndex,
         round: nextRound,
       };
     });
-  }, [addJournalEntry, role]);
+  }, [addJournalEntry, pushToast, role]);
 
   const handleStopInitiative = useCallback(() => {
     if (role !== "gm") return;
     setInitiative(createEmptyInitiativeState());
     addJournalEntry("initiative", "Трекер инициативы очищен.");
-  }, [addJournalEntry, role]);
+    pushToast("Инициатива сброшена.", "info");
+  }, [addJournalEntry, pushToast, role]);
 
   const handleSelectTurn = useCallback(
     (tokenId: string) => {
@@ -3965,6 +4048,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       "save",
       `Карта «${nextPreset.name}» сохранена локально для комнаты ${roomId} как новая вкладка.`,
     );
+    pushToast(`Сцена «${nextPreset.name}» сохранена.`, "success");
   };
 
   const handleExportMapJson = () => {
@@ -4009,6 +4093,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       "save",
       `Экспортирован JSON сцены «${mapPresetName || mapName}».`,
     );
+    pushToast("JSON сцены экспортирован.", "success");
   };
 
   const handleImportMapJson = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -4026,6 +4111,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           "system",
           `Файл ${file.name} не содержит валидную карту комнаты.`,
         );
+        pushToast("Импорт не выполнен: неверный формат карты.", "warning");
         return;
       }
 
@@ -4058,11 +4144,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         ),
       );
       addJournalEntry("map", `JSON-карта «${file.name}» загружена в комнату.`);
+      pushToast(`Карта «${file.name}» импортирована.`, "success");
     } catch {
       addJournalEntry(
         "system",
         `Файл ${file.name} не является валидным JSON карты.`,
       );
+      pushToast("Ошибка импорта JSON-карты.", "warning");
     } finally {
       event.target.value = "";
     }
@@ -4181,6 +4269,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const handleDeleteSavedMap = (presetId: string) => {
     const presetIndex = savedMaps.findIndex((preset) => preset.id === presetId);
     if (presetIndex <= 0) return;
+    const preset = savedMaps[presetIndex];
+    const shouldDelete = window.confirm(
+      `Удалить вкладку «${preset?.name ?? "сцена"}»? Это действие нельзя отменить.`,
+    );
+    if (!shouldDelete) return;
 
     const nextSavedMaps = savedMaps.filter((preset) => preset.id !== presetId);
     const fallbackPreset =
@@ -4197,6 +4290,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     }
 
     addJournalEntry("map", "Вкладка карты удалена.");
+    pushToast("Вкладка сцены удалена.", "info");
   };
 
   const handleResizeMap = () => {
@@ -4271,6 +4365,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       "loot",
       `Лут из таблицы dnd.su (${lootCrBand}): ${nextLoot.details} Ссылка: ${nextLoot.link}`,
     );
+    pushToast("Лут сгенерирован.", "success");
   };
 
   const handleRandomEvent = () => {
@@ -4281,6 +4376,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       "event",
       `Событие из dnd.su: ${nextEvent.title}. Ссылка: ${nextEvent.link}`,
     );
+    pushToast("Случайное событие добавлено.", "success");
   };
 
   const updateSelectedSheet = useCallback(
@@ -4867,24 +4963,32 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     [],
   );
 
-  const handleRoomAuth = () => {
+  const handleRoomAuth = (forcedRole?: "gm" | "player") => {
     const name = displayName.trim() || "Без имени";
     const pass = passwordInput.trim();
+    const requestedRole = forcedRole ?? joinIntent ?? "player";
 
     if (!pass) {
       setAuthError("Нужен пароль комнаты.");
+      pushToast("Введите пароль комнаты.", "warning");
       return;
     }
 
     const currentState = roomAccessRegistry.get(roomId);
 
     if (!currentState) {
+      if (requestedRole === "player") {
+        setAuthError("Комнаты ещё нет. Для первого входа выберите роль мастера.");
+        pushToast("Первый вход в комнату должен быть как мастер.", "warning");
+        return;
+      }
       roomAccessRegistry.set(roomId, { password: pass, gmExists: true });
       setRoomPassword(pass);
       setRole("gm");
       setJoinStep("ready");
       setAuthError("");
       setDisplayName(name);
+      pushToast("Комната создана, вы вошли как мастер.", "success");
       addJournalEntry(
         "room",
         `${name} создал комнату как мастер и задал пароль.`,
@@ -4894,6 +4998,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
     if (currentState.password !== pass) {
       setAuthError("Неверный пароль комнаты.");
+      pushToast("Неверный пароль комнаты.", "warning");
+      return;
+    }
+
+    if (requestedRole === "gm") {
+      setAuthError("Комната уже создана. Войдите как игрок или наблюдатель.");
+      pushToast("Роль мастера уже занята для этой комнаты.", "warning");
       return;
     }
 
@@ -4902,6 +5013,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setJoinStep("player-sheet");
     setAuthError("");
     setDisplayName(name);
+    pushToast("Вход выполнен. Добавьте лист персонажа.", "success");
     addJournalEntry("room", `${name} присоединился к комнате как игрок.`);
   };
 
@@ -4911,6 +5023,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setJoinStep("ready");
     setAuthError("");
     setDisplayName(name);
+    pushToast("Вы вошли в режиме наблюдателя.", "info");
     addJournalEntry("room", `${name} присоединился к комнате как наблюдатель.`);
   };
 
@@ -4920,8 +5033,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       await navigator.clipboard.writeText(inviteLink);
       setInviteCopied(true);
       window.setTimeout(() => setInviteCopied(false), 1600);
+      pushToast("Invite-ссылка скопирована.", "success");
     } catch {
       setAuthError("Не удалось скопировать ссылку автоматически.");
+      pushToast("Не удалось скопировать ссылку.", "warning");
     }
   };
 
@@ -4962,6 +5077,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     setSelectedTokenId(tokenId);
     setJoinStep("ready");
     addJournalEntry("sheet", `${displayName} создал новый лист персонажа.`);
+    pushToast("Лист персонажа создан.", "success");
   };
 
   const handleAddNpcToMap = useCallback(() => {
@@ -5004,6 +5120,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       "map",
       `${trimmedName} добавлен на ${npcPlacementBoard === "gm" ? "скрытую карту мастера" : "публичную карту"} как ${npcKindInput === "monster" ? "монстр" : "NPC"}.`,
     );
+    pushToast(`${trimmedName} добавлен на карту.`, "success");
   }, [
     addJournalEntry,
     cols,
@@ -5015,6 +5132,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     npcNameInput,
     npcPlacementBoard,
     npcSpeedInput,
+    pushToast,
     role,
     rows,
     currentMapId,
@@ -5237,8 +5355,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               onClick={handleCopyInviteLink}
               className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100"
             >
-              {inviteCopied ? "Ссылка скопирована" : "Копировать invite-ссылку"}
+              {inviteCopied ? "Ссылка скопирована" : "Копировать ссылку-приглашение"}
             </button>
+            <span className="rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300">
+              Сохранение:{" "}
+              {saveState === "error"
+                ? "ошибка"
+                : lastSavedAt
+                  ? `последнее в ${lastSavedAt}`
+                  : "ожидание"}
+            </span>
             {role === "gm" || joinStep !== "ready" ? (
               <>
                 <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
@@ -5346,10 +5472,38 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 Одна комната, один пароль и режим наблюдателя
               </h2>
               <p className="mt-3 text-sm text-slate-300">
-                Если комната ещё не создана, введённый пароль будет сохранён и
-                этот вход станет мастером. Если комната уже существует, тот же
-                пароль пустит внутрь как игрока.
+                Сначала выберите роль, затем войдите по паролю. Первый вход
+                мастером создаёт комнату, остальные пользователи заходят как
+                игроки или наблюдатели.
               </p>
+              <div className="mt-4 flex flex-wrap gap-2 text-sm">
+                <button
+                  type="button"
+                  onClick={() => setJoinIntent("gm")}
+                  className={boardButtonClass(joinIntent === "gm")}
+                >
+                  Войти как мастер
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setJoinIntent("player")}
+                  className={boardButtonClass(joinIntent === "player")}
+                >
+                  Войти как игрок
+                </button>
+                <button
+                  type="button"
+                  onClick={handleJoinAsSpectator}
+                  className="rounded-full border border-white/15 px-5 py-2 text-sm font-medium text-slate-100"
+                >
+                  Войти наблюдателем
+                </button>
+              </div>
+              <div className="mt-3 text-xs text-slate-400">
+                {joinIntent === "gm"
+                  ? "Роль мастера доступна только для первого входа в комнату."
+                  : "Игроку нужен существующий пароль комнаты и лист персонажа."}
+              </div>
               <div className="mt-6 grid gap-3 md:grid-cols-2">
                 <input
                   value={displayName}
@@ -5369,16 +5523,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 <div className="mt-3 text-sm text-rose-300">{authError}</div>
               ) : null}
               <button
-                onClick={handleRoomAuth}
+                onClick={() => handleRoomAuth(joinIntent ?? undefined)}
                 className="mt-5 rounded-full bg-fuchsia-500 px-5 py-3 text-sm font-medium text-white"
               >
-                Войти в комнату
-              </button>
-              <button
-                onClick={handleJoinAsSpectator}
-                className="mt-3 rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-slate-100"
-              >
-                Войти наблюдателем
+                {joinIntent === "gm"
+                  ? "Создать комнату как мастер"
+                  : "Войти в комнату как игрок"}
               </button>
             </div>
 
@@ -5441,7 +5591,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     <div className="rounded-2xl border border-white/10 px-4 py-3">
                       <div className="font-medium text-white">Наблюдатель</div>
                       <div className="mt-1">
-                        Подключается в read-only режиме без создания персонажа:
+                        Подключается в режиме только чтения без создания персонажа:
                         можно смотреть карту, инициативу и журнал, но нельзя
                         двигать токены и менять состояние комнаты.
                       </div>
@@ -5449,6 +5599,37 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   </div>
                 </>
               )}
+            </div>
+          </section>
+        ) : null}
+
+        {joinStep === "ready" ? (
+          <section className="card px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">
+                  Быстрый прогресс по старту
+                </div>
+                <div className="text-xs text-slate-400">
+                  Отметки обновляются автоматически по вашим действиям в комнате.
+                </div>
+              </div>
+              <span className="badge">
+                {
+                  onboardingSteps.filter((step) => step.done).length
+                }/{onboardingSteps.length}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {onboardingSteps.map((step) => (
+                <div
+                  key={step.id}
+                  className={`rounded-2xl border px-3 py-2 text-sm ${step.done ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100" : "border-white/10 bg-slate-900/60 text-slate-200"}`}
+                >
+                  {step.done ? "✓ " : "○ "}
+                  {step.label}
+                </div>
+              ))}
             </div>
           </section>
         ) : null}
@@ -5518,32 +5699,57 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
         {role === "gm" ? (
           <div className="sticky top-20 z-40 flex items-center justify-between gap-2 px-1">
-            <button
-              type="button"
-              onClick={() => {
-                setIsLeftMasterDrawerOpen((current) => {
-                  const next = !current;
-                  if (next) setIsRightMasterDrawerOpen(false);
-                  return next;
-                });
-              }}
-              className="rounded-full border border-white/10 bg-slate-950/90 px-4 py-2 text-xs text-slate-200"
-            >
-              {isLeftMasterDrawerOpen ? "Свернуть левую шторку" : "Открыть левую шторку"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsRightMasterDrawerOpen((current) => {
-                  const next = !current;
-                  if (next) setIsLeftMasterDrawerOpen(false);
-                  return next;
-                });
-              }}
-              className="rounded-full border border-white/10 bg-slate-950/90 px-4 py-2 text-xs text-slate-200"
-            >
-              {isRightMasterDrawerOpen ? "Свернуть правую шторку" : "Открыть правую шторку"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMasterPreset("combat")}
+                className={boardButtonClass(masterPreset === "combat")}
+              >
+                Режим: Бой
+              </button>
+              <button
+                type="button"
+                onClick={() => setMasterPreset("explore")}
+                className={boardButtonClass(masterPreset === "explore")}
+              >
+                Режим: Исследование
+              </button>
+              <button
+                type="button"
+                onClick={() => setMasterPreset("prep")}
+                className={boardButtonClass(masterPreset === "prep")}
+              >
+                Режим: Подготовка
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLeftMasterDrawerOpen((current) => {
+                    const next = !current;
+                    if (next) setIsRightMasterDrawerOpen(false);
+                    return next;
+                  });
+                }}
+                className="rounded-full border border-white/10 bg-slate-950/90 px-4 py-2 text-xs text-slate-200"
+              >
+                {isLeftMasterDrawerOpen ? "Свернуть левую шторку" : "Открыть левую шторку"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRightMasterDrawerOpen((current) => {
+                    const next = !current;
+                    if (next) setIsLeftMasterDrawerOpen(false);
+                    return next;
+                  });
+                }}
+                className="rounded-full border border-white/10 bg-slate-950/90 px-4 py-2 text-xs text-slate-200"
+              >
+                {isRightMasterDrawerOpen ? "Свернуть правую шторку" : "Открыть правую шторку"}
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -5563,7 +5769,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   {gmPanelOrder
                   .filter(
                     (panelId): panelId is "admin" | "tokens" =>
-                      panelId === "admin" || panelId === "tokens",
+                      (panelId === "admin" || panelId === "tokens") &&
+                      panelVisibility[panelId],
                   )
                   .map((panelId) => (
                     <div
@@ -5638,7 +5845,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         <CompactSection
                           title="Админ-панель мастера"
                           description="Кисти, палитры и размер карты убраны в сворачиваемый блок."
-                          badge="master only"
+                          badge="только мастер"
                           defaultOpen
                           className="xl:sticky xl:top-20"
                         >
@@ -5660,7 +5867,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           </div>
                           <div className="mt-3 grid gap-2 text-xs text-slate-300 sm:grid-cols-2">
                             <label className="flex items-center justify-between rounded-xl border border-white/10 px-3 py-2">
-                              <span>Fog of war для игроков</span>
+                              <span>Туман войны для игроков</span>
                               <input
                                 type="checkbox"
                                 checked={useFogOfWar}
@@ -5724,7 +5931,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                             : item.value === "move"
                                               ? "Токены"
                                               : item.value === "fog"
-                                                ? "Fog"
+                                                ? "Туман"
                                                 : "Ластик"
                                   }
                                   className="inline-block max-w-full truncate"
@@ -5930,7 +6137,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                             </div>
                             <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
                               <div>Покрытие: {paintedCells}</div>
-                              <div>Fog: {foggedCells}</div>
+                              <div>Туман: {foggedCells}</div>
                               <div>Препятствия: {obstacleCells}</div>
                               <div>Текстуры: {textureCells}</div>
                               <div>Мебель: {furnitureCells}</div>
@@ -6225,7 +6432,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 <CompactSection
                   title="Панель персонажей группы"
                   description="И игроки, и мастер могут загружать и просматривать карточки всей группы."
-                  badge="party roster"
+                  badge="состав группы"
                   defaultOpen
                 >
                   <div className="mt-4 flex flex-wrap gap-3 [&>*]:min-w-0">
@@ -7331,7 +7538,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }
                     : undefined
                 }
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "initiative" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "initiative" ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "initiative" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "initiative" ? "ring-2 ring-fuchsia-400/60" : ""} ${!panelVisibility.initiative ? "hidden" : ""}`}
               >
                 {role === "gm" ? (
                   <div
@@ -7385,7 +7592,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 <CompactSection
                   title="Инициатива и ход боя"
                   description="Трекер работает поверх текущих токенов и сохраняется в JSON комнаты."
-                  badge="combat"
+                  badge="бой"
                 >
                   <div className="mt-4 flex flex-wrap gap-2 text-sm">
                     {role === "gm" ? (
@@ -7462,11 +7669,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           Порядок ходов
                         </div>
                         <div className="mt-1 text-sm text-slate-400">
-                          Отдельное поле с портретами персонажей и NPC. Мастер
+                          Отдельное поле с портретами персонажей и НПС. Мастер
                           может руками переставлять участников вверх/вниз.
                         </div>
                       </div>
-                      <span className="badge">turn order</span>
+                      <span className="badge">очерёдность ходов</span>
                     </div>
 
                     {initiativeParticipantsForView.length ? (
@@ -7525,7 +7732,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                           : ""}
                                       </span>
                                       <span className="mt-1 block text-sm text-slate-200">
-                                        Init {participant.initiative} · mod{" "}
+                                        Инициатива {participant.initiative} · мод.{" "}
                                         {formatSignedModifier(
                                           participant.initiativeModifier,
                                         )}
@@ -7644,7 +7851,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                     </div>
                                   )}
                                   <span className="text-xs text-slate-500">
-                                    mod{" "}
+                                    мод.{" "}
                                     {formatSignedModifier(
                                       participant.initiativeModifier,
                                     )}
@@ -7680,7 +7887,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     order: gmPanelOrder.indexOf("tools"),
                     gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)} / span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)}`,
                   }}
-                  className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""}`}
+                  className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""} ${!panelVisibility.tools ? "hidden" : ""}`}
                 >
                   <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
                     <div className="space-y-2">
@@ -7734,7 +7941,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       <CompactSection
                         title="Инструменты мастера"
                         description="Лут, события, заметка и броски спрятаны в один блок."
-                        badge="dnd.su only"
+                        badge="по таблицам dnd.su"
                       >
                         <div className="mt-4 space-y-3 text-sm text-slate-300">
                           <div className="overflow-hidden rounded-2xl border border-white/8 px-4 py-3">
@@ -7835,14 +8042,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                             <div className="flex items-center justify-between gap-3">
                               <div>
                                 <div className="font-medium text-white">
-                                  Быстро добавить NPC на карту
+                                  Быстро добавить НПС на карту
                                 </div>
                                 <div className="mt-1 text-sm text-slate-400">
                                   Мастер задаёт параметры и сразу получает новый
                                   токен на публичной или скрытой карте.
                                 </div>
                               </div>
-                              <span className="badge">NPC</span>
+                              <span className="badge">НПС</span>
                             </div>
                             <div className="mt-4 grid gap-3 md:grid-cols-2">
                               <input
@@ -7850,7 +8057,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                 onChange={(event) =>
                                   setNpcNameInput(event.target.value)
                                 }
-                                placeholder="Имя NPC"
+                                placeholder="Имя НПС"
                                 className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
                               />
                               <select
@@ -7862,7 +8069,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                 }
                                 className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
                               >
-                                <option value="npc">NPC</option>
+                                <option value="npc">НПС</option>
                                 <option value="monster">Монстр</option>
                                 <option value="object">Объект</option>
                               </select>
@@ -7982,7 +8189,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     <CompactSection
                       title="Быстрые действия"
                       description="Чат и кубы собраны в один компактный вертикальный стек."
-                      badge="utility"
+                      badge="утилиты"
                       defaultOpen
                       className="h-fit"
                     >
@@ -8048,8 +8255,36 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     description="Лента событий осталась полностью доступной, но больше не отвлекает постоянно."
                     badge="последние 20 событий"
                   >
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {(
+                        [
+                          ["all", "Все"],
+                          ["system", "Система"],
+                          ["map", "Карта"],
+                          ["dice", "Броски"],
+                          ["loot", "Лут"],
+                          ["event", "События"],
+                          ["initiative", "Инициатива"],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setJournalFilter(value)}
+                          className={boardButtonClass(journalFilter === value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      <input
+                        value={journalSearch}
+                        onChange={(event) => setJournalSearch(event.target.value)}
+                        placeholder="Поиск по журналу"
+                        className="min-w-[16rem] rounded-full border border-white/10 bg-slate-900/70 px-4 py-2 text-sm text-white"
+                      />
+                    </div>
                     <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1 text-sm">
-                      {journal.map((entry) => (
+                      {filteredJournal.map((entry) => (
                         <div
                           key={entry.id}
                           className="overflow-hidden rounded-2xl border border-white/8 px-4 py-3"
@@ -8063,13 +8298,18 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           </p>
                         </div>
                       ))}
+                      {!filteredJournal.length ? (
+                        <div className="rounded-2xl border border-dashed border-white/10 px-4 py-3 text-slate-400">
+                          Ничего не найдено по текущему фильтру.
+                        </div>
+                      ) : null}
                     </div>
                   </CompactSection>
 
                   <CompactSection
                     title="Виджет местности"
                     description="Региональная карта вынесена в отдельный раскрывающийся блок."
-                    badge="regional map"
+                    badge="региональная карта"
                   >
                     <p className="mt-3 text-sm text-slate-300">
                       Сюда можно подставить внешний URL с региональной картой.
@@ -8275,6 +8515,22 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         onChange={handlePatchLevelUpDraft}
         onConfirm={handleConfirmLevelUp}
       />
+      <div className="pointer-events-none fixed right-4 top-4 z-[70] space-y-2">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`rounded-2xl border px-4 py-2 text-sm text-white shadow-lg ${
+              toast.tone === "success"
+                ? "border-emerald-400/40 bg-emerald-500/20"
+                : toast.tone === "warning"
+                  ? "border-amber-400/40 bg-amber-500/20"
+                  : "border-cyan-400/40 bg-cyan-500/20"
+            }`}
+          >
+            {toast.text}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
