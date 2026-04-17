@@ -2555,35 +2555,6 @@ function CompactSection({
   );
 }
 
-function MasterDeskScaffold({
-  header,
-  children,
-}: {
-  header?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="space-y-4">
-      {header ? <div className="master-desk-header-slot">{header}</div> : null}
-      {children}
-    </section>
-  );
-}
-
-function MasterDeskPanels({
-  role,
-  children,
-}: {
-  role: RoomRole;
-  children: ReactNode;
-}) {
-  return (
-    <div className={role === "gm" ? "master-workspace-grid" : "grid gap-4 xl:grid-cols-1"}>
-      {children}
-    </div>
-  );
-}
-
 function boardButtonClass(isActive: boolean) {
   return `rounded-full border px-3 py-2 text-sm ${isActive ? "border-fuchsia-400 bg-fuchsia-500/15 text-white" : "border-white/10 text-slate-300"}`;
 }
@@ -5712,9 +5683,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
         </section>
 
-        <MasterDeskScaffold
-          header={
-            role === "gm" ? (
+        <section className="space-y-4">
+          {role === "gm" ? (
+            <div className="master-desk-header-slot">
               <MasterWorkspaceHeader
                 masterPreset={masterPreset}
                 onPresetChange={setMasterPreset}
@@ -5724,10 +5695,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 onOpenLevelUpDrawer={() => setIsLevelUpOpen(true)}
                 levelUpEnabled={Boolean(selectedLevelUpDraft && selectedLevelUpPreview)}
               />
-            ) : null
-          }
-        >
-          <MasterDeskPanels role={role}>
+            </div>
+          ) : null}
+          <div className={role === "gm" ? "master-workspace-grid" : "grid gap-4 xl:grid-cols-1"}>
             {role === "gm" ? (
               <div className="contents">
                 <div className="contents">
@@ -8232,8 +8202,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               />
             </div>
           )}
-          </MasterDeskPanels>
-        </MasterDeskScaffold>
+          </div>
+        </section>
       </div>
       <MasterLayoutEditor
         open={isLayoutEditorOpen}
