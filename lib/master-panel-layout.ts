@@ -371,7 +371,10 @@ export function normalizeSavedLayoutConfig(
   input?: Partial<LayoutConfig> | LegacyMasterPanelLayout | null,
 ): LayoutConfig {
   if (!input) return createDefaultLayoutConfig();
-  if ("panels" in input || input.version === 2) {
+  const hasVersion =
+    "version" in input &&
+    typeof (input as { version?: unknown }).version === "number";
+  if ("panels" in input || (hasVersion && input.version === 2)) {
     return normalizeLayoutConfig(input as Partial<LayoutConfig>);
   }
   return migrateLegacyLayoutConfig(input as LegacyMasterPanelLayout);
