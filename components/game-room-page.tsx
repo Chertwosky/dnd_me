@@ -14,6 +14,13 @@ import {
 import { CharacterXpCard } from "@/components/character-xp-card";
 import { LevelUpBanner } from "@/components/level-up-banner";
 import { LevelUpDrawer } from "@/components/level-up-drawer";
+import { MasterLayoutEditor } from "@/components/master-layout-editor";
+import { MasterWorkspaceHeader } from "@/components/master-workspace-header";
+import {
+  type LayoutConfig as MasterLayoutConfig,
+  type MasterPanelSize as MasterLayoutSize,
+  normalizeSavedLayoutConfig,
+} from "@/lib/master-panel-layout";
 import {
   applyXp,
   buildLevelUpPreview,
@@ -251,6 +258,12 @@ type SavedRoomState = {
   sheets: CharacterSheet[];
   journal: JournalEntry[];
   initiative?: InitiativeState;
+  gmLayout?:
+    | Partial<MasterLayoutConfig>
+    | {
+        panelOrder?: MasterPanelId[];
+        panelWidths?: Partial<Record<MasterPanelId, number>>;
+      };
 };
 
 type SavedMapPreset = {
@@ -288,6 +301,32 @@ const masterPanelShortLabels: Record<MasterPanelId, string> = {
   tools: "Утил.",
 };
 
+const masterPanelMeta: Record<
+  MasterPanelId,
+  { title: string; description: string }
+> = {
+  admin: {
+    title: "Сцена: админ-панель",
+    description: "Карта, кисти, слои и параметры сцены.",
+  },
+  tokens: {
+    title: "Существа: токены",
+    description: "Список существ, быстрые действия и управление токенами.",
+  },
+  party: {
+    title: "Существа: персонажи группы",
+    description: "Карточки персонажей, библиотека и управление составом.",
+  },
+  initiative: {
+    title: "Бой: инициатива",
+    description: "Боевой трекер, ход и порядок участников.",
+  },
+  tools: {
+    title: "Нарратив: инструменты",
+    description: "Журнал, лут, события и вспомогательные сервисы мастера.",
+  },
+};
+
 const masterPanelGroups: Record<MasterPanelId, "scene" | "creatures" | "combat" | "narrative"> = {
   admin: "scene",
   tokens: "creatures",
@@ -302,6 +341,20 @@ const masterGroupLabels: Record<"scene" | "creatures" | "combat" | "narrative", 
   combat: "Бой",
   narrative: "Нарратив",
 };
+
+function widthToPanelSize(width: number): MasterLayoutSize {
+  if (width <= 420) return "compact";
+  if (width <= 620) return "regular";
+  if (width <= 980) return "wide";
+  return "full";
+}
+
+function panelSizeToWidth(size: MasterLayoutSize): number {
+  if (size === "compact") return 360;
+  if (size === "regular") return 560;
+  if (size === "wide") return 860;
+  return 1100;
+}
 
 function getMasterPanelGridSpan(width: number) {
   return Math.max(1, Math.min(4, Math.round(width / 320)));
@@ -2395,6 +2448,7 @@ function buildSavedRoomState({
   sheets,
   journal,
   initiative,
+  gmLayout,
 }: SavedRoomState): SavedRoomState {
   return {
     mapName,
@@ -2409,6 +2463,7 @@ function buildSavedRoomState({
     sheets,
     journal,
     initiative,
+    gmLayout,
   };
 }
 
@@ -3094,6 +3149,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [masterPreset, setMasterPreset] = useState<MasterViewPreset>("combat");
+  const [isLayoutEditorOpen, setIsLayoutEditorOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState("");
   const [isCreaturesDrawerOpen, setIsCreaturesDrawerOpen] = useState(true);
   const [creaturesDrawerWidth, setCreaturesDrawerWidth] = useState(520);
   const [creaturesDrawerTab, setCreaturesDrawerTab] = useState<"tokens" | "party">("tokens");
@@ -3372,12 +3429,27 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             parsed.sheets ?? initialSheets,
           ),
         );
+      if (parsed.gmLayout) {
+        const normalizedLayout = normalizeSavedLayoutConfig(parsed.gmLayout);
+        setGmPanelOrder(normalizedLayout.order);
+        setGmPanelWidths((current) => ({
+          ...current,
+          admin: panelSizeToWidth(normalizedLayout.panels.admin.size),
+          tokens: panelSizeToWidth(normalizedLayout.panels.tokens.size),
+          party: panelSizeToWidth(normalizedLayout.panels.party.size),
+          initiative: panelSizeToWidth(normalizedLayout.panels.initiative.size),
+          tools: Math.max(220, panelSizeToWidth(normalizedLayout.panels.tools.size) - 320),
+        }));
+        if ("panelOrder" in parsed.gmLayout || "panelWidths" in parsed.gmLayout) {
+          pushToast("Раскладка панелей мягко мигрирована на формат v2.", "info");
+        }
+      }
     } catch {
       // ignore corrupted local state
     }
 
     setIsLoadedFromStorage(true);
-  }, [roomId]);
+  }, [pushToast, roomId]);
 
   useEffect(() => {
     if (!isLoadedFromStorage) return;
@@ -3394,6 +3466,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       sheets,
       journal,
       initiative,
+      gmLayout: gmLayoutConfig,
     });
     try {
       window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
@@ -3407,6 +3480,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     initiative,
     isLoadedFromStorage,
     journal,
+    gmLayoutConfig,
     mapName,
     mapState,
     roomId,
@@ -3529,6 +3603,59 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     if (masterPreset === "explore") return ["scene", "narrative", "creatures"] as const;
     return ["scene", "creatures", "combat"] as const;
   }, [masterPreset]);
+  const initiativeOrder = useMemo(
+    () =>
+      initiative.participants.map((participant, index) =>
+        index === initiative.currentTurnIndex
+          ? `▶ ${participant.name}`
+          : participant.name,
+      ),
+    [initiative.currentTurnIndex, initiative.participants],
+  );
+  const gmLayoutConfig = useMemo<MasterLayoutConfig>(
+    () => ({
+      version: 2,
+      order: gmPanelOrder,
+      panels: {
+        admin: { size: widthToPanelSize(gmPanelWidths.admin) },
+        tokens: { size: widthToPanelSize(gmPanelWidths.tokens) },
+        party: { size: widthToPanelSize(gmPanelWidths.party) },
+        initiative: { size: widthToPanelSize(gmPanelWidths.initiative) },
+        tools: { size: widthToPanelSize(gmPanelWidths.tools + 320) },
+      },
+    }),
+    [gmPanelOrder, gmPanelWidths],
+  );
+  const masterPanelModels = useMemo(
+    () => {
+      const query = globalSearch.trim().toLowerCase();
+      return gmPanelOrder.map((panelId) => ({
+        id: panelId,
+        group: masterPanelGroups[panelId],
+        title: masterPanelMeta[panelId].title,
+        description: masterPanelMeta[panelId].description,
+        visibility: panelVisibility[panelId],
+        priority: gmPanelOrder.indexOf(panelId),
+        size: widthToPanelSize(gmPanelWidths[panelId]),
+        matchesSearch:
+          !query ||
+          masterPanelMeta[panelId].title.toLowerCase().includes(query) ||
+          masterPanelMeta[panelId].description.toLowerCase().includes(query),
+      }));
+    },
+    [globalSearch, gmPanelOrder, gmPanelWidths, panelVisibility],
+  );
+  const masterPanelSearchMap = useMemo(
+    () =>
+      masterPanelModels.reduce(
+        (accumulator, panel) => {
+          accumulator[panel.id] = panel.matchesSearch;
+          return accumulator;
+        },
+        {} as Record<MasterPanelId, boolean>,
+      ),
+    [masterPanelModels],
+  );
 
   const buildInitiativeParticipants = useCallback(
     (mode: "players" | "visible" | "all") => {
@@ -4024,6 +4151,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         useSharedGmMapForPlayers,
         mainMapSnapshot,
         initiative,
+        gmLayout: gmLayoutConfig,
       });
       window.localStorage.setItem(
         getStorageKey(roomId),
@@ -4061,6 +4189,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       useSharedGmMapForPlayers,
       mainMapSnapshot,
       initiative,
+      gmLayout: gmLayoutConfig,
     });
     window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
     addJournalEntry(
@@ -4097,6 +4226,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       useSharedGmMapForPlayers,
       mainMapSnapshot,
       initiative,
+      gmLayout: gmLayoutConfig,
     });
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -4982,6 +5112,32 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     [],
   );
 
+  const handleSetLayoutPanelSize = useCallback(
+    (panelId: MasterPanelId, size: MasterLayoutSize) => {
+      const nextWidth = panelSizeToWidth(size);
+      setGmPanelWidths((current) => ({
+        ...current,
+        [panelId]:
+          panelId === "tools"
+            ? Math.max(220, nextWidth - 320)
+            : nextWidth,
+      }));
+    },
+    [],
+  );
+
+  const handleOpenShortcuts = useCallback(() => {
+    pushToast("Shortcuts: Ctrl+K поиск, стрелки/drag для порядка панелей.", "info");
+  }, [pushToast]);
+
+  const handleFocusInitiativePanel = useCallback(() => {
+    setMasterPreset("combat");
+    const node = window.document.querySelector("[data-master-panel='initiative']");
+    if (node instanceof HTMLElement) {
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
+
   const handleRoomAuth = (forcedRole?: "gm" | "player") => {
     const name = displayName.trim() || "Без имени";
     const pass = passwordInput.trim();
@@ -5717,54 +5873,27 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         </section>
 
         {role === "gm" ? (
-          <div className="sticky top-20 z-40 space-y-2 px-1">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setMasterPreset("combat")}
-                className={boardButtonClass(masterPreset === "combat")}
-              >
-                Режим: Бой
-              </button>
-              <button
-                type="button"
-                onClick={() => setMasterPreset("explore")}
-                className={boardButtonClass(masterPreset === "explore")}
-              >
-                Режим: Исследование
-              </button>
-              <button
-                type="button"
-                onClick={() => setMasterPreset("prep")}
-                className={boardButtonClass(masterPreset === "prep")}
-              >
-                Режим: Подготовка
-              </button>
-              </div>
-              <span className="rounded-full border border-white/10 bg-slate-950/90 px-3 py-2 text-xs text-slate-300">
-                Панели мастера закреплены в сетке и не перекрываются
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-slate-400">Группы:</span>
-              {activeMasterGroups.map((group) => (
-                <span
-                  key={group}
-                  className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100"
-                >
-                  {masterGroupLabels[group]}
-                </span>
-              ))}
-            </div>
-          </div>
+          <MasterWorkspaceHeader
+            masterPreset={masterPreset}
+            onPresetChange={setMasterPreset}
+            activeGroups={activeMasterGroups}
+            groupLabels={masterGroupLabels}
+            onOpenLayoutEditor={() => setIsLayoutEditorOpen(true)}
+            onOpenLevelUpDrawer={() => setIsLevelUpOpen(true)}
+            levelUpEnabled={Boolean(selectedLevelUpDraft && selectedLevelUpPreview)}
+            globalSearch={globalSearch}
+            onGlobalSearchChange={setGlobalSearch}
+            onFocusInitiativePanel={handleFocusInitiativePanel}
+            onOpenShortcuts={handleOpenShortcuts}
+            initiativeOrder={initiativeOrder}
+          />
         ) : null}
 
         <section className="space-y-4">
           <div
             className={
               role === "gm"
-                ? "grid grid-flow-row-dense items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]"
+                ? "master-workspace-grid"
                 : "grid gap-4 xl:grid-cols-1"
             }
           >
@@ -5773,13 +5902,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 className="space-y-2"
               >
                 <div className="w-full max-w-6xl space-y-2">
-                  {gmPanelOrder
+                  {masterPanelModels
                   .filter(
-                    (panelId): panelId is "admin" | "tokens" =>
-                      (panelId === "admin" || panelId === "tokens") &&
-                      panelVisibility[panelId],
+                    (panel) =>
+                      (panel.id === "admin" || panel.id === "tokens") &&
+                      panel.visibility &&
+                      panel.matchesSearch,
                   )
-                  .map((panelId) => (
+                  .map((panel) => {
+                    const panelId = panel.id;
+                    return (
                     <div
                       key={panelId}
                       onDragOver={(event) =>
@@ -6361,7 +6493,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         </CompactSection>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : null}
@@ -6384,7 +6517,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   setDraggedMasterPanel(null);
                   setDragOverMasterPanel(null);
                 }}
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role === "gm" ? `fixed right-4 top-16 z-50 h-[calc(100vh-5rem)] overflow-y-auto rounded-3xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isCreaturesDrawerOpen && creaturesDrawerTab === "party" ? "translate-x-0" : "translate-x-[120%]"}` : ""}`}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${!masterPanelSearchMap.party ? "hidden" : ""} ${role === "gm" ? `fixed right-4 top-16 z-50 h-[calc(100vh-5rem)] overflow-y-auto rounded-3xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isCreaturesDrawerOpen && creaturesDrawerTab === "party" ? "translate-x-0" : "translate-x-[120%]"}` : ""}`}
                 style={
                   role === "gm"
                     ? { width: `min(92vw, ${creaturesDrawerWidth}px)` }
@@ -7557,7 +7690,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }
                     : undefined
                 }
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "initiative" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "initiative" ? "ring-2 ring-fuchsia-400/60" : ""} ${!panelVisibility.initiative ? "hidden" : ""}`}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "initiative" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "initiative" ? "ring-2 ring-fuchsia-400/60" : ""} ${!panelVisibility.initiative || !masterPanelSearchMap.initiative ? "hidden" : ""}`}
               >
                 {role === "gm" ? (
                   <div
@@ -7906,7 +8039,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     order: gmPanelOrder.indexOf("tools"),
                     gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)} / span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)}`,
                   }}
-                  className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""} ${!panelVisibility.tools ? "hidden" : ""}`}
+                  className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""} ${!panelVisibility.tools || !masterPanelSearchMap.tools ? "hidden" : ""}`}
                 >
                   <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
                     <div className="space-y-2">
@@ -8566,6 +8699,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
         ) : null}
       </div>
+      <MasterLayoutEditor
+        open={isLayoutEditorOpen}
+        layoutConfig={gmLayoutConfig}
+        onClose={() => setIsLayoutEditorOpen(false)}
+        onMovePanel={handleMoveGmPanel}
+        onSetPanelSize={handleSetLayoutPanelSize}
+      />
       <LevelUpDrawer
         open={isLevelUpOpen}
         draft={selectedLevelUpDraft}
