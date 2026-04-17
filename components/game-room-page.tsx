@@ -5747,43 +5747,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsCreaturesDrawerOpen((current) => !current)}
-                className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
-              >
-                {isCreaturesDrawerOpen
-                  ? "Свернуть правую шторку существ"
-                  : "Открыть правую шторку существ"}
-              </button>
-              <label className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/80 px-3 py-1.5 text-xs text-slate-300">
-                Ширина шторки
-                <input
-                  type="range"
-                  min="380"
-                  max="980"
-                  value={creaturesDrawerWidth}
-                  onChange={(event) =>
-                    setCreaturesDrawerWidth(Number(event.target.value))
-                  }
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => setCreaturesDrawerTab("tokens")}
-                className={boardButtonClass(creaturesDrawerTab === "tokens")}
-              >
-                Вкладка: Существа
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreaturesDrawerTab("party")}
-                className={boardButtonClass(creaturesDrawerTab === "party")}
-              >
-                Вкладка: Персонажи
-              </button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-slate-400">Группы:</span>
               {activeMasterGroups.map((group) => (
                 <span
@@ -5834,12 +5797,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                               gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths[panelId])} / span ${getMasterPanelGridSpan(gmPanelWidths[panelId])}`,
                             }
                           : role === "gm"
-                            ? { width: `${creaturesDrawerWidth}px` }
+                            ? { width: `min(92vw, ${creaturesDrawerWidth}px)` }
                             : {}),
                       }}
                       className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === panelId ? "ring-2 ring-fuchsia-400/60" : ""} ${
                         panelId === "tokens" && role === "gm"
-                          ? `fixed bottom-0 right-0 top-0 z-50 overflow-y-auto border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${
+                          ? `fixed right-4 top-16 z-50 h-[calc(100vh-5rem)] overflow-y-auto rounded-3xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${
                               isCreaturesDrawerOpen && creaturesDrawerTab === "tokens"
                                 ? "translate-x-0"
                                 : "translate-x-[120%]"
@@ -6421,10 +6384,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   setDraggedMasterPanel(null);
                   setDragOverMasterPanel(null);
                 }}
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role === "gm" ? `fixed bottom-0 right-0 top-0 z-50 overflow-y-auto border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isCreaturesDrawerOpen && creaturesDrawerTab === "party" ? "translate-x-0" : "translate-x-[120%]"}` : ""}`}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role === "gm" ? `fixed right-4 top-16 z-50 h-[calc(100vh-5rem)] overflow-y-auto rounded-3xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isCreaturesDrawerOpen && creaturesDrawerTab === "party" ? "translate-x-0" : "translate-x-[120%]"}` : ""}`}
                 style={
                   role === "gm"
-                    ? { width: `${creaturesDrawerWidth}px` }
+                    ? { width: `min(92vw, ${creaturesDrawerWidth}px)` }
                     : {
                         order: gmPanelOrder.indexOf("party"),
                         gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.party)} / span ${getMasterPanelGridSpan(gmPanelWidths.party)}`,
@@ -6433,7 +6396,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               >
                 <div
                   className={
-                    role === "gm" ? "w-full max-w-6xl space-y-2" : ""
+                    role === "gm" ? "w-full min-w-0 space-y-2" : ""
                   }
                 >
                 {role === "gm" ? (
@@ -8562,6 +8525,46 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             </div>
           )}
         </section>
+        {role === "gm" ? (
+          <div className="fixed right-4 top-24 z-[60] flex w-[min(92vw,420px)] flex-col gap-2 rounded-2xl border border-white/10 bg-slate-950/90 p-3 backdrop-blur">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCreaturesDrawerOpen((current) => !current)}
+                className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+              >
+                {isCreaturesDrawerOpen ? "Скрыть шторку существ" : "Показать шторку существ"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreaturesDrawerTab("tokens")}
+                className={boardButtonClass(creaturesDrawerTab === "tokens")}
+              >
+                Существа
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreaturesDrawerTab("party")}
+                className={boardButtonClass(creaturesDrawerTab === "party")}
+              >
+                Персонажи
+              </button>
+            </div>
+            <label className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/70 px-3 py-1.5 text-xs text-slate-300">
+              Ширина шторки
+              <input
+                type="range"
+                min="360"
+                max="980"
+                value={creaturesDrawerWidth}
+                onChange={(event) =>
+                  setCreaturesDrawerWidth(Number(event.target.value))
+                }
+                className="w-full"
+              />
+            </label>
+          </div>
+        ) : null}
       </div>
       <LevelUpDrawer
         open={isLevelUpOpen}
