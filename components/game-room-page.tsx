@@ -3200,6 +3200,20 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     initiative: 999,
     tools: 320,
   });
+  const gmLayoutConfig = useMemo<MasterLayoutConfig>(
+    () => ({
+      version: 2,
+      order: gmPanelOrder,
+      panels: {
+        admin: { size: widthToPanelSize(gmPanelWidths.admin) },
+        tokens: { size: widthToPanelSize(gmPanelWidths.tokens) },
+        party: { size: widthToPanelSize(gmPanelWidths.party) },
+        initiative: { size: widthToPanelSize(gmPanelWidths.initiative) },
+        tools: { size: widthToPanelSize(gmPanelWidths.tools + 320) },
+      },
+    }),
+    [gmPanelOrder, gmPanelWidths],
+  );
 
   const cols = mapState.cols;
   const rows = mapState.rows;
@@ -3618,20 +3632,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           : participant.name,
       ),
     [initiative.currentTurnIndex, initiative.participants],
-  );
-  const gmLayoutConfig = useMemo<MasterLayoutConfig>(
-    () => ({
-      version: 2,
-      order: gmPanelOrder,
-      panels: {
-        admin: { size: widthToPanelSize(gmPanelWidths.admin) },
-        tokens: { size: widthToPanelSize(gmPanelWidths.tokens) },
-        party: { size: widthToPanelSize(gmPanelWidths.party) },
-        initiative: { size: widthToPanelSize(gmPanelWidths.initiative) },
-        tools: { size: widthToPanelSize(gmPanelWidths.tools + 320) },
-      },
-    }),
-    [gmPanelOrder, gmPanelWidths],
   );
   const masterPanelModels = useMemo(
     () => {
