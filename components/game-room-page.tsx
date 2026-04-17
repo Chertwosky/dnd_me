@@ -3441,7 +3441,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           tools: Math.max(220, panelSizeToWidth(normalizedLayout.panels.tools.size) - 320),
         }));
         if ("panelOrder" in parsed.gmLayout || "panelWidths" in parsed.gmLayout) {
-          pushToast("Раскладка панелей мягко мигрирована на формат v2.", "info");
+          setToasts((current) => [
+            ...current,
+            {
+              id: `${Date.now()}-layout-migrated`,
+              tone: "info",
+              text: "Раскладка панелей мягко мигрирована на формат v2.",
+            },
+          ]);
         }
       }
     } catch {
@@ -3449,7 +3456,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     }
 
     setIsLoadedFromStorage(true);
-  }, [pushToast, roomId]);
+  }, [roomId]);
 
   useEffect(() => {
     if (!isLoadedFromStorage) return;
