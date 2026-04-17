@@ -288,6 +288,21 @@ const masterPanelShortLabels: Record<MasterPanelId, string> = {
   tools: "Утил.",
 };
 
+const masterPanelGroups: Record<MasterPanelId, "scene" | "creatures" | "combat" | "narrative"> = {
+  admin: "scene",
+  tokens: "creatures",
+  party: "creatures",
+  initiative: "combat",
+  tools: "narrative",
+};
+
+const masterGroupLabels: Record<"scene" | "creatures" | "combat" | "narrative", string> = {
+  scene: "Сцена",
+  creatures: "Существа",
+  combat: "Бой",
+  narrative: "Нарратив",
+};
+
 function getMasterPanelGridSpan(width: number) {
   if (width >= 960) return 3;
   if (width >= 640) return 2;
@@ -3127,8 +3142,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     initiative: 999,
     tools: 320,
   });
-  const [isLeftMasterDrawerOpen, setIsLeftMasterDrawerOpen] = useState(true);
-  const [isRightMasterDrawerOpen, setIsRightMasterDrawerOpen] = useState(true);
 
   const cols = mapState.cols;
   const rows = mapState.rows;
@@ -3510,6 +3523,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     }),
     [masterPreset],
   );
+  const activeMasterGroups = useMemo(() => {
+    if (masterPreset === "combat") return ["combat", "creatures", "narrative"] as const;
+    if (masterPreset === "explore") return ["scene", "narrative", "creatures"] as const;
+    return ["scene", "creatures", "combat"] as const;
+  }, [masterPreset]);
 
   const buildInitiativeParticipants = useCallback(
     (mode: "players" | "visible" | "all") => {
@@ -5698,8 +5716,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         </section>
 
         {role === "gm" ? (
-          <div className="sticky top-20 z-40 flex items-center justify-between gap-2 px-1">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="sticky top-20 z-40 space-y-2 px-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setMasterPreset("combat")}
@@ -5721,34 +5740,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               >
                 Режим: Подготовка
               </button>
+              </div>
+              <span className="rounded-full border border-white/10 bg-slate-950/90 px-3 py-2 text-xs text-slate-300">
+                Панели мастера закреплены в сетке и не перекрываются
+              </span>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsLeftMasterDrawerOpen((current) => {
-                    const next = !current;
-                    if (next) setIsRightMasterDrawerOpen(false);
-                    return next;
-                  });
-                }}
-                className="rounded-full border border-white/10 bg-slate-950/90 px-4 py-2 text-xs text-slate-200"
-              >
-                {isLeftMasterDrawerOpen ? "Свернуть левую шторку" : "Открыть левую шторку"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRightMasterDrawerOpen((current) => {
-                    const next = !current;
-                    if (next) setIsLeftMasterDrawerOpen(false);
-                    return next;
-                  });
-                }}
-                className="rounded-full border border-white/10 bg-slate-950/90 px-4 py-2 text-xs text-slate-200"
-              >
-                {isRightMasterDrawerOpen ? "Свернуть правую шторку" : "Открыть правую шторку"}
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-400">Группы:</span>
+              {activeMasterGroups.map((group) => (
+                <span
+                  key={group}
+                  className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100"
+                >
+                  {masterGroupLabels[group]}
+                </span>
+              ))}
             </div>
           </div>
         ) : null}
@@ -5763,7 +5769,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           >
             {role === "gm" ? (
               <div
-                className={`fixed inset-0 z-30 overflow-y-auto border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isLeftMasterDrawerOpen ? "translate-x-0" : "-translate-x-[110%]"}`}
+                className="space-y-2"
               >
                 <div className="w-full max-w-6xl space-y-2">
                   {gmPanelOrder
@@ -5803,7 +5809,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           Панель мастера:{" "}
                           <AdaptiveLabel
                             full={
-                              panelId === "admin" ? "админ-панель" : "токены"
+                              panelId === "admin"
+                                ? "Сцена: админ-панель"
+                                : "Существа: токены"
                             }
                             short={masterPanelShortLabels[panelId]}
                           />
@@ -5843,8 +5851,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       </div>
                       {panelId === "admin" ? (
                         <CompactSection
-                          title="Админ-панель мастера"
-                          description="Кисти, палитры и размер карты убраны в сворачиваемый блок."
+                          title="Сцена · Админ-панель мастера"
+                          description="Карта, кисти, палитры и параметры сцены в одном месте."
                           badge="только мастер"
                           defaultOpen
                           className="xl:sticky xl:top-20"
@@ -6373,11 +6381,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }
                     : undefined
                 }
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role === "gm" ? `fixed bottom-0 right-0 top-0 z-30 w-full overflow-y-auto border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isRightMasterDrawerOpen ? "translate-x-0" : "translate-x-[120%]"}` : ""}`}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""}`}
               >
                 <div
                   className={
-                    role === "gm" ? "ml-auto w-full max-w-6xl space-y-2" : ""
+                    role === "gm" ? "w-full max-w-6xl space-y-2" : ""
                   }
                 >
                 {role === "gm" ? (
@@ -6391,7 +6399,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     <span className="font-medium text-white">
                       Панель мастера:{" "}
                       <AdaptiveLabel
-                        full="персонажи группы"
+                        full="Существа: персонажи группы"
                         short={masterPanelShortLabels.party}
                       />
                     </span>
@@ -6430,8 +6438,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   </div>
                 ) : null}
                 <CompactSection
-                  title="Панель персонажей группы"
-                  description="И игроки, и мастер могут загружать и просматривать карточки всей группы."
+                  title="Существа · Панель персонажей группы"
+                  description="Игроки и мастер управляют листами и карточками группы."
                   badge="состав группы"
                   defaultOpen
                 >
@@ -7551,7 +7559,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     <span className="font-medium text-white">
                       Панель мастера:{" "}
                       <AdaptiveLabel
-                        full="инициатива"
+                        full="Бой: инициатива"
                         short={masterPanelShortLabels.initiative}
                       />
                     </span>
@@ -7590,8 +7598,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   </div>
                 ) : null}
                 <CompactSection
-                  title="Инициатива и ход боя"
-                  description="Трекер работает поверх текущих токенов и сохраняется в JSON комнаты."
+                  title="Бой · Инициатива и ход"
+                  description="Боевой трекер поверх текущих токенов с сохранением в JSON комнаты."
                   badge="бой"
                 >
                   <div className="mt-4 flex flex-wrap gap-2 text-sm">
@@ -7901,7 +7909,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         <span className="font-medium text-white">
                           Панель мастера:{" "}
                           <AdaptiveLabel
-                            full="инструменты"
+                            full="Нарратив: инструменты"
                             short={masterPanelShortLabels.tools}
                           />
                         </span>
@@ -7939,8 +7947,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         />
                       </div>
                       <CompactSection
-                        title="Инструменты мастера"
-                        description="Лут, события, заметка и броски спрятаны в один блок."
+                        title="Нарратив · Инструменты мастера"
+                        description="Лут, события, заметки и генераторы для ведения сцены."
                         badge="по таблицам dnd.su"
                       >
                         <div className="mt-4 space-y-3 text-sm text-slate-300">
