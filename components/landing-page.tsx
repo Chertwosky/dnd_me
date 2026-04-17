@@ -39,7 +39,7 @@ export function LandingPage() {
       <main className="mx-auto max-w-7xl space-y-14 px-6 py-12 md:py-16">
         <section className="grid gap-6 rounded-3xl border border-white/10 bg-slate-950/70 p-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
           <div>
-            <span className="badge">D&D virtual tabletop</span>
+            <span className="badge">D&D виртуальный стол</span>
             <h1 className="mt-4 text-4xl font-semibold tracking-tight text-white md:text-5xl">
               Здесь можно сразу провести сессию, а не читать абстрактное описание проекта.
             </h1>

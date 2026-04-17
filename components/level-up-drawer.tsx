@@ -48,7 +48,7 @@ export function LevelUpDrawer({
       <div className="h-full w-full max-w-3xl overflow-y-auto border-l border-white/10 bg-slate-950 p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">Level up flow</div>
+            <div className="text-xs uppercase tracking-wide text-slate-500">Повышение уровня</div>
             <h2 className="mt-1 text-2xl font-semibold text-white">Пошаговое повышение уровня</h2>
           </div>
           <button type="button" onClick={onClose} className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-200">Закрыть</button>
@@ -129,7 +129,7 @@ export function LevelUpDrawer({
                         <button key={spell.item.id} type="button" onClick={() => onChange({ selectedSpellIds: selected ? draft.selectedSpellIds.filter((id) => id !== spell.item.id) : [...draft.selectedSpellIds, spell.item.id] })} className={`rounded-2xl border px-3 py-3 text-left ${selected ? 'border-violet-400/40 bg-violet-500/10' : 'border-white/8 bg-slate-900/40'}`}>
                           <div className="flex items-center justify-between gap-2">
                             <div className="font-medium text-white">{spell.item.name}</div>
-                            <span className="text-xs text-slate-400">{spell.item.level === 0 ? 'Cantrip' : `${spell.item.level} круг`}</span>
+                            <span className="text-xs text-slate-400">{spell.item.level === 0 ? 'Заговор' : `${spell.item.level} круг`}</span>
                           </div>
                           <div className="mt-1 text-xs text-slate-400">{spell.item.school}</div>
                           <div className="mt-2">
@@ -161,7 +161,7 @@ export function LevelUpDrawer({
               <div className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-3 text-sm text-emerald-100">Все обязательные выборы сделаны. Можно подтверждать.</div>
             )}
             <div className="mt-4 flex gap-3">
-              <button type="button" onClick={onConfirm} disabled={hasBlocking} className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-medium text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">Подтвердить level up</button>
+              <button type="button" onClick={onConfirm} disabled={hasBlocking} className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-medium text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">Подтвердить повышение</button>
               <button type="button" onClick={onClose} className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">Сохранить как draft и закрыть</button>
             </div>
           </section>
