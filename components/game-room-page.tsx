@@ -12,6 +12,10 @@ import {
   type ReactNode,
 } from "react";
 import { CharacterXpCard } from "@/components/character-xp-card";
+import { useRoomState } from "@/hooks/use-room-state";
+import { useMasterPanels } from "@/hooks/use-master-panels";
+import { useBoardInteractions } from "@/hooks/use-board-interactions";
+import type { JoinStep, RoomRole } from "@/components/room/types";
 import { LevelUpBanner } from "@/components/level-up-banner";
 import { LevelUpDrawer } from "@/components/level-up-drawer";
 import {
@@ -27,9 +31,6 @@ import {
   type LevelUpDraft,
 } from "@/lib/level-up";
 
-type RoomRole = "gm" | "player" | "spectator";
-type JoinStep = "auth" | "player-sheet" | "ready";
-type JoinIntent = "gm" | "player" | null;
 type DrawingTool =
   | "move"
   | "terrain"
@@ -3007,13 +3008,23 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     typeof window === "undefined"
       ? ""
       : `${window.location.origin}/rooms/${roomId}`;
-  const [roomPassword, setRoomPassword] = useState("");
-  const [passwordInput, setPasswordInput] = useState("");
-  const [displayName, setDisplayName] = useState("Мастер Аркейн");
-  const [joinIntent, setJoinIntent] = useState<JoinIntent>("player");
-  const [role, setRole] = useState<RoomRole | null>(null);
-  const [joinStep, setJoinStep] = useState<JoinStep>("auth");
-  const [authError, setAuthError] = useState("");
+  const {
+    roomViewModel,
+    roomPassword,
+    setRoomPassword,
+    passwordInput,
+    setPasswordInput,
+    displayName,
+    setDisplayName,
+    joinIntent,
+    setJoinIntent,
+    role,
+    setRole,
+    joinStep,
+    setJoinStep,
+    authError,
+    setAuthError,
+  } = useRoomState(roomId);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [mapName, setMapName] = useState("Руины старой башни");
@@ -3054,14 +3065,12 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     "center" | "tl" | "tr" | "bl" | "br"
   >("center");
   const [activeBoard, setActiveBoard] = useState<BoardKind>("public");
-  const [isPointerDown, setIsPointerDown] = useState(false);
-  const [draggingTokenId, setDraggingTokenId] = useState<string | null>(null);
+
   const [chatInput, setChatInput] = useState("");
   const [diceFormula, setDiceFormula] = useState("1d20+5");
   const [lootCrBand, setLootCrBand] = useState<LootCrBand>("0-4");
   const [lootResult, setLootResult] = useState<LootResult>(randomLootDefault);
   const [eventResult, setEventResult] = useState(randomEventPool[0]);
-  const [zoom, setZoom] = useState(1);
   const [gridColsInput, setGridColsInput] = useState(String(DEFAULT_COLS));
   const [gridRowsInput, setGridRowsInput] = useState(String(DEFAULT_ROWS));
   const [useFogOfWar, setUseFogOfWar] = useState(true);
@@ -3093,14 +3102,29 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [isLoadedFromStorage, setIsLoadedFromStorage] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  const [masterPreset, setMasterPreset] = useState<MasterViewPreset>("combat");
-  const [isCreaturesDrawerOpen, setIsCreaturesDrawerOpen] = useState(true);
-  const [creaturesDrawerWidth, setCreaturesDrawerWidth] = useState(520);
-  const [creaturesDrawerTab, setCreaturesDrawerTab] = useState<"tokens" | "party">("tokens");
-  const [journalFilter, setJournalFilter] = useState<JournalEntry["type"] | "all">(
-    "all",
-  );
-  const [journalSearch, setJournalSearch] = useState("");
+  const {
+    masterPanelVM,
+    masterPreset,
+    setMasterPreset,
+    isCreaturesDrawerOpen,
+    setIsCreaturesDrawerOpen,
+    creaturesDrawerWidth,
+    setCreaturesDrawerWidth,
+    creaturesDrawerTab,
+    setCreaturesDrawerTab,
+    journalFilter,
+    setJournalFilter,
+    journalSearch,
+    setJournalSearch,
+    gmPanelOrder,
+    setGmPanelOrder,
+    draggedMasterPanel,
+    setDraggedMasterPanel,
+    dragOverMasterPanel,
+    setDragOverMasterPanel,
+    gmPanelWidths,
+    setGmPanelWidths,
+  } = useMasterPanels();
   const [initiative, setInitiative] = useState<InitiativeState>(
     createEmptyInitiativeState,
   );
@@ -3123,26 +3147,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [levelRollbackSnapshots, setLevelRollbackSnapshots] = useState<
     Record<string, CharacterSheet[]>
   >({});
-  const [gmPanelOrder, setGmPanelOrder] = useState<MasterPanelId[]>([
-    "admin",
-    "tokens",
-    "party",
-    "initiative",
-    "tools",
-  ]);
-  const [draggedMasterPanel, setDraggedMasterPanel] =
-    useState<MasterPanelId | null>(null);
-  const [dragOverMasterPanel, setDragOverMasterPanel] =
-    useState<MasterPanelId | null>(null);
-  const [gmPanelWidths, setGmPanelWidths] = useState<
-    Record<"admin" | "tokens" | "party" | "initiative" | "tools", number>
-  >({
-    admin: 440,
-    tokens: 440,
-    party: 999,
-    initiative: 999,
-    tools: 320,
-  });
 
   const cols = mapState.cols;
   const rows = mapState.rows;
@@ -3152,25 +3156,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     : mapState.publicTiles;
   const activeTiles =
     activeBoard === "public" ? mapState.publicTiles : mapState.gmTiles;
-  const handleZoomOut = useCallback(
-    () =>
-      setZoom((current) =>
-        clamp(Number((current - 0.1).toFixed(2)), 0.2, 1.8),
-      ),
-    [],
-  );
-  const handleZoomIn = useCallback(
-    () =>
-      setZoom((current) =>
-        clamp(Number((current + 0.1).toFixed(2)), 0.2, 1.8),
-      ),
-    [],
-  );
-  const handleZoomFit = useCallback(() => {
-    const fitByWidth = 1200 / (cols * 44);
-    const fitByHeight = 700 / (rows * 44);
-    setZoom(clamp(Math.min(fitByWidth, fitByHeight), 0.2, 1.8));
-  }, [cols, rows]);
+  const {
+    zoom,
+    setZoom,
+    isPointerDown,
+    setIsPointerDown,
+    draggingTokenId,
+    setDraggingTokenId,
+    handleZoomOut,
+    handleZoomIn,
+    handleZoomFit,
+  } = useBoardInteractions({ cols, rows });
 
   const selectedToken = useMemo(
     () => tokens.find((token) => token.id === selectedTokenId) ?? tokens[0],
@@ -3917,6 +3913,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     draggingTokenId,
     isPointerDown,
     tokens,
+    setDraggingTokenId,
+    setIsPointerDown,
   ]);
 
   const handleBoardPointerDown =
@@ -4901,7 +4899,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         `${preset.name}: карточка загружена из библиотеки в новую партию.`,
       );
     },
-    [addJournalEntry, cols, currentMapId, displayName, playerTokens.length, rows],
+    [addJournalEntry, cols, currentMapId, displayName, playerTokens.length, rows, setJoinStep],
   );
 
   const handleMoveGmPanel = useCallback(
@@ -4916,7 +4914,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         return next;
       });
     },
-    [],
+    [setGmPanelOrder],
   );
 
   const movePanelInOrder = useCallback(
@@ -4942,7 +4940,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData("text/plain", panelId);
     },
-    [],
+    [setDragOverMasterPanel, setDraggedMasterPanel],
   );
 
   const handleDragOverMasterPanel = useCallback(
@@ -4953,7 +4951,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         setDragOverMasterPanel(panelId);
       }
     },
-    [dragOverMasterPanel, draggedMasterPanel],
+    [dragOverMasterPanel, draggedMasterPanel, setDragOverMasterPanel],
   );
 
   const handleDropMasterPanel = useCallback(
@@ -4969,7 +4967,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setDraggedMasterPanel(null);
       setDragOverMasterPanel(null);
     },
-    [draggedMasterPanel, movePanelInOrder],
+    [
+      draggedMasterPanel,
+      movePanelInOrder,
+      setDragOverMasterPanel,
+      setDraggedMasterPanel,
+      setGmPanelOrder,
+    ],
   );
 
   const handleGmPanelWidthChange = useCallback(
@@ -4979,7 +4983,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     ) => {
       setGmPanelWidths((current) => ({ ...current, [panelId]: width }));
     },
-    [],
+    [setGmPanelWidths],
   );
 
   const handleRoomAuth = (forcedRole?: "gm" | "player") => {
