@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+
 :root {
   --background: #07111f;
   --foreground: #f8fafc;
@@ -10,6 +11,38 @@
   --panel-strong: #0f172a;
   --accent: #a855f7;
   --accent-2: #22d3ee;
+
+  /* spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* radius scale */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  /* elevation */
+  --elevation-1: 0 4px 14px rgba(2, 6, 23, 0.24);
+  --elevation-2: 0 10px 28px rgba(2, 6, 23, 0.32);
+  --elevation-3: 0 24px 48px rgba(2, 6, 23, 0.4);
+
+  /* border opacity */
+  --border-soft: rgba(148, 163, 184, 0.1);
+  --border-base: rgba(148, 163, 184, 0.16);
+  --border-strong: rgba(148, 163, 184, 0.24);
+
+  /* state colors */
+  --state-primary: rgba(168, 85, 247, 0.18);
+  --state-secondary: rgba(34, 211, 238, 0.16);
+  --state-success: rgba(16, 185, 129, 0.2);
+  --state-warning: rgba(245, 158, 11, 0.2);
+  --state-destructive: rgba(244, 63, 94, 0.2);
 }
 
 html {
@@ -26,12 +59,13 @@ body {
 }
 
 * {
-  border-color: rgba(148, 163, 184, 0.16);
+  border-color: var(--border-base);
 }
 
 @layer components {
   .card {
     @apply rounded-2xl border border-white/10 bg-slate-950/60 backdrop-blur;
+    box-shadow: var(--elevation-1);
   }
 
   .badge {
@@ -172,5 +206,36 @@ body {
 
   .master-panel-shell {
     grid-column: span var(--master-panel-span-xl, 12) / span var(--master-panel-span-xl, 12);
+  }
+}
+
+
+@layer components {
+  .ui-stack {
+    @apply space-y-4;
+  }
+
+  .ui-actions {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .ui-heading {
+    @apply text-xl font-semibold text-white md:text-2xl;
+  }
+
+  .btn-hierarchy-primary {
+    @apply border-fuchsia-400/30 bg-fuchsia-500/15 text-white;
+  }
+
+  .btn-hierarchy-secondary {
+    @apply border-cyan-400/30 bg-cyan-500/10 text-cyan-100;
+  }
+
+  .btn-hierarchy-ghost {
+    @apply border-transparent bg-transparent text-slate-200;
+  }
+
+  .btn-hierarchy-destructive {
+    @apply border-rose-400/30 bg-rose-500/10 text-rose-100;
   }
 }
