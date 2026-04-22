@@ -21,6 +21,8 @@ import { LevelUpDrawer } from "@/components/level-up-drawer";
 import { MasterLayoutEditor } from "@/components/master-layout-editor";
 import { MasterPanelShell } from "@/components/master-panel-shell";
 import { MasterWorkspaceHeader } from "@/components/master-workspace-header";
+import { Button, Input, Panel, Tag } from "@/components/ui";
+import { uiControlVariants } from "@/components/ui/variants";
 import {
   MASTER_PANEL_DEFINITIONS,
   MASTER_PANEL_IDS,
@@ -2547,7 +2549,7 @@ function CompactSection({
 }
 
 function boardButtonClass(isActive: boolean) {
-  return `rounded-full border px-3 py-2 text-sm ${isActive ? "border-fuchsia-400 bg-fuchsia-500/15 text-white" : "border-white/10 text-slate-300"}`;
+  return uiControlVariants({ tone: isActive ? "primary" : "default" });
 }
 
 const statLabels: Array<{ key: keyof CharacterStats; label: string }> = [
@@ -5360,29 +5362,23 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link
-              href="/"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200"
-            >
+            <Link href="/" className={uiControlVariants({ tone: "default" })}>
               На главную
             </Link>
-            <button
-              onClick={handleCopyInviteLink}
-              className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100"
-            >
+            <Button onClick={handleCopyInviteLink} tone="secondary">
               {inviteCopied ? "Ссылка скопирована" : "Копировать ссылку-приглашение"}
-            </button>
-            <span className="rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300">
+            </Button>
+            <Tag className="px-4 py-2 text-xs">
               Сохранение:{" "}
               {saveState === "error"
                 ? "ошибка"
                 : lastSavedAt
                   ? `последнее в ${lastSavedAt}`
                   : "ожидание"}
-            </span>
+            </Tag>
             {role === "gm" || joinStep !== "ready" ? (
               <>
-                <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
+                <label className={uiControlVariants({ tone: "default" }) + " cursor-pointer"}>
                   Загрузить карту
                   <input
                     type="file"
@@ -5391,7 +5387,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     onChange={handleUploadMap}
                   />
                 </label>
-                <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
+                <label className={uiControlVariants({ tone: "default" }) + " cursor-pointer"}>
                   Загрузить JSON
                   <input
                     type="file"
@@ -5400,12 +5396,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     onChange={handleImportMapJson}
                   />
                 </label>
-                <button
-                  onClick={handleExportMapJson}
-                  className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950"
-                >
+                <Button onClick={handleExportMapJson} tone="success">
                   Сохранить JSON
-                </button>
+                </Button>
               </>
             ) : null}
           </div>
@@ -5426,24 +5419,17 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 </div>
               </div>
               <div className="flex w-full max-w-xl gap-2">
-                <input
+                <Input
                   value={mapPresetName}
                   onChange={(event) => setMapPresetName(event.target.value)}
                   placeholder="Название вкладки карты"
-                  className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
                 />
-                <button
-                  onClick={handleSaveMap}
-                  className="rounded-full bg-emerald-500 px-4 py-3 text-sm font-medium text-slate-950"
-                >
+                <Button onClick={handleSaveMap} tone="success" className="h-11">
                   Сохранить как вкладку
-                </button>
-                <button
-                  onClick={handleExportMapJson}
-                  className="rounded-full border border-white/10 px-4 py-3 text-sm font-medium text-slate-200"
-                >
+                </Button>
+                <Button onClick={handleExportMapJson} tone="default" className="h-11">
                   Экспорт JSON
-                </button>
+                </Button>
               </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -5459,13 +5445,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       {preset.name}
                     </button>
                     {index > 0 ? (
-                      <button
+                      <Button
                         onClick={() => handleDeleteSavedMap(preset.id)}
-                        className="rounded-full border border-white/10 px-3 py-2 text-sm text-rose-300"
+                        tone="destructive"
+                        size="sm"
                         aria-label={`Удалить вкладку ${preset.name}`}
                       >
                         ×
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                 ))
@@ -5481,7 +5468,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
         {joinStep !== "ready" ? (
           <section className="grid gap-4 lg:grid-cols-2">
-            <div className="card p-6">
+            <Panel className="p-6">
               <span className="badge">Вход</span>
               <h2 className="mt-4 text-2xl font-semibold text-white">
                 Одна комната, один пароль и режим наблюдателя
@@ -5520,34 +5507,34 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   : "Игроку нужен существующий пароль комнаты и лист персонажа."}
               </div>
               <div className="mt-6 grid gap-3 md:grid-cols-2">
-                <input
+                <Input
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
                   placeholder="Ваше имя"
-                  className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
                 />
-                <input
+                <Input
                   value={passwordInput}
                   onChange={(event) => setPasswordInput(event.target.value)}
                   type="password"
                   placeholder="Пароль комнаты"
-                  className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
                 />
               </div>
               {authError ? (
                 <div className="mt-3 text-sm text-rose-300">{authError}</div>
               ) : null}
-              <button
+              <Button
                 onClick={() => handleRoomAuth(joinIntent ?? undefined)}
-                className="mt-5 rounded-full bg-fuchsia-500 px-5 py-3 text-sm font-medium text-white"
+                tone="primary"
+                size="lg"
+                className="mt-5"
               >
                 {joinIntent === "gm"
                   ? "Создать комнату как мастер"
                   : "Войти в комнату как игрок"}
-              </button>
-            </div>
+              </Button>
+            </Panel>
 
-            <div className="card p-6">
+            <Panel className="p-6">
               {role === "player" && joinStep === "player-sheet" ? (
                 <>
                   <span className="badge">Лист игрока</span>
@@ -5614,7 +5601,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   </div>
                 </>
               )}
-            </div>
+            </Panel>
           </section>
         ) : null}
 
