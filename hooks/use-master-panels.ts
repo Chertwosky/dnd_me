@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { MasterPanelVM } from "@/components/room/types";
+import {
+  createDefaultLayoutConfig,
+  type LayoutConfig,
+  type MasterPanelId,
+  moveMasterPanel,
+} from "@/lib/master-panel-layout";
 
-export type MasterPanelId = "admin" | "tokens" | "party" | "initiative" | "tools";
 export type MasterViewPreset = "combat" | "explore" | "prep";
 export type JournalFilter =
   | "system"
@@ -18,58 +23,55 @@ export type JournalFilter =
 
 export function useMasterPanels() {
   const [masterPreset, setMasterPreset] = useState<MasterViewPreset>("combat");
-  const [isCreaturesDrawerOpen, setIsCreaturesDrawerOpen] = useState(true);
-  const [creaturesDrawerWidth, setCreaturesDrawerWidth] = useState(520);
-  const [creaturesDrawerTab, setCreaturesDrawerTab] = useState<"tokens" | "party">("tokens");
+  const [isSecondaryPanelOpen, setIsSecondaryPanelOpen] = useState(false);
+  const [secondaryPanelId, setSecondaryPanelId] = useState<MasterPanelId>("tokens");
   const [journalFilter, setJournalFilter] = useState<JournalFilter>("all");
   const [journalSearch, setJournalSearch] = useState("");
-  const [gmPanelOrder, setGmPanelOrder] = useState<MasterPanelId[]>([
-    "admin",
-    "tokens",
-    "party",
-    "initiative",
-    "tools",
-  ]);
-  const [draggedMasterPanel, setDraggedMasterPanel] = useState<MasterPanelId | null>(null);
-  const [dragOverMasterPanel, setDragOverMasterPanel] = useState<MasterPanelId | null>(null);
-  const [gmPanelWidths, setGmPanelWidths] = useState<Record<MasterPanelId, number>>({
-    admin: 440,
-    tokens: 440,
-    party: 999,
-    initiative: 999,
-    tools: 320,
-  });
+  const [layoutConfig, setLayoutConfig] = useState<LayoutConfig>(
+    createDefaultLayoutConfig,
+  );
+  const [isLayoutEditorOpen, setIsLayoutEditorOpen] = useState(false);
 
-  const masterPanelVM: MasterPanelVM = {
-    preset: masterPreset,
-    isCreaturesDrawerOpen,
-    creaturesDrawerWidth,
-    creaturesDrawerTab,
-    journalFilter,
-    journalSearch,
+  const masterPanelVM: MasterPanelVM = useMemo(
+    () => ({
+      preset: masterPreset,
+      isSecondaryPanelOpen,
+      secondaryPanelId,
+      journalFilter,
+      journalSearch,
+    }),
+    [
+      isSecondaryPanelOpen,
+      journalFilter,
+      journalSearch,
+      masterPreset,
+      secondaryPanelId,
+    ],
+  );
+
+  const moveLayoutPanel = (panelId: MasterPanelId, direction: "up" | "down") => {
+    setLayoutConfig((current) => ({
+      ...current,
+      order: moveMasterPanel(current.order, panelId, direction),
+    }));
   };
 
   return {
     masterPanelVM,
     masterPreset,
     setMasterPreset,
-    isCreaturesDrawerOpen,
-    setIsCreaturesDrawerOpen,
-    creaturesDrawerWidth,
-    setCreaturesDrawerWidth,
-    creaturesDrawerTab,
-    setCreaturesDrawerTab,
+    isSecondaryPanelOpen,
+    setIsSecondaryPanelOpen,
+    secondaryPanelId,
+    setSecondaryPanelId,
     journalFilter,
     setJournalFilter,
     journalSearch,
     setJournalSearch,
-    gmPanelOrder,
-    setGmPanelOrder,
-    draggedMasterPanel,
-    setDraggedMasterPanel,
-    dragOverMasterPanel,
-    setDragOverMasterPanel,
-    gmPanelWidths,
-    setGmPanelWidths,
+    layoutConfig,
+    setLayoutConfig,
+    moveLayoutPanel,
+    isLayoutEditorOpen,
+    setIsLayoutEditorOpen,
   };
 }

@@ -11,9 +11,8 @@ export interface RoomViewModel {
 
 export interface MasterPanelVM {
   preset: "combat" | "explore" | "prep";
-  isCreaturesDrawerOpen: boolean;
-  creaturesDrawerWidth: number;
-  creaturesDrawerTab: "tokens" | "party";
+  isSecondaryPanelOpen: boolean;
+  secondaryPanelId: "admin" | "tokens" | "party" | "initiative" | "tools";
   journalFilter:
     | "system"
     | "move"
