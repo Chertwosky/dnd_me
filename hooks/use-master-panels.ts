@@ -7,7 +7,7 @@ import {
   moveMasterPanel,
 } from "@/lib/master-panel-layout";
 
-export type MasterViewPreset = "combat" | "explore" | "prep";
+export type MasterViewPreset = "combat" | "scene" | "prep";
 export type JournalFilter =
   | "system"
   | "move"

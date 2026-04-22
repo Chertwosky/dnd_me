@@ -2,11 +2,11 @@
 
 import { type MasterPanelGroup } from "@/lib/master-panel-layout";
 
-type MasterViewPreset = "combat" | "explore" | "prep";
+type MasterViewPreset = "combat" | "scene" | "prep";
 
 const presetLabels: Record<MasterViewPreset, string> = {
   combat: "Бой",
-  explore: "Исследование",
+  scene: "Сцена",
   prep: "Подготовка",
 };
 
@@ -57,7 +57,7 @@ export function MasterWorkspaceHeader({
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] xl:items-start">
         <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/60 p-2">
-          {(["combat", "explore", "prep"] as const).map((preset) => (
+          {(["scene", "combat", "prep"] as const).map((preset) => (
             <button
               key={preset}
               type="button"

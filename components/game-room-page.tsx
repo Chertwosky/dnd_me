@@ -56,7 +56,7 @@ type LayerKind = "terrain" | "obstacle" | "texture" | "furniture";
 type TokenKind = "player" | "npc" | "monster" | "object";
 type BoardKind = "public" | "gm";
 type LootCrBand = "0-4" | "5-10" | "11-16" | "17+";
-type MasterViewPreset = "combat" | "explore" | "prep";
+type MasterViewPreset = "combat" | "scene" | "prep";
 type TokenStatusKey =
   | "poisoned"
   | "stunned"
@@ -3520,7 +3520,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const panelVisibility = useMemo(
     () => ({
-      admin: masterPreset === "prep" || masterPreset === "explore",
+      admin: masterPreset === "prep" || masterPreset === "scene",
       tokens: true,
       party: true,
       initiative: masterPreset === "combat",
@@ -3530,7 +3530,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   );
   const activeMasterGroups = useMemo(() => {
     if (masterPreset === "combat") return ["combat", "creatures", "narrative"] as const;
-    if (masterPreset === "explore") return ["scene", "narrative", "creatures"] as const;
+    if (masterPreset === "scene") return ["scene", "narrative", "creatures"] as const;
     return ["scene", "creatures", "combat"] as const;
   }, [masterPreset]);
 
@@ -5650,6 +5650,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         ) : null}
 
         <section
+          data-layout-zone="topbar"
           className={`grid gap-3 ${role === "gm" ? "md:grid-cols-3 xl:grid-cols-6" : "md:grid-cols-2 xl:grid-cols-5"}`}
         >
           <div className="card px-4 py-3">
@@ -5723,21 +5724,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             levelUpEnabled={Boolean(selectedSheet)}
           />
         ) : null}
-        {role === "gm" ? (
-          <MasterPanelShell
-            panelId="admin"
-            title={MASTER_PANEL_DEFINITIONS.admin.title}
-            description={MASTER_PANEL_DEFINITIONS.admin.description}
-            size={layoutConfig.panels.admin.size}
-            className="master-desk-header-slot"
-          >
-            <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
-              Рабочая сетка использует spans из LayoutConfig; вторичные панели открываются через единую offcanvas-шторку.
-            </div>
-          </MasterPanelShell>
-        ) : null}
-
-        <section className="space-y-4">
+        <section data-layout-zone="context-panels" className="space-y-4">
           <div
             className={
               role === "gm"
@@ -8265,7 +8252,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               ) : null}
             </div>
           </div>
-          <div className="card sticky top-3 z-10 flex flex-wrap items-center gap-2 px-4 py-3 text-sm text-slate-200">
+          <div data-layout-zone="topbar" className="card flex flex-wrap items-center gap-2 px-4 py-3 text-sm text-slate-200">
             <span className="badge">Инструмент: {tool}</span>
             <span className="badge">
               Редактируется:{" "}
@@ -8284,7 +8271,33 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </div>
 
           {role === "gm" ? (
-            <div className="space-y-4">
+            <div data-layout-zone="topbar" className="card flex flex-wrap items-center gap-2 px-3 py-2">
+              <button
+                type="button"
+                onClick={() => setIsSecondaryPanelOpen((current) => !current)}
+                className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+              >
+                {isSecondaryPanelOpen ? "Скрыть secondary-колонку" : "Показать secondary-колонку"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSecondaryPanelId("tokens")}
+                className={boardButtonClass(secondaryPanelId === "tokens")}
+              >
+                Токены
+              </button>
+              <button
+                type="button"
+                onClick={() => setSecondaryPanelId("party")}
+                className={boardButtonClass(secondaryPanelId === "party")}
+              >
+                Персонажи
+              </button>
+            </div>
+          ) : null}
+
+          {role === "gm" ? (
+            <div data-layout-zone="main-board" className="space-y-4">
               <div className="card flex flex-wrap items-center gap-2 px-3 py-2">
                 <button
                   type="button"
@@ -8350,7 +8363,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     </button>
                   ))}
               </div>
-              <div id="battle-board-public">
+              <div data-layout-zone="main-board" id="battle-board-public">
                 <Board
                   boardId="battle-grid-public"
                   title="Публичная карта"
@@ -8422,33 +8435,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             </div>
           )}
         </section>
-        {role === "gm" ? (
-          <div className="fixed right-4 top-24 z-[60] flex w-[min(92vw,420px)] flex-col gap-2 rounded-2xl border border-white/10 bg-slate-950/90 p-3 backdrop-blur">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsSecondaryPanelOpen((current) => !current)}
-                className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
-              >
-                {isSecondaryPanelOpen ? "Скрыть шторку существ" : "Показать шторку существ"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setSecondaryPanelId("tokens")}
-                className={boardButtonClass(secondaryPanelId === "tokens")}
-              >
-                Существа
-              </button>
-              <button
-                type="button"
-                onClick={() => setSecondaryPanelId("party")}
-                className={boardButtonClass(secondaryPanelId === "party")}
-              >
-                Персонажи
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
       <MasterLayoutEditor
         open={isLayoutEditorOpen}
