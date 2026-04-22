@@ -10,7 +10,7 @@ export interface RoomViewModel {
 }
 
 export interface MasterPanelVM {
-  preset: "combat" | "explore" | "prep";
+  preset: "combat" | "scene" | "prep";
   isSecondaryPanelOpen: boolean;
   secondaryPanelId: "admin" | "tokens" | "party" | "initiative" | "tools";
   journalFilter:
