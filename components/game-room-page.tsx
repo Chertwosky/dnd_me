@@ -18,6 +18,19 @@ import { useBoardInteractions } from "@/hooks/use-board-interactions";
 import type { JoinStep, RoomRole } from "@/components/room/types";
 import { LevelUpBanner } from "@/components/level-up-banner";
 import { LevelUpDrawer } from "@/components/level-up-drawer";
+import { MasterLayoutEditor } from "@/components/master-layout-editor";
+import { MasterPanelShell } from "@/components/master-panel-shell";
+import { MasterWorkspaceHeader } from "@/components/master-workspace-header";
+import {
+  MASTER_PANEL_DEFINITIONS,
+  MASTER_PANEL_IDS,
+  getMasterPanelSpanTokens,
+  normalizeSavedLayoutConfig,
+  type LayoutConfig,
+  type MasterPanelGroup,
+  type MasterPanelId,
+  type MasterPanelSize,
+} from "@/lib/master-panel-layout";
 import {
   applyXp,
   buildLevelUpPreview,
@@ -238,6 +251,7 @@ type LootResult = {
 
 type SavedRoomState = {
   mapName: string;
+  masterLayout?: Partial<LayoutConfig> | { panelOrder?: MasterPanelId[]; panelWidths?: Partial<Record<MasterPanelId, number>> };
   mapState: MapState;
   savedMaps?: SavedMapPreset[];
   activeSavedMapId?: string | null;
@@ -279,34 +293,13 @@ const STORAGE_PREFIX = "dnd-me-room:";
 const CHARACTER_LIBRARY_PREFIX = "dnd-me-character-library:";
 const DEFAULT_WIDGET_URL = "https://tychmaps.com/waterdeep/";
 
-type MasterPanelId = "admin" | "tokens" | "party" | "initiative" | "tools";
-
-const masterPanelShortLabels: Record<MasterPanelId, string> = {
-  admin: "Админ",
-  tokens: "Ток.",
-  party: "Пати",
-  initiative: "Иниц.",
-  tools: "Утил.",
-};
-
-const masterPanelGroups: Record<MasterPanelId, "scene" | "creatures" | "combat" | "narrative"> = {
-  admin: "scene",
-  tokens: "creatures",
-  party: "creatures",
-  initiative: "combat",
-  tools: "narrative",
-};
-
-const masterGroupLabels: Record<"scene" | "creatures" | "combat" | "narrative", string> = {
+const masterGroupLabels: Record<MasterPanelGroup, string> = {
   scene: "Сцена",
   creatures: "Существа",
   combat: "Бой",
   narrative: "Нарратив",
 };
 
-function getMasterPanelGridSpan(width: number) {
-  return Math.max(1, Math.min(4, Math.round(width / 320)));
-}
 
 const layerPalette: Record<LayerKind, string[]> = {
   terrain: ["#0f172a", "#334155", "#14532d", "#1d4ed8", "#92400e", "#4c1d95"],
@@ -2396,6 +2389,7 @@ function buildSavedRoomState({
   sheets,
   journal,
   initiative,
+  masterLayout,
 }: SavedRoomState): SavedRoomState {
   return {
     mapName,
@@ -2410,6 +2404,7 @@ function buildSavedRoomState({
     sheets,
     journal,
     initiative,
+    masterLayout,
   };
 }
 
@@ -3103,28 +3098,38 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const {
-    masterPanelVM,
     masterPreset,
     setMasterPreset,
-    isCreaturesDrawerOpen,
-    setIsCreaturesDrawerOpen,
-    creaturesDrawerWidth,
-    setCreaturesDrawerWidth,
-    creaturesDrawerTab,
-    setCreaturesDrawerTab,
+    isSecondaryPanelOpen,
+    setIsSecondaryPanelOpen,
+    secondaryPanelId,
+    setSecondaryPanelId,
     journalFilter,
     setJournalFilter,
     journalSearch,
     setJournalSearch,
-    gmPanelOrder,
-    setGmPanelOrder,
-    draggedMasterPanel,
-    setDraggedMasterPanel,
-    dragOverMasterPanel,
-    setDragOverMasterPanel,
-    gmPanelWidths,
-    setGmPanelWidths,
+    layoutConfig,
+    setLayoutConfig,
+    moveLayoutPanel,
+    isLayoutEditorOpen,
+    setIsLayoutEditorOpen,
   } = useMasterPanels();
+  const [draggedMasterPanel, setDraggedMasterPanel] = useState<MasterPanelId | null>(null);
+  const [dragOverMasterPanel, setDragOverMasterPanel] = useState<MasterPanelId | null>(null);
+  const gmPanelOrder = layoutConfig.order;
+
+  const getPanelShellStyle = useCallback(
+    (panelId: MasterPanelId): CSSProperties => {
+      const spans = getMasterPanelSpanTokens(panelId, layoutConfig.panels[panelId].size);
+      return {
+        order: layoutConfig.order.indexOf(panelId),
+        ["--master-panel-span-md" as string]: spans.md,
+        ["--master-panel-span-xl" as string]: spans.xl,
+      };
+    },
+    [layoutConfig.order, layoutConfig.panels],
+  );
+
   const [initiative, setInitiative] = useState<InitiativeState>(
     createEmptyInitiativeState,
   );
@@ -3368,12 +3373,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             parsed.sheets ?? initialSheets,
           ),
         );
+      setLayoutConfig(normalizeSavedLayoutConfig(parsed.masterLayout));
     } catch {
       // ignore corrupted local state
     }
 
     setIsLoadedFromStorage(true);
-  }, [roomId]);
+  }, [roomId, setLayoutConfig]);
 
   useEffect(() => {
     if (!isLoadedFromStorage) return;
@@ -3390,6 +3396,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       sheets,
       journal,
       initiative,
+      masterLayout: layoutConfig,
     });
     try {
       window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
@@ -3413,6 +3420,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     useSharedGmMapForPlayers,
     mainMapSnapshot,
     widgetUrl,
+    layoutConfig,
   ]);
 
   useEffect(() => {
@@ -3444,7 +3452,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     } catch {
       // ignore corrupted character library
     }
-  }, [roomId]);
+  }, [roomId, setLayoutConfig]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -4904,17 +4912,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const handleMoveGmPanel = useCallback(
     (panelId: MasterPanelId, direction: "up" | "down") => {
-      setGmPanelOrder((current) => {
-        const index = current.indexOf(panelId);
-        if (index === -1) return current;
-        const nextIndex = direction === "up" ? index - 1 : index + 1;
-        if (nextIndex < 0 || nextIndex >= current.length) return current;
-        const next = [...current];
-        [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-        return next;
-      });
+      moveLayoutPanel(panelId, direction);
     },
-    [setGmPanelOrder],
+    [moveLayoutPanel],
   );
 
   const movePanelInOrder = useCallback(
@@ -4961,9 +4961,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         draggedMasterPanel ??
         (event.dataTransfer.getData("text/plain") as MasterPanelId);
       if (!sourceId) return;
-      setGmPanelOrder((current) =>
-        movePanelInOrder(current, sourceId, targetId),
-      );
+      setLayoutConfig((current) => ({
+        ...current,
+        order: movePanelInOrder(current.order, sourceId, targetId),
+      }));
       setDraggedMasterPanel(null);
       setDragOverMasterPanel(null);
     },
@@ -4972,19 +4973,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       movePanelInOrder,
       setDragOverMasterPanel,
       setDraggedMasterPanel,
-      setGmPanelOrder,
+      setLayoutConfig,
     ],
   );
 
-  const handleGmPanelWidthChange = useCallback(
-    (
-      panelId: "admin" | "tokens" | "party" | "initiative" | "tools",
-      width: number,
-    ) => {
-      setGmPanelWidths((current) => ({ ...current, [panelId]: width }));
-    },
-    [setGmPanelWidths],
-  );
 
   const handleRoomAuth = (forcedRole?: "gm" | "player") => {
     const name = displayName.trim() || "Без имени";
@@ -5721,54 +5713,35 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         </section>
 
         {role === "gm" ? (
-          <div className="sticky top-20 z-40 space-y-2 px-1">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setMasterPreset("combat")}
-                className={boardButtonClass(masterPreset === "combat")}
-              >
-                Режим: Бой
-              </button>
-              <button
-                type="button"
-                onClick={() => setMasterPreset("explore")}
-                className={boardButtonClass(masterPreset === "explore")}
-              >
-                Режим: Исследование
-              </button>
-              <button
-                type="button"
-                onClick={() => setMasterPreset("prep")}
-                className={boardButtonClass(masterPreset === "prep")}
-              >
-                Режим: Подготовка
-              </button>
-              </div>
-              <span className="rounded-full border border-white/10 bg-slate-950/90 px-3 py-2 text-xs text-slate-300">
-                Панели мастера закреплены в сетке и не перекрываются
-              </span>
+          <MasterWorkspaceHeader
+            masterPreset={masterPreset}
+            onPresetChange={setMasterPreset}
+            activeGroups={activeMasterGroups}
+            groupLabels={masterGroupLabels}
+            onOpenLayoutEditor={() => setIsLayoutEditorOpen(true)}
+            onOpenLevelUpDrawer={() => setIsLevelUpOpen(true)}
+            levelUpEnabled={Boolean(selectedSheet)}
+          />
+        ) : null}
+        {role === "gm" ? (
+          <MasterPanelShell
+            panelId="admin"
+            title={MASTER_PANEL_DEFINITIONS.admin.title}
+            description={MASTER_PANEL_DEFINITIONS.admin.description}
+            size={layoutConfig.panels.admin.size}
+            className="master-desk-header-slot"
+          >
+            <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+              Рабочая сетка использует spans из LayoutConfig; вторичные панели открываются через единую offcanvas-шторку.
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-slate-400">Группы:</span>
-              {activeMasterGroups.map((group) => (
-                <span
-                  key={group}
-                  className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100"
-                >
-                  {masterGroupLabels[group]}
-                </span>
-              ))}
-            </div>
-          </div>
+          </MasterPanelShell>
         ) : null}
 
         <section className="space-y-4">
           <div
             className={
               role === "gm"
-                ? "grid grid-flow-row-dense items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]"
+                ? "master-workspace-grid"
                 : "grid gap-4 xl:grid-cols-1"
             }
           >
@@ -5794,25 +5767,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         setDraggedMasterPanel(null);
                         setDragOverMasterPanel(null);
                       }}
-                      style={{
-                        ...(panelId === "admin"
-                          ? {
-                              order: gmPanelOrder.indexOf(panelId),
-                              gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths[panelId])} / span ${getMasterPanelGridSpan(gmPanelWidths[panelId])}`,
-                            }
-                          : role === "gm"
-                            ? { width: `min(92vw, ${creaturesDrawerWidth}px)` }
-                            : {}),
-                      }}
-                      className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === panelId ? "ring-2 ring-fuchsia-400/60" : ""} ${
-                        panelId === "tokens" && role === "gm"
-                          ? `fixed right-4 top-16 z-50 h-[calc(100vh-5rem)] overflow-y-auto rounded-3xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${
-                              isCreaturesDrawerOpen && creaturesDrawerTab === "tokens"
-                                ? "translate-x-0"
-                                : "translate-x-[120%]"
-                            }`
-                          : ""
-                      }`}
+                      style={role === "gm" ? getPanelShellStyle(panelId) : undefined}
+                      className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === panelId ? "ring-2 ring-fuchsia-400/60" : ""} ${MASTER_PANEL_DEFINITIONS[panelId].mobileBehavior === "secondary" && !(isSecondaryPanelOpen && secondaryPanelId === panelId) ? "max-lg:hidden" : ""}`}
                     >
                       <div
                         draggable={role === "gm"}
@@ -5830,7 +5786,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                                 ? "Сцена: админ-панель"
                                 : "Существа: токены"
                             }
-                            short={masterPanelShortLabels[panelId]}
+                            short={MASTER_PANEL_DEFINITIONS[panelId].shortLabel}
                           />
                         </span>
                         <button
@@ -5852,19 +5808,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         >
                           ↓
                         </button>
-                        <span className="text-slate-500">Ширина</span>
-                        <input
-                          type="range"
-                          min="240"
-                          max="1200"
-                          value={gmPanelWidths[panelId]}
-                          onChange={(event) =>
-                            handleGmPanelWidthChange(
-                              panelId,
-                              Number(event.target.value),
-                            )
-                          }
-                        />
                       </div>
                       {panelId === "admin" ? (
                         <CompactSection
@@ -6388,15 +6331,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   setDraggedMasterPanel(null);
                   setDragOverMasterPanel(null);
                 }}
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role === "gm" ? `fixed right-4 top-16 z-50 h-[calc(100vh-5rem)] overflow-y-auto rounded-3xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isCreaturesDrawerOpen && creaturesDrawerTab === "party" ? "translate-x-0" : "translate-x-[120%]"}` : ""}`}
-                style={
-                  role === "gm"
-                    ? { width: `min(92vw, ${creaturesDrawerWidth}px)` }
-                    : {
-                        order: gmPanelOrder.indexOf("party"),
-                        gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.party)} / span ${getMasterPanelGridSpan(gmPanelWidths.party)}`,
-                      }
-                }
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${MASTER_PANEL_DEFINITIONS.party.mobileBehavior === "secondary" && !(isSecondaryPanelOpen && secondaryPanelId === "party") ? "max-lg:hidden" : ""}`}
+                style={role === "gm" ? getPanelShellStyle("party") : undefined}
               >
                 <div
                   className={
@@ -6415,7 +6351,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       Панель мастера:{" "}
                       <AdaptiveLabel
                         full="Существа: персонажи группы"
-                        short={masterPanelShortLabels.party}
+                        short={MASTER_PANEL_DEFINITIONS.party.shortLabel}
                       />
                     </span>
                     <button
@@ -6437,19 +6373,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     >
                       ↓
                     </button>
-                    <span className="text-slate-500">Ширина</span>
-                    <input
-                      type="range"
-                      min="260"
-                      max="1400"
-                      value={gmPanelWidths.party}
-                      onChange={(event) =>
-                        handleGmPanelWidthChange(
-                          "party",
-                          Number(event.target.value),
-                        )
-                      }
-                    />
                   </div>
                 ) : null}
                 <CompactSection
@@ -7556,8 +7479,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 style={
                   role === "gm"
                     ? {
-                        order: gmPanelOrder.indexOf("initiative"),
-                        gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.initiative)} / span ${getMasterPanelGridSpan(gmPanelWidths.initiative)}`,
+                        ...getPanelShellStyle("initiative"),
                       }
                     : undefined
                 }
@@ -7575,7 +7497,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       Панель мастера:{" "}
                       <AdaptiveLabel
                         full="Бой: инициатива"
-                        short={masterPanelShortLabels.initiative}
+                        short={MASTER_PANEL_DEFINITIONS.initiative.shortLabel}
                       />
                     </span>
                     <button
@@ -7597,19 +7519,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     >
                       ↓
                     </button>
-                    <span className="text-slate-500">Ширина</span>
-                    <input
-                      type="range"
-                      min="260"
-                      max="1400"
-                      value={gmPanelWidths.initiative}
-                      onChange={(event) =>
-                        handleGmPanelWidthChange(
-                          "initiative",
-                          Number(event.target.value),
-                        )
-                      }
-                    />
                   </div>
                 ) : null}
                 <CompactSection
@@ -7906,10 +7815,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     setDraggedMasterPanel(null);
                     setDragOverMasterPanel(null);
                   }}
-                  style={{
-                    order: gmPanelOrder.indexOf("tools"),
-                    gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)} / span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)}`,
-                  }}
+                  style={getPanelShellStyle("tools")}
                   className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""} ${!panelVisibility.tools ? "hidden" : ""}`}
                 >
                   <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
@@ -7925,7 +7831,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                           Панель мастера:{" "}
                           <AdaptiveLabel
                             full="Нарратив: инструменты"
-                            short={masterPanelShortLabels.tools}
+                            short={MASTER_PANEL_DEFINITIONS.tools.shortLabel}
                           />
                         </span>
                         <button
@@ -7947,19 +7853,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         >
                           ↓
                         </button>
-                        <span className="text-slate-500">Ширина</span>
-                        <input
-                          type="range"
-                          min="220"
-                          max="1100"
-                          value={gmPanelWidths.tools}
-                          onChange={(event) =>
-                            handleGmPanelWidthChange(
-                              "tools",
-                              Number(event.target.value),
-                            )
-                          }
-                        />
                       </div>
                       <CompactSection
                         title="Нарратив · Инструменты мастера"
@@ -8534,42 +8427,44 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => setIsCreaturesDrawerOpen((current) => !current)}
+                onClick={() => setIsSecondaryPanelOpen((current) => !current)}
                 className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
               >
-                {isCreaturesDrawerOpen ? "Скрыть шторку существ" : "Показать шторку существ"}
+                {isSecondaryPanelOpen ? "Скрыть шторку существ" : "Показать шторку существ"}
               </button>
               <button
                 type="button"
-                onClick={() => setCreaturesDrawerTab("tokens")}
-                className={boardButtonClass(creaturesDrawerTab === "tokens")}
+                onClick={() => setSecondaryPanelId("tokens")}
+                className={boardButtonClass(secondaryPanelId === "tokens")}
               >
                 Существа
               </button>
               <button
                 type="button"
-                onClick={() => setCreaturesDrawerTab("party")}
-                className={boardButtonClass(creaturesDrawerTab === "party")}
+                onClick={() => setSecondaryPanelId("party")}
+                className={boardButtonClass(secondaryPanelId === "party")}
               >
                 Персонажи
               </button>
             </div>
-            <label className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/70 px-3 py-1.5 text-xs text-slate-300">
-              Ширина шторки
-              <input
-                type="range"
-                min="360"
-                max="980"
-                value={creaturesDrawerWidth}
-                onChange={(event) =>
-                  setCreaturesDrawerWidth(Number(event.target.value))
-                }
-                className="w-full"
-              />
-            </label>
           </div>
         ) : null}
       </div>
+      <MasterLayoutEditor
+        open={isLayoutEditorOpen}
+        layoutConfig={layoutConfig}
+        onClose={() => setIsLayoutEditorOpen(false)}
+        onMovePanel={handleMoveGmPanel}
+        onSetPanelSize={(panelId, size) =>
+          setLayoutConfig((current) => ({
+            ...current,
+            panels: {
+              ...current.panels,
+              [panelId]: { size },
+            },
+          }))
+        }
+      />
       <LevelUpDrawer
         open={isLevelUpOpen}
         draft={selectedLevelUpDraft}
