@@ -1,5 +1,6 @@
-import type { FeatureSectionProps } from "@/components/room/types";
+import type { RoomAuthFeatureProps } from "@/components/room/types";
 
-export function FeatureSection({ children }: FeatureSectionProps) {
+export function RoomAuthSection({ isVisible, children }: RoomAuthFeatureProps) {
+  if (!isVisible) return null;
   return <>{children}</>;
 }

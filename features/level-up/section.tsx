@@ -1,5 +1,5 @@
-import type { FeatureSectionProps } from "@/components/room/types";
+import type { RoomFeatureProps } from "@/components/room/types";
 
-export function FeatureSection({ children }: FeatureSectionProps) {
+export function FeatureSection({ children }: RoomFeatureProps) {
   return <>{children}</>;
 }

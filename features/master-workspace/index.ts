@@ -1,1 +1,1 @@
-export { FeatureSection as MasterWorkspaceSection } from "./section";
+export { MasterWorkspaceSection } from "./section";

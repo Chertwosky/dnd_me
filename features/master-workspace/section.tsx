@@ -1,5 +1,6 @@
-import type { FeatureSectionProps } from "@/components/room/types";
+import type { MasterWorkspaceFeatureProps } from "@/components/room/types";
 
-export function FeatureSection({ children }: FeatureSectionProps) {
+export function MasterWorkspaceSection({ role, children }: MasterWorkspaceFeatureProps) {
+  if (role !== "gm") return null;
   return <>{children}</>;
 }

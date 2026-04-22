@@ -15,6 +15,7 @@ import { CharacterXpCard } from "@/components/character-xp-card";
 import { useRoomState } from "@/hooks/use-room-state";
 import { useMasterPanels } from "@/hooks/use-master-panels";
 import { useBoardInteractions } from "@/hooks/use-board-interactions";
+import type { JoinStep, RoomRole } from "@/components/room/types";
 import { LevelUpBanner } from "@/components/level-up-banner";
 import { LevelUpDrawer } from "@/components/level-up-drawer";
 import {
@@ -30,9 +31,6 @@ import {
   type LevelUpDraft,
 } from "@/lib/level-up";
 
-type RoomRole = "gm" | "player" | "spectator";
-type JoinStep = "auth" | "player-sheet" | "ready";
-type JoinIntent = "gm" | "player" | null;
 type DrawingTool =
   | "move"
   | "terrain"
@@ -3915,6 +3913,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     draggingTokenId,
     isPointerDown,
     tokens,
+    setDraggingTokenId,
+    setIsPointerDown,
   ]);
 
   const handleBoardPointerDown =
@@ -4899,7 +4899,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         `${preset.name}: карточка загружена из библиотеки в новую партию.`,
       );
     },
-    [addJournalEntry, cols, currentMapId, displayName, playerTokens.length, rows],
+    [addJournalEntry, cols, currentMapId, displayName, playerTokens.length, rows, setJoinStep],
   );
 
   const handleMoveGmPanel = useCallback(
@@ -4914,7 +4914,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         return next;
       });
     },
-    [],
+    [setGmPanelOrder],
   );
 
   const movePanelInOrder = useCallback(
@@ -4940,7 +4940,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData("text/plain", panelId);
     },
-    [],
+    [setDragOverMasterPanel, setDraggedMasterPanel],
   );
 
   const handleDragOverMasterPanel = useCallback(
@@ -4951,7 +4951,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         setDragOverMasterPanel(panelId);
       }
     },
-    [dragOverMasterPanel, draggedMasterPanel],
+    [dragOverMasterPanel, draggedMasterPanel, setDragOverMasterPanel],
   );
 
   const handleDropMasterPanel = useCallback(
@@ -4967,7 +4967,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       setDraggedMasterPanel(null);
       setDragOverMasterPanel(null);
     },
-    [draggedMasterPanel, movePanelInOrder],
+    [
+      draggedMasterPanel,
+      movePanelInOrder,
+      setDragOverMasterPanel,
+      setDraggedMasterPanel,
+      setGmPanelOrder,
+    ],
   );
 
   const handleGmPanelWidthChange = useCallback(
@@ -4977,7 +4983,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     ) => {
       setGmPanelWidths((current) => ({ ...current, [panelId]: width }));
     },
-    [],
+    [setGmPanelWidths],
   );
 
   const handleRoomAuth = (forcedRole?: "gm" | "player") => {

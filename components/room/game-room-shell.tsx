@@ -33,7 +33,7 @@ export function GameRoomShell({
   levelUp,
 }: GameRoomShellProps) {
   if (viewModel.joinStep !== "ready") {
-    return <RoomAuthSection>{auth}</RoomAuthSection>;
+    return <RoomAuthSection isVisible>{auth}</RoomAuthSection>;
   }
 
   const role = viewModel.role ?? "spectator";
@@ -41,7 +41,7 @@ export function GameRoomShell({
   if (role === "gm") {
     return (
       <>
-        <MasterWorkspaceSection>{masterWorkspace}</MasterWorkspaceSection>
+        <MasterWorkspaceSection role={role}>{masterWorkspace}</MasterWorkspaceSection>
         <BoardSection>{board}</BoardSection>
         <TokensSection>{tokens}</TokensSection>
         <PartySection>{party}</PartySection>

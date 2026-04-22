@@ -1,1 +1,1 @@
-export { FeatureSection as RoomAuthSection } from "./section";
+export { RoomAuthSection } from "./section";

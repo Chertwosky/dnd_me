@@ -29,6 +29,16 @@ export interface MasterPanelVM {
   journalSearch: string;
 }
 
-export interface FeatureSectionProps {
+export interface RoomAuthFeatureProps {
+  isVisible: boolean;
+  children: ReactNode;
+}
+
+export interface MasterWorkspaceFeatureProps {
+  role: RoomRole | null;
+  children: ReactNode;
+}
+
+export interface RoomFeatureProps {
   children: ReactNode;
 }
