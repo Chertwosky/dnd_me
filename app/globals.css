@@ -101,6 +101,48 @@ body {
   display: inline;
 }
 
+.adaptive-label--overflow .adaptive-label__full {
+  display: none !important;
+}
+
+.adaptive-label--overflow .adaptive-label__short {
+  display: inline !important;
+}
+
+@media (max-width: 419px) {
+  .adaptive-label--overflow .adaptive-label__short {
+    display: none !important;
+  }
+
+  .adaptive-label--overflow .adaptive-label__icon {
+    display: inline !important;
+  }
+}
+
+.panel-text-truncate {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 360px) {
+  .panel-text-truncate {
+    position: relative;
+    color: transparent;
+  }
+
+  .panel-text-truncate::after {
+    content: attr(data-icon);
+    color: inherit;
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+}
+
 @media (min-width: 420px) {
   .adaptive-label__icon {
     display: none;
