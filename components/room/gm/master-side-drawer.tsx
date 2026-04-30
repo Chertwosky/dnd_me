@@ -119,7 +119,7 @@ export function MasterSideDrawer({
         hidden={!open}
         data-state={open ? "open" : "closed"}
       >
-        <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden sm:gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 overflow-hidden sm:flex-nowrap sm:gap-2">
           {(["tokens", "party"] as const).map((tab) => (
             <button
               key={tab}
@@ -135,7 +135,7 @@ export function MasterSideDrawer({
               }`}
               title={tabLabels[tab]}
             >
-              {isUltraCompact ? tabIcons[tab] : isCompact ? tabCompactLabels[tab] : tabLabels[tab]}
+              {isUltraCompact ? `${tabIcons[tab]} ${tabCompactLabels[tab]}` : isCompact ? `${tabIcons[tab]} ${tabCompactLabels[tab]}` : tabLabels[tab]}
             </button>
           ))}
           <button
@@ -151,13 +151,13 @@ export function MasterSideDrawer({
           </button>
         </div>
         <label
-          className={`mt-2 flex min-w-0 items-center gap-2 overflow-hidden rounded-full border border-white/10 bg-slate-950/35 text-xs text-slate-300 ${
+          className={`mt-2 flex min-w-0 flex-col gap-2 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/35 text-xs text-slate-300 sm:flex-row sm:items-center ${
             isCompact ? "px-2 py-1.5" : "px-3 py-1.5"
           }`}
           title="Ширина"
         >
           <span className="shrink-0 overflow-hidden truncate" aria-hidden="true">
-            {isCompact ? "↔" : "Ширина"}
+            {isCompact ? "↔ Шир." : "Ширина"}
           </span>
           <input
             type="range"
