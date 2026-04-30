@@ -3136,39 +3136,31 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [levelRollbackSnapshots, setLevelRollbackSnapshots] = useState<
     Record<string, CharacterSheet[]>
   >({});
-  const [gmPanelOrder, setGmPanelOrder] = useState<MasterPanelId[]>([
-    "admin",
-    "tokens",
-    "party",
-    "initiative",
-    "tools",
-  ]);
+  const [gmLayoutConfig, setGmLayoutConfig] = useState<MasterLayoutConfig>({
+    version: 2,
+    order: ["admin", "tokens", "party", "initiative", "tools"],
+    panels: {
+      admin: { size: "regular" },
+      tokens: { size: "regular" },
+      party: { size: "wide" },
+      initiative: { size: "wide" },
+      tools: { size: "full" },
+    },
+  });
   const [draggedMasterPanel, setDraggedMasterPanel] =
     useState<MasterPanelId | null>(null);
   const [dragOverMasterPanel, setDragOverMasterPanel] =
     useState<MasterPanelId | null>(null);
-  const [gmPanelSizes, setGmPanelSizes] = useState<
-    Record<"admin" | "tokens" | "party" | "initiative" | "tools", MasterLayoutSize>
-  >({
-    admin: "regular",
-    tokens: "regular",
-    party: "wide",
-    initiative: "wide",
-    tools: "full",
-  });
-  const gmLayoutConfig = useMemo<MasterLayoutConfig>(
+  const gmPanelOrder = gmLayoutConfig.order;
+  const gmPanelSizes = useMemo(
     () => ({
-      version: 2,
-      order: gmPanelOrder,
-      panels: {
-        admin: { size: gmPanelSizes.admin },
-        tokens: { size: gmPanelSizes.tokens },
-        party: { size: gmPanelSizes.party },
-        initiative: { size: gmPanelSizes.initiative },
-        tools: { size: gmPanelSizes.tools },
-      },
+      admin: gmLayoutConfig.panels.admin.size,
+      tokens: gmLayoutConfig.panels.tokens.size,
+      party: gmLayoutConfig.panels.party.size,
+      initiative: gmLayoutConfig.panels.initiative.size,
+      tools: gmLayoutConfig.panels.tools.size,
     }),
-    [gmPanelOrder, gmPanelSizes],
+    [gmLayoutConfig],
   );
 
   const cols = mapState.cols;
@@ -3404,14 +3396,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       }
       if (parsed.gmLayout) {
         const normalizedLayout = normalizeSavedLayoutConfig(parsed.gmLayout);
-        setGmPanelOrder(normalizedLayout.order);
-        setGmPanelSizes({
-          admin: normalizedLayout.panels.admin.size,
-          tokens: normalizedLayout.panels.tokens.size,
-          party: normalizedLayout.panels.party.size,
-          initiative: normalizedLayout.panels.initiative.size,
-          tools: normalizedLayout.panels.tools.size,
-        });
+        setGmLayoutConfig(normalizedLayout);
         if ("panelOrder" in parsed.gmLayout || "panelWidths" in parsed.gmLayout) {
           setToasts((current) => [
             ...current,
@@ -5006,14 +4991,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   const handleMoveGmPanel = useCallback(
     (panelId: MasterPanelId, direction: "up" | "down") => {
-      setGmPanelOrder((current) => {
-        const index = current.indexOf(panelId);
+      setGmLayoutConfig((current) => {
+        const index = current.order.indexOf(panelId);
         if (index === -1) return current;
         const nextIndex = direction === "up" ? index - 1 : index + 1;
-        if (nextIndex < 0 || nextIndex >= current.length) return current;
-        const next = [...current];
+        if (nextIndex < 0 || nextIndex >= current.order.length) return current;
+        const next = [...current.order];
         [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-        return next;
+        return { ...current, order: next };
       });
     },
     [],
@@ -5063,9 +5048,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         draggedMasterPanel ??
         (event.dataTransfer.getData("text/plain") as MasterPanelId);
       if (!sourceId) return;
-      setGmPanelOrder((current) =>
-        movePanelInOrder(current, sourceId, targetId),
-      );
+      setGmLayoutConfig((current) => ({
+        ...current,
+        order: movePanelInOrder(current.order, sourceId, targetId),
+      }));
       setDraggedMasterPanel(null);
       setDragOverMasterPanel(null);
     },
@@ -5079,14 +5065,26 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     ) => {
       const options = getMasterPanelDefinition(panelId).allowedSizes;
       const nextSize = options[Math.max(0, Math.min(options.length - 1, width))];
-      setGmPanelSizes((current) => ({ ...current, [panelId]: nextSize }));
+      setGmLayoutConfig((current) => ({
+        ...current,
+        panels: {
+          ...current.panels,
+          [panelId]: { size: nextSize },
+        },
+      }));
     },
     [],
   );
 
   const handleSetLayoutPanelSize = useCallback(
     (panelId: MasterPanelId, size: MasterLayoutSize) => {
-      setGmPanelSizes((current) => ({ ...current, [panelId]: size }));
+      setGmLayoutConfig((current) => ({
+        ...current,
+        panels: {
+          ...current.panels,
+          [panelId]: { size },
+        },
+      }));
     },
     [],
   );
