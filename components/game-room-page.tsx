@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -16,11 +15,19 @@ import { LevelUpBanner } from "@/components/level-up-banner";
 import { LevelUpDrawer } from "@/components/level-up-drawer";
 import { MasterLayoutEditor } from "@/components/master-layout-editor";
 import { MasterWorkspaceHeader } from "@/components/master-workspace-header";
+import { JoinGate } from "@/components/room/join/join-gate";
+import { RoomHeader } from "@/components/room/shell/room-header";
+import { RoomStatusGrid } from "@/components/room/shell/room-status-grid";
 import {
   type LayoutConfig as MasterLayoutConfig,
   type MasterPanelSize as MasterLayoutSize,
   normalizeSavedLayoutConfig,
 } from "@/lib/master-panel-layout";
+import {
+  buildSavedRoomState,
+  getCharacterLibraryStorageKey,
+  getRoomStorageKey,
+} from "@/lib/room/storage";
 import {
   applyXp,
   buildLevelUpPreview,
@@ -287,8 +294,6 @@ const MAX_GRID = 99;
 const DEFAULT_TERRAIN = "#0f172a";
 const roomAccessRegistry = new Map<string, RoomAccessState>();
 
-const STORAGE_PREFIX = "dnd-me-room:";
-const CHARACTER_LIBRARY_PREFIX = "dnd-me-character-library:";
 const DEFAULT_WIDGET_URL = "https://tychmaps.com/waterdeep/";
 
 type MasterPanelId = "admin" | "tokens" | "party" | "initiative" | "tools";
@@ -2405,14 +2410,6 @@ function isCellVisibleToPlayers(x: number, y: number, tokens: RoomToken[]) {
   });
 }
 
-function getStorageKey(roomId: string) {
-  return `${STORAGE_PREFIX}${roomId}`;
-}
-
-function getCharacterLibraryKey(roomId: string) {
-  return `${CHARACTER_LIBRARY_PREFIX}${roomId}`;
-}
-
 function createEmptyInitiativeState(): InitiativeState {
   return {
     active: false,
@@ -2433,38 +2430,6 @@ function normalizeToken(token: RoomToken): RoomToken {
 
 function getStatusMeta(status: TokenStatusKey) {
   return tokenStatusCatalog.find((item) => item.key === status);
-}
-
-function buildSavedRoomState({
-  mapName,
-  mapState,
-  savedMaps,
-  activeSavedMapId,
-  widgetUrl,
-  useFogOfWar,
-  useSharedGmMapForPlayers,
-  mainMapSnapshot,
-  tokens,
-  sheets,
-  journal,
-  initiative,
-  gmLayout,
-}: SavedRoomState): SavedRoomState {
-  return {
-    mapName,
-    mapState,
-    savedMaps,
-    activeSavedMapId,
-    widgetUrl,
-    useFogOfWar,
-    useSharedGmMapForPlayers,
-    mainMapSnapshot,
-    tokens,
-    sheets,
-    journal,
-    initiative,
-    gmLayout,
-  };
 }
 
 function getInitiativeModifier(token: RoomToken, sheets: CharacterSheet[]) {
@@ -2583,14 +2548,14 @@ function CompactSection({
 }) {
   return (
     <details
-      className={`card group overflow-hidden ${className ?? ""}`}
+      className={`arcane-panel group overflow-hidden ${className ?? ""}`}
       open={defaultOpen}
     >
       <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-4 marker:content-none">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold text-white">{title}</h2>
-            {badge ? <span className="badge">{badge}</span> : null}
+            <h2 className="text-base font-semibold text-parchment-100">{title}</h2>
+            {badge ? <span className="badge border-ember-300/30 bg-ember-400/10 text-ember-200">{badge}</span> : null}
           </div>
           {description ? (
             <p className="mt-1 text-sm text-slate-400">{description}</p>
@@ -2606,7 +2571,7 @@ function CompactSection({
 }
 
 function boardButtonClass(isActive: boolean) {
-  return `rounded-full border px-3 py-2 text-sm ${isActive ? "border-fuchsia-400 bg-fuchsia-500/15 text-white" : "border-white/10 text-slate-300"}`;
+  return `rounded-full border px-3 py-2 text-sm transition ${isActive ? "border-ember-300/60 bg-ember-400/15 text-ember-100 shadow-ember-glow" : "border-white/10 text-slate-300 hover:border-rune-400/40 hover:text-white"}`;
 }
 
 const statLabels: Array<{ key: keyof CharacterStats; label: string }> = [
@@ -2830,25 +2795,26 @@ function Board({
   const minWidth = Math.max(600, cols * 44);
 
   return (
-    <div className="card p-4">
+    <div className="arcane-panel p-4">
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-white">{title}</h2>
+          <div className="eyebrow">Тактическая карта</div>
+          <h2 className="mt-1 text-lg font-semibold text-parchment-100">{title}</h2>
           <p className="text-sm text-slate-400">{subtitle}</p>
         </div>
-        <span className="badge">
+        <span className="badge border-rune-400/30 bg-rune-500/10 text-rune-100">
           {cols}×{rows}
         </span>
       </div>
 
-      <div className="overflow-auto rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+      <div className="overflow-auto rounded-3xl border border-white/10 bg-ink-950/80 p-3 shadow-inner">
         <div className="relative">
           {showZoomOverlay ? (
-            <div className="absolute right-2 top-2 z-20 flex items-center gap-2 rounded-xl border border-white/15 bg-slate-950/85 px-2 py-2 backdrop-blur">
+            <div className="absolute right-2 top-2 z-20 flex items-center gap-2 rounded-2xl border border-white/15 bg-ink-950/90 px-2 py-2 shadow-rune-glow backdrop-blur">
               <button
                 type="button"
                 onClick={onZoomOut}
-                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-100"
+                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-100 transition hover:border-rune-400/50"
               >
                 −
               </button>
@@ -2863,14 +2829,14 @@ function Board({
               <button
                 type="button"
                 onClick={onZoomIn}
-                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-100"
+                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-100 transition hover:border-rune-400/50"
               >
                 +
               </button>
               <button
                 type="button"
                 onClick={onZoomFit}
-                className="rounded-lg border border-white/15 px-2 py-1 text-[11px] text-slate-200"
+                className="rounded-lg border border-white/15 px-2 py-1 text-[11px] text-slate-200 transition hover:border-rune-400/50"
               >
                 fit
               </button>
@@ -2878,7 +2844,7 @@ function Board({
                 <button
                   type="button"
                   onClick={onReturnToMain}
-                  className="rounded-lg border border-emerald-300/30 px-2 py-1 text-[11px] text-emerald-200"
+                  className="rounded-lg border border-emerald-300/30 px-2 py-1 text-[11px] text-emerald-200 transition hover:border-emerald-300/70"
                 >
                   main
                 </button>
@@ -2888,7 +2854,7 @@ function Board({
           <div
             id={boardId}
             onPointerDown={onBoardPointerDown}
-            className="relative touch-none select-none overflow-hidden rounded-2xl border border-white/10 bg-slate-900"
+            className="relative touch-none select-none overflow-hidden rounded-3xl border border-white/10 bg-slate-900"
           style={{
             display: "grid",
             gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
@@ -3394,7 +3360,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   );
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(getStorageKey(roomId));
+    const stored = window.localStorage.getItem(getRoomStorageKey(roomId));
     if (!stored) {
       setIsLoadedFromStorage(true);
       return;
@@ -3490,7 +3456,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       gmLayout: gmLayoutConfig,
     });
     try {
-      window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
+      window.localStorage.setItem(getRoomStorageKey(roomId), JSON.stringify(payload));
       setSaveState("saved");
       setLastSavedAt(nowTime());
     } catch {
@@ -3536,7 +3502,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   }, [activeSavedMapId, mapName, mapState]);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(getCharacterLibraryKey(roomId));
+    const stored = window.localStorage.getItem(getCharacterLibraryStorageKey(roomId));
     if (!stored) return;
     try {
       setSavedCharacters(JSON.parse(stored) as SavedCharacterPreset[]);
@@ -3547,7 +3513,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
   useEffect(() => {
     window.localStorage.setItem(
-      getCharacterLibraryKey(roomId),
+      getCharacterLibraryStorageKey(roomId),
       JSON.stringify(savedCharacters),
     );
   }, [roomId, savedCharacters]);
@@ -4161,7 +4127,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         gmLayout: gmLayoutConfig,
       });
       window.localStorage.setItem(
-        getStorageKey(roomId),
+        getRoomStorageKey(roomId),
         JSON.stringify(payload),
       );
     }
@@ -4198,7 +4164,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       initiative,
       gmLayout: gmLayoutConfig,
     });
-    window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(payload));
+    window.localStorage.setItem(getRoomStorageKey(roomId), JSON.stringify(payload));
     addJournalEntry(
       "save",
       `Карта «${nextPreset.name}» сохранена локально для комнаты ${roomId} как новая вкладка.`,
@@ -5514,69 +5480,24 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   return (
     <div className="min-h-screen px-4 py-4 md:px-6">
       <div className="mx-auto flex max-w-[1800px] flex-col gap-4">
-        <header className="card flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="text-sm text-slate-400">Комната / {roomId}</div>
-            <h1 className="text-2xl font-semibold text-white">
-              Комната мастера с двумя картами и видимостью игроков
-            </h1>
-            <p className="mt-1 text-sm text-slate-400">
-              Мастер видит игровую карту и скрытую карту для тумана войны, НПС и
-              секретов. Лут и события теперь ведут на конкретные ссылки dnd.su,
-              а карта сохраняется локально в браузере.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200"
-            >
-              На главную
-            </Link>
-            <button
-              onClick={handleCopyInviteLink}
-              className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100"
-            >
-              {inviteCopied ? "Ссылка скопирована" : "Копировать ссылку-приглашение"}
-            </button>
-            <span className="rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300">
-              Сохранение:{" "}
-              {saveState === "error"
-                ? "ошибка"
-                : lastSavedAt
-                  ? `последнее в ${lastSavedAt}`
-                  : "ожидание"}
-            </span>
-            {role === "gm" || joinStep !== "ready" ? (
-              <>
-                <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
-                  Загрузить карту
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleUploadMap}
-                  />
-                </label>
-                <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">
-                  Загрузить JSON
-                  <input
-                    type="file"
-                    accept="application/json"
-                    className="hidden"
-                    onChange={handleImportMapJson}
-                  />
-                </label>
-                <button
-                  onClick={handleExportMapJson}
-                  className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950"
-                >
-                  Сохранить JSON
-                </button>
-              </>
-            ) : null}
-          </div>
-        </header>
+        <RoomHeader
+          roomId={roomId}
+          title="Arcane Table: мастерская сцены"
+          description="Две карты, видимость игроков, токены, лут, события и журнал собраны в один рабочий стол. Состояние пока сохраняется локально и экспортируется JSON-файлом."
+          inviteCopied={inviteCopied}
+          saveLabel={
+            saveState === "error"
+              ? "ошибка"
+              : lastSavedAt
+                ? `последнее в ${lastSavedAt}`
+                : "ожидание"
+          }
+          canManageFiles={role === "gm" || joinStep !== "ready"}
+          onCopyInviteLink={handleCopyInviteLink}
+          onUploadMap={handleUploadMap}
+          onImportMapJson={handleImportMapJson}
+          onExportMapJson={handleExportMapJson}
+        />
 
         {role === "gm" || joinStep !== "ready" ? (
           <CompactSection
@@ -5647,142 +5568,21 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         ) : null}
 
         {joinStep !== "ready" ? (
-          <section className="grid gap-4 lg:grid-cols-2">
-            <div className="card p-6">
-              <span className="badge">Вход</span>
-              <h2 className="mt-4 text-2xl font-semibold text-white">
-                Одна комната, один пароль и режим наблюдателя
-              </h2>
-              <p className="mt-3 text-sm text-slate-300">
-                Сначала выберите роль, затем войдите по паролю. Первый вход
-                мастером создаёт комнату, остальные пользователи заходят как
-                игроки или наблюдатели.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2 text-sm">
-                <button
-                  type="button"
-                  onClick={() => setJoinIntent("gm")}
-                  className={boardButtonClass(joinIntent === "gm")}
-                >
-                  Войти как мастер
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setJoinIntent("player")}
-                  className={boardButtonClass(joinIntent === "player")}
-                >
-                  Войти как игрок
-                </button>
-                <button
-                  type="button"
-                  onClick={handleJoinAsSpectator}
-                  className="rounded-full border border-white/15 px-5 py-2 text-sm font-medium text-slate-100"
-                >
-                  Войти наблюдателем
-                </button>
-              </div>
-              <div className="mt-3 text-xs text-slate-400">
-                {joinIntent === "gm"
-                  ? "Роль мастера доступна только для первого входа в комнату."
-                  : "Игроку нужен существующий пароль комнаты и лист персонажа."}
-              </div>
-              <div className="mt-6 grid gap-3 md:grid-cols-2">
-                <input
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  placeholder="Ваше имя"
-                  className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
-                />
-                <input
-                  value={passwordInput}
-                  onChange={(event) => setPasswordInput(event.target.value)}
-                  type="password"
-                  placeholder="Пароль комнаты"
-                  className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white"
-                />
-              </div>
-              {authError ? (
-                <div className="mt-3 text-sm text-rose-300">{authError}</div>
-              ) : null}
-              <button
-                onClick={() => handleRoomAuth(joinIntent ?? undefined)}
-                className="mt-5 rounded-full bg-fuchsia-500 px-5 py-3 text-sm font-medium text-white"
-              >
-                {joinIntent === "gm"
-                  ? "Создать комнату как мастер"
-                  : "Войти в комнату как игрок"}
-              </button>
-            </div>
-
-            <div className="card p-6">
-              {role === "player" && joinStep === "player-sheet" ? (
-                <>
-                  <span className="badge">Лист игрока</span>
-                  <h2 className="mt-4 text-2xl font-semibold text-white">
-                    Выберите, как добавить персонажа
-                  </h2>
-                  <div className="mt-5 space-y-4 text-sm text-slate-300">
-                    <button
-                      onClick={createPlayerCharacter}
-                      className="w-full rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-4 text-left"
-                    >
-                      <div className="font-medium text-white">
-                        Заполнить лист в комнате
-                      </div>
-                      <div className="mt-1 text-slate-300">
-                        Создаётся пустой шаблон персонажа, который игрок
-                        редактирует вручную.
-                      </div>
-                    </button>
-                    <label className="block cursor-pointer rounded-2xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-4 text-left">
-                      <div className="font-medium text-white">
-                        Залить JSON с longstoryshort.app
-                      </div>
-                      <div className="mt-1 text-slate-300">
-                        Загружается JSON-экспорт цифрового листа, затем он
-                        превращается в токен и лист персонажа.
-                      </div>
-                      <input
-                        type="file"
-                        accept="application/json"
-                        className="hidden"
-                        onChange={handleImportCharacterJson}
-                      />
-                    </label>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <span className="badge">Роли</span>
-                  <div className="mt-4 space-y-3 text-sm text-slate-300">
-                    <div className="rounded-2xl border border-white/10 px-4 py-3">
-                      <div className="font-medium text-white">Мастер</div>
-                      <div className="mt-1">
-                        Задаёт размер карты, сохраняет карту, настраивает обзор
-                        игроков, управляет публичной и скрытой картой отдельно.
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 px-4 py-3">
-                      <div className="font-medium text-white">Игрок</div>
-                      <div className="mt-1">
-                        Заходит по тому же паролю, импортирует лист или
-                        заполняет его вручную, затем управляет только своим
-                        токеном.
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 px-4 py-3">
-                      <div className="font-medium text-white">Наблюдатель</div>
-                      <div className="mt-1">
-                        Подключается в режиме только чтения без создания персонажа:
-                        можно смотреть карту, инициативу и журнал, но нельзя
-                        двигать токены и менять состояние комнаты.
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </section>
+          <JoinGate
+            role={role}
+            joinStep={joinStep}
+            joinIntent={joinIntent}
+            displayName={displayName}
+            passwordInput={passwordInput}
+            authError={authError}
+            onJoinIntentChange={setJoinIntent}
+            onDisplayNameChange={setDisplayName}
+            onPasswordInputChange={setPasswordInput}
+            onJoinAsSpectator={handleJoinAsSpectator}
+            onRoomAuth={handleRoomAuth}
+            onCreatePlayerCharacter={createPlayerCharacter}
+            onImportCharacterJson={handleImportCharacterJson}
+          />
         ) : null}
 
         {joinStep === "ready" ? (
@@ -5816,68 +5616,18 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </section>
         ) : null}
 
-        <section
-          className={`grid gap-3 ${role === "gm" ? "md:grid-cols-3 xl:grid-cols-6" : "md:grid-cols-2 xl:grid-cols-5"}`}
-        >
-          <div className="card px-4 py-3">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              Карта
-            </div>
-            <div className="mt-1 truncate text-base font-semibold text-white">
-              {mapName}
-            </div>
-          </div>
-          <div className="card px-4 py-3">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              Роль
-            </div>
-            <div className="mt-1 text-base font-semibold text-white">
-              {role === "gm"
-                ? "Мастер"
-                : role === "player"
-                  ? "Игрок"
-                  : role === "spectator"
-                    ? "Наблюдатель"
-                    : "Не выбрана"}
-            </div>
-          </div>
-          {role === "gm" ? (
-            <div className="card px-4 py-3">
-              <div className="text-xs uppercase tracking-wide text-slate-500">
-                Пароль
-              </div>
-              <div className="mt-1 text-base font-semibold text-white">
-                {roomPassword ? "••••••••" : "Не задан"}
-              </div>
-            </div>
-          ) : null}
-          <div className="card px-4 py-3">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              Активный токен
-            </div>
-            <div className="mt-1 truncate text-base font-semibold text-white">
-              {selectedToken?.name ?? "—"}
-            </div>
-          </div>
-          <div className="card px-4 py-3">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              Масштаб
-            </div>
-            <div className="mt-1 text-base font-semibold text-white">
-              {Math.round(zoom * 100)}%
-            </div>
-          </div>
-          <div className="card px-4 py-3">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              Обзор
-            </div>
-            <div className="mt-1 truncate text-sm font-medium text-slate-200">
-              {playerTokens
-                .map((token) => `${token.name} ${token.visionRadius ?? 3}`)
-                .join(" • ") || "нет игроков"}
-            </div>
-          </div>
-        </section>
+        <RoomStatusGrid
+          role={role}
+          mapName={mapName}
+          roomPassword={roomPassword}
+          selectedTokenName={selectedToken?.name ?? "—"}
+          zoomPercent={Math.round(zoom * 100)}
+          playerVisionLabel={
+            playerTokens
+              .map((token) => `${token.name} ${token.visionRadius ?? 3}`)
+              .join(" • ") || "нет игроков"
+          }
+        />
 
         {role === "gm" ? (
           <MasterWorkspaceHeader

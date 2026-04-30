@@ -50,27 +50,27 @@ export function LevelUpDrawer({
       onClose={onClose}
       placement="right"
       zIndexClass="z-[80]"
-      panelClassName="h-full w-full max-w-3xl overflow-hidden border-l border-white/10 bg-slate-950"
+      panelClassName="h-full w-full max-w-3xl overflow-hidden border-l border-white/10 bg-ink-950"
       contentClassName="h-full overflow-y-auto p-5"
     >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">Повышение уровня</div>
-            <h2 className="mt-1 text-2xl font-semibold text-white">Пошаговое повышение уровня</h2>
+            <div className="eyebrow">Повышение уровня</div>
+            <h2 className="mt-1 text-2xl font-semibold text-parchment-100">Пошаговое повышение уровня</h2>
           </div>
-          <button type="button" onClick={onClose} className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-200">Закрыть</button>
+          <button type="button" onClick={onClose} className="arcane-button px-3 py-1 text-sm">Закрыть</button>
         </div>
 
         <div className="mt-5 space-y-5">
-          <section className="rounded-3xl border border-white/10 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Шаг 1 · выбрать путь</div>
+          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="eyebrow">Шаг 1 · выбрать путь</div>
             <div className="mt-3 grid gap-2 md:grid-cols-3">
               {classes.map((classRef) => {
                 const option = preview.multiclassOptions.find((item) => item.item.classId === classRef.id);
                 const available = classRef.id === draft.targetClassId || option?.available;
                 const reasons = option?.reasons.map((item) => item.message) ?? [];
                 return (
-                  <button key={classRef.id} type="button" onClick={() => onChange({ targetClassId: classRef.id, isMulticlass: classRef.id !== 'Wizard' && classRef.id !== draft.targetClassId ? true : classRef.id !== draft.targetClassId })} className={`rounded-2xl border px-3 py-3 text-left ${draft.targetClassId === classRef.id ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-white/8 bg-slate-900/40'}`}>
+                  <button key={classRef.id} type="button" onClick={() => onChange({ targetClassId: classRef.id, isMulticlass: classRef.id !== 'Wizard' && classRef.id !== draft.targetClassId ? true : classRef.id !== draft.targetClassId })} className={`rounded-2xl border px-3 py-3 text-left ${draft.targetClassId === classRef.id ? 'border-rune-400/40 bg-rune-500/10' : 'border-white/10 bg-ink-900/40'}`}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium text-white">{classRef.name}</span>
                       <AvailabilityBadge available={Boolean(available)} reasons={reasons} />
@@ -87,15 +87,15 @@ export function LevelUpDrawer({
 
           <LevelUpSummary preview={preview} />
 
-          <section className="rounded-3xl border border-white/10 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Шаг 3 · выбрать опции</div>
+          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="eyebrow">Шаг 3 · выбрать опции</div>
             <div className="mt-4 space-y-4">
               {preview.subclassOptions.length ? (
                 <div>
                   <div className="mb-2 text-sm font-medium text-white">Подкласс</div>
                   <div className="grid gap-2 md:grid-cols-2">
                     {currentSubclassOptions.map((subclass) => (
-                      <button key={subclass.id} type="button" onClick={() => onChange({ selectedSubclassId: subclass.id })} className={`rounded-2xl border px-3 py-3 text-left ${draft.selectedSubclassId === subclass.id ? 'border-fuchsia-400/40 bg-fuchsia-500/10' : 'border-white/8 bg-slate-900/40'}`}>
+                      <button key={subclass.id} type="button" onClick={() => onChange({ selectedSubclassId: subclass.id })} className={`rounded-2xl border px-3 py-3 text-left ${draft.selectedSubclassId === subclass.id ? 'border-arcane-400/40 bg-arcane-500/10' : 'border-white/10 bg-ink-900/40'}`}>
                         <div className="font-medium text-white">{subclass.name}</div>
                         <div className="mt-1 text-xs text-slate-400">{Object.values(subclass.featuresByLevel).flat().slice(0, 2).join(', ')}</div>
                         <div className="mt-2">
@@ -133,7 +133,7 @@ export function LevelUpDrawer({
                     {preview.spells.map((spell) => {
                       const selected = draft.selectedSpellIds.includes(spell.item.id);
                       return (
-                        <button key={spell.item.id} type="button" onClick={() => onChange({ selectedSpellIds: selected ? draft.selectedSpellIds.filter((id) => id !== spell.item.id) : [...draft.selectedSpellIds, spell.item.id] })} className={`rounded-2xl border px-3 py-3 text-left ${selected ? 'border-violet-400/40 bg-violet-500/10' : 'border-white/8 bg-slate-900/40'}`}>
+                        <button key={spell.item.id} type="button" onClick={() => onChange({ selectedSpellIds: selected ? draft.selectedSpellIds.filter((id) => id !== spell.item.id) : [...draft.selectedSpellIds, spell.item.id] })} className={`rounded-2xl border px-3 py-3 text-left ${selected ? 'border-arcane-400/40 bg-arcane-500/10' : 'border-white/10 bg-ink-900/40'}`}>
                           <div className="flex items-center justify-between gap-2">
                             <div className="font-medium text-white">{spell.item.name}</div>
                             <span className="text-xs text-slate-400">{spell.item.level === 0 ? 'Заговор' : `${spell.item.level} круг`}</span>
@@ -160,16 +160,16 @@ export function LevelUpDrawer({
             </div>
           </section>
 
-          <section className="rounded-3xl border border-white/10 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Шаг 4 · подтвердить</div>
+          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="eyebrow">Шаг 4 · подтвердить</div>
             {hasBlocking ? (
               <div className="mt-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-100">Перед подтверждением завершите обязательные выборы: {preview.missingSelections.concat(preview.blockedOptions.map((item) => item.message)).join('; ')}</div>
             ) : (
               <div className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-3 text-sm text-emerald-100">Все обязательные выборы сделаны. Можно подтверждать.</div>
             )}
             <div className="mt-4 flex gap-3">
-              <button type="button" onClick={onConfirm} disabled={hasBlocking} className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-medium text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">Подтвердить повышение</button>
-              <button type="button" onClick={onClose} className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200">Сохранить как draft и закрыть</button>
+              <button type="button" onClick={onConfirm} disabled={hasBlocking} className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-medium text-ink-950 disabled:cursor-not-allowed disabled:opacity-50">Подтвердить повышение</button>
+              <button type="button" onClick={onClose} className="arcane-button px-4 py-2">Сохранить как draft и закрыть</button>
             </div>
           </section>
         </div>

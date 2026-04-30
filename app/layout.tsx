@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'D&D Game Table MVP',
+  title: 'Arcane Table',
   description:
-    'MVP веб-платформы для онлайн-сессий D&D: карта, токены, карточки персонажей, лут, события и встроенная справка.',
+    'Dark fantasy virtual tabletop для онлайн-сессий D&D: карта, токены, персонажи, мастерская сцены, журнал и прогрессия.',
 };
 
 export default function RootLayout({

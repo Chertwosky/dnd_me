@@ -36,6 +36,7 @@ test("normalizes layout config and restores invalid or missing panel sizes", () 
       tokens: { size: "compact" },
       party: { size: "compact" as never },
       initiative: { size: "regular" },
+      tools: { size: "full" },
     },
   });
 

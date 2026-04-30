@@ -3,13 +3,16 @@
 @tailwind utilities;
 
 :root {
-  --background: #07111f;
-  --foreground: #f8fafc;
-  --muted: #94a3b8;
-  --panel: rgba(15, 23, 42, 0.88);
-  --panel-strong: #0f172a;
-  --accent: #a855f7;
+  --background: #030712;
+  --foreground: #fff7ed;
+  --muted: #a8b3c7;
+  --panel: rgba(7, 17, 31, 0.82);
+  --panel-strong: #0b1220;
+  --panel-soft: rgba(15, 23, 42, 0.62);
+  --accent: #8b5cf6;
   --accent-2: #22d3ee;
+  --accent-3: #f59e0b;
+  --danger: #fb7185;
 }
 
 html {
@@ -18,11 +21,15 @@ html {
 
 body {
   background:
-    radial-gradient(circle at top, rgba(168, 85, 247, 0.18), transparent 30%),
-    radial-gradient(circle at right, rgba(34, 211, 238, 0.12), transparent 20%),
-    linear-gradient(180deg, #020617 0%, #07111f 100%);
+    radial-gradient(circle at 12% 10%, rgba(139, 92, 246, 0.24), transparent 30%),
+    radial-gradient(circle at 88% 12%, rgba(34, 211, 238, 0.16), transparent 26%),
+    radial-gradient(circle at 50% 100%, rgba(245, 158, 11, 0.08), transparent 32%),
+    linear-gradient(180deg, #030712 0%, #07111f 54%, #020617 100%);
   color: var(--foreground);
   min-height: 100vh;
+  font-feature-settings:
+    "liga" 1,
+    "calt" 1;
 }
 
 * {
@@ -31,15 +38,39 @@ body {
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-white/10 bg-slate-950/60 backdrop-blur;
+    @apply rounded-3xl border border-white/10 bg-ink-950/70 shadow-arcane-panel backdrop-blur;
   }
 
   .badge {
-    @apply inline-flex items-center rounded-full border border-white/10 px-3 py-1 text-xs font-medium text-slate-200;
+    @apply inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-parchment-100;
   }
 
   .section-title {
-    @apply text-2xl font-semibold tracking-tight text-white md:text-3xl;
+    @apply text-2xl font-semibold tracking-tight text-parchment-100 md:text-3xl;
+  }
+
+  .arcane-panel {
+    @apply rounded-3xl border border-white/10 bg-panel-sheen bg-ink-950/75 shadow-arcane-panel backdrop-blur;
+  }
+
+  .arcane-button {
+    @apply inline-flex items-center justify-center rounded-full border border-white/10 px-5 py-2.5 text-sm font-semibold text-parchment-100 transition hover:border-rune-400/50 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .arcane-button-primary {
+    @apply border-ember-300/40 bg-gradient-to-r from-ember-400 to-amber-300 text-ink-950 shadow-ember-glow hover:border-ember-200 hover:from-ember-300 hover:to-parchment-200;
+  }
+
+  .arcane-button-secondary {
+    @apply border-rune-400/30 bg-rune-500/10 text-rune-100 shadow-rune-glow;
+  }
+
+  .arcane-input {
+    @apply rounded-2xl border border-white/10 bg-ink-950/70 px-4 py-3 text-sm text-parchment-100 outline-none transition placeholder:text-slate-500 focus:border-rune-400/60 focus:ring-2 focus:ring-rune-400/20;
+  }
+
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.24em] text-ember-300/80;
   }
 }
 
@@ -105,9 +136,9 @@ body {
 .master-workspace-header {
   border: 1px solid rgba(148, 163, 184, 0.18);
   background:
-    radial-gradient(circle at 20% 0%, rgba(192, 132, 252, 0.12), transparent 45%),
-    radial-gradient(circle at 90% 100%, rgba(34, 211, 238, 0.09), transparent 50%),
-    rgba(2, 6, 23, 0.78);
+    radial-gradient(circle at 20% 0%, rgba(139, 92, 246, 0.2), transparent 45%),
+    radial-gradient(circle at 90% 100%, rgba(34, 211, 238, 0.13), transparent 50%),
+    linear-gradient(135deg, rgba(7, 17, 31, 0.92), rgba(2, 6, 23, 0.84));
 }
 
 .master-workspace-grid > * {
@@ -139,18 +170,18 @@ body {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  border-radius: 1rem;
+  border-radius: 1.25rem;
   padding: 0.25rem;
   background: linear-gradient(
     180deg,
-    rgba(15, 23, 42, 0.65) 0%,
-    rgba(2, 6, 23, 0.7) 100%
+    rgba(139, 92, 246, 0.12) 0%,
+    rgba(2, 6, 23, 0.72) 100%
   );
   border: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .master-panel-shell--desk {
-  box-shadow: 0 8px 28px rgba(2, 6, 23, 0.35);
+  box-shadow: 0 18px 48px rgba(2, 6, 23, 0.42);
 }
 
 @media (min-width: 768px) {
