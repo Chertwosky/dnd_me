@@ -184,6 +184,67 @@ body {
   box-shadow: 0 18px 48px rgba(2, 6, 23, 0.42);
 }
 
+.master-side-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 55;
+  height: 100dvh;
+  max-width: 92vw;
+  overflow-y: auto;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    radial-gradient(circle at 0% 15%, rgba(139, 92, 246, 0.16), transparent 32%),
+    linear-gradient(180deg, rgba(3, 7, 18, 0.97), rgba(7, 17, 31, 0.96));
+  box-shadow: -28px 0 72px rgba(2, 6, 23, 0.45);
+  backdrop-filter: blur(18px);
+  transition: transform 260ms ease;
+}
+
+.master-side-drawer__handle {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  z-index: 65;
+  display: flex;
+  height: 5.5rem;
+  width: 1.75rem;
+  transform: translateY(-50%);
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-right: 0;
+  border-radius: 999px 0 0 999px;
+  background: rgba(2, 6, 23, 0.22);
+  color: rgba(255, 247, 237, 0.72);
+  backdrop-filter: blur(8px);
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    width 180ms ease;
+}
+
+.master-side-drawer__handle:hover,
+.master-side-drawer__handle:focus-visible {
+  width: 2.25rem;
+  background: rgba(15, 23, 42, 0.58);
+  color: rgba(255, 247, 237, 0.96);
+  outline: none;
+}
+
+.master-side-drawer__controls {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 60;
+  max-width: calc(92vw - 2rem);
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(2, 6, 23, 0.34);
+  padding: 0.75rem;
+  backdrop-filter: blur(12px);
+}
+
 @media (min-width: 768px) {
   .master-workspace-grid {
     grid-template-columns: repeat(6, minmax(0, 1fr));

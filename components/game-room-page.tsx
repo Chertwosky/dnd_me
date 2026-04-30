@@ -15,6 +15,7 @@ import { LevelUpBanner } from "@/components/level-up-banner";
 import { LevelUpDrawer } from "@/components/level-up-drawer";
 import { MasterLayoutEditor } from "@/components/master-layout-editor";
 import { MasterWorkspaceHeader } from "@/components/master-workspace-header";
+import { MasterSideDrawer } from "@/components/room/gm/master-side-drawer";
 import { JoinGate } from "@/components/room/join/join-gate";
 import { RoomHeader } from "@/components/room/shell/room-header";
 import { RoomStatusGrid } from "@/components/room/shell/room-status-grid";
@@ -5662,7 +5663,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   {masterPanelModels
                   .filter(
                     (panel) =>
-                      (panel.id === "admin" || panel.id === "tokens") &&
+                      panel.id === "admin" &&
                       panel.visibility &&
                       panel.matchesSearch,
                   )
@@ -5680,24 +5681,10 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         setDragOverMasterPanel(null);
                       }}
                       style={{
-                        ...(panelId === "admin"
-                          ? {
-                              order: gmPanelOrder.indexOf(panelId),
-                              gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths[panelId])} / span ${getMasterPanelGridSpan(gmPanelWidths[panelId])}`,
-                            }
-                          : role === "gm"
-                            ? { width: `min(92vw, ${creaturesDrawerWidth}px)` }
-                            : {}),
+                        order: gmPanelOrder.indexOf(panelId),
+                        gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths[panelId])} / span ${getMasterPanelGridSpan(gmPanelWidths[panelId])}`,
                       }}
-                      className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === panelId ? "ring-2 ring-fuchsia-400/60" : ""} ${
-                        panelId === "tokens" && role === "gm"
-                          ? `fixed right-4 top-16 z-50 h-[calc(100vh-5rem)] overflow-y-auto rounded-3xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${
-                              isCreaturesDrawerOpen && creaturesDrawerTab === "tokens"
-                                ? "translate-x-0"
-                                : "translate-x-[120%]"
-                            }`
-                          : ""
-                      }`}
+                      className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === panelId ? "ring-2 ring-fuchsia-400/60" : ""}`}
                     >
                       <div
                         draggable={role === "gm"}
@@ -6274,7 +6261,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   setDraggedMasterPanel(null);
                   setDragOverMasterPanel(null);
                 }}
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${!masterPanelSearchMap.party ? "hidden" : ""} ${role === "gm" ? `fixed right-4 top-16 z-50 h-[calc(100vh-5rem)] overflow-y-auto rounded-3xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl backdrop-blur transition-transform duration-300 ${isCreaturesDrawerOpen && creaturesDrawerTab === "party" ? "translate-x-0" : "translate-x-[120%]"}` : ""}`}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role !== "gm" && !masterPanelSearchMap.party ? "hidden" : ""} ${role === "gm" ? `master-side-drawer p-4 pt-28 ${isCreaturesDrawerOpen && creaturesDrawerTab === "party" ? "translate-x-0" : "translate-x-full pointer-events-none"}` : ""}`}
                 style={
                   role === "gm"
                     ? { width: `min(92vw, ${creaturesDrawerWidth}px)` }
@@ -6289,55 +6276,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     role === "gm" ? "w-full min-w-0 space-y-2" : ""
                   }
                 >
-                {role === "gm" ? (
-                  <div
-                    draggable
-                    onDragStart={(event) =>
-                      handleDragStartMasterPanel("party", event)
-                    }
-                    className="flex min-w-0 cursor-grab flex-wrap items-center gap-2 rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 active:cursor-grabbing"
-                  >
-                    <span className="font-medium text-white">
-                      Панель мастера:{" "}
-                      <AdaptiveLabel
-                        full="Существа: персонажи группы"
-                        short={masterPanelShortLabels.party}
-                      />
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleMoveGmPanel("party", "up")}
-                      disabled={gmPanelOrder.indexOf("party") === 0}
-                      className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleMoveGmPanel("party", "down")}
-                      disabled={
-                        gmPanelOrder.indexOf("party") ===
-                        gmPanelOrder.length - 1
-                      }
-                      className="rounded-full border border-white/10 px-2 py-1 disabled:opacity-40"
-                    >
-                      ↓
-                    </button>
-                    <span className="text-slate-500">Ширина</span>
-                    <input
-                      type="range"
-                      min="260"
-                      max="1400"
-                      value={gmPanelWidths.party}
-                      onChange={(event) =>
-                        handleGmPanelWidthChange(
-                          "party",
-                          Number(event.target.value),
-                        )
-                      }
-                    />
-                  </div>
-                ) : null}
                 <CompactSection
                   title="Существа и персонажи группы"
                   description="Правая шторка: карточки, импорт/экспорт и управление составом группы."
@@ -8416,44 +8354,160 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           )}
         </section>
         {role === "gm" ? (
-          <div className="fixed right-4 top-24 z-[60] flex w-[min(92vw,420px)] flex-col gap-2 rounded-2xl border border-white/10 bg-slate-950/90 p-3 backdrop-blur">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsCreaturesDrawerOpen((current) => !current)}
-                className="rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+          <>
+            <MasterSideDrawer
+              open={isCreaturesDrawerOpen}
+              activeTab={creaturesDrawerTab}
+              width={creaturesDrawerWidth}
+              onOpenChange={setIsCreaturesDrawerOpen}
+              onTabChange={setCreaturesDrawerTab}
+              onWidthChange={setCreaturesDrawerWidth}
+            />
+            <aside
+              className={`master-side-drawer p-4 pt-28 ${isCreaturesDrawerOpen && creaturesDrawerTab === "tokens" ? "translate-x-0" : "translate-x-full pointer-events-none"}`}
+              style={{ width: `min(92vw, ${creaturesDrawerWidth}px)` }}
+              aria-hidden={!isCreaturesDrawerOpen || creaturesDrawerTab !== "tokens"}
+            >
+              <CompactSection
+                title="Токены"
+                description="Полный список токенов со статусами и обзором игроков."
+                badge={`${tokens.length} шт.`}
+                defaultOpen
               >
-                {isCreaturesDrawerOpen ? "Скрыть шторку существ" : "Показать шторку существ"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreaturesDrawerTab("tokens")}
-                className={boardButtonClass(creaturesDrawerTab === "tokens")}
-              >
-                Существа
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreaturesDrawerTab("party")}
-                className={boardButtonClass(creaturesDrawerTab === "party")}
-              >
-                Персонажи
-              </button>
-            </div>
-            <label className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/70 px-3 py-1.5 text-xs text-slate-300">
-              Ширина шторки
-              <input
-                type="range"
-                min="360"
-                max="980"
-                value={creaturesDrawerWidth}
-                onChange={(event) =>
-                  setCreaturesDrawerWidth(Number(event.target.value))
-                }
-                className="w-full"
-              />
-            </label>
-          </div>
+                <div className="mt-4 max-h-[calc(100dvh-14rem)] space-y-3 overflow-y-auto pr-1 text-sm">
+                  {tokens.map((token) => (
+                    <div
+                      key={token.id}
+                      className={`overflow-hidden rounded-2xl border px-3 py-3 ${selectedTokenId === token.id ? "border-cyan-400/40 bg-cyan-500/10" : "border-white/8"}`}
+                    >
+                      <button
+                        onClick={() => setSelectedTokenId(token.id)}
+                        className="w-full text-left"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-white">
+                              {token.name}
+                            </div>
+                            <div className="truncate text-slate-400">
+                              {token.kind} • {cellCoordinate(token.x, token.y)}
+                            </div>
+                          </div>
+                          <span className="max-w-[7rem] truncate text-right text-xs text-slate-300 sm:max-w-none">
+                            HP {token.hp}/{token.maxHp}
+                          </span>
+                        </div>
+                      </button>
+                      <div className="mt-3 grid gap-2 text-xs text-slate-300">
+                        <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2">
+                          <span>Скрыт от игроков</span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(token.gmOnly)}
+                            onChange={(event) =>
+                              handleTokenSetting(
+                                token.id,
+                                "gmOnly",
+                                event.target.checked,
+                              )
+                            }
+                          />
+                        </label>
+                        <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-3 py-2">
+                          <span>В скрытности (не виден)</span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(token.hiddenFromPlayers)}
+                            onChange={(event) =>
+                              handleTokenSetting(
+                                token.id,
+                                "hiddenFromPlayers",
+                                event.target.checked,
+                              )
+                            }
+                          />
+                        </label>
+                        <label className="rounded-xl border border-white/10 px-3 py-2">
+                          <div className="mb-1">Токен-переход по карте</div>
+                          <select
+                            value={token.linkedMapId ?? ""}
+                            onChange={(event) =>
+                              handleTokenMapLinkChange(token.id, event.target.value)
+                            }
+                            className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-2 py-1 text-xs text-white"
+                          >
+                            <option value="">нет</option>
+                            <option value="main">Основная карта</option>
+                            {savedMaps.map((preset) => (
+                              <option
+                                key={`token-link-${token.id}-${preset.id}`}
+                                value={preset.id}
+                              >
+                                {preset.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {token.kind === "player" ? (
+                          <label className="rounded-xl border border-white/10 px-3 py-2">
+                            <div className="mb-2">
+                              Обзор игрока: {token.visionRadius ?? 3} клетки
+                            </div>
+                            <input
+                              type="range"
+                              min="1"
+                              max="8"
+                              value={token.visionRadius ?? 3}
+                              onChange={(event) =>
+                                handleTokenSetting(
+                                  token.id,
+                                  "visionRadius",
+                                  Number(event.target.value),
+                                )
+                              }
+                              className="w-full"
+                            />
+                          </label>
+                        ) : null}
+                        {token.kind !== "object" ? (
+                          <div className="rounded-xl border border-white/10 px-3 py-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <span>Статусы и эффекты</span>
+                              <span className="text-[11px] text-slate-500">
+                                {(token.statuses ?? []).length
+                                  ? `${(token.statuses ?? []).length} active`
+                                  : "нет активных"}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {tokenStatusCatalog.map((status) => {
+                                const isActive = (token.statuses ?? []).includes(
+                                  status.key,
+                                );
+                                return (
+                                  <button
+                                    key={`${token.id}-${status.key}`}
+                                    type="button"
+                                    onClick={() =>
+                                      handleToggleTokenStatus(token.id, status.key)
+                                    }
+                                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${isActive ? status.colorClass : "border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200"}`}
+                                    title={status.description}
+                                  >
+                                    {status.short}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CompactSection>
+            </aside>
+          </>
         ) : null}
       </div>
       <MasterLayoutEditor
