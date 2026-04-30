@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type CSSProperties,
@@ -308,6 +309,13 @@ const masterPanelShortLabels: Record<MasterPanelId, string> = {
   party: "Пати",
   initiative: "Иниц.",
   tools: "Утил.",
+};
+const masterPanelIcons: Record<MasterPanelId, string> = {
+  admin: "🧭",
+  tokens: "🧩",
+  party: "👥",
+  initiative: "⚔️",
+  tools: "📜",
 };
 
 const masterPanelMeta: Record<
@@ -2506,9 +2514,25 @@ function AdaptiveLabel({
   icon?: string;
   className?: string;
 }) {
+  const labelRef = useRef<HTMLSpanElement | null>(null);
+  const [isOverflow, setIsOverflow] = useState(false);
+
+  useEffect(() => {
+    const node = labelRef.current;
+    if (!node) return;
+    const updateOverflow = () => {
+      setIsOverflow(node.scrollWidth > node.clientWidth);
+    };
+    updateOverflow();
+    const resizeObserver = new ResizeObserver(() => updateOverflow());
+    resizeObserver.observe(node);
+    return () => resizeObserver.disconnect();
+  }, [full, short, icon]);
+
   return (
     <span
-      className={`adaptive-label ${className ?? ""}`.trim()}
+      ref={labelRef}
+      className={`adaptive-label ${isOverflow ? "adaptive-label--overflow" : ""} ${className ?? ""}`.trim()}
       title={full}
       aria-label={full}
     >
@@ -2542,16 +2566,16 @@ function CompactSection({
       open={defaultOpen}
     >
       <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-4 marker:content-none">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold text-parchment-100">{title}</h2>
-            {badge ? <span className="badge border-ember-300/30 bg-ember-400/10 text-ember-200">{badge}</span> : null}
+            <h2 className="panel-text-truncate text-base font-semibold text-parchment-100" title={title} data-icon="📌">{title}</h2>
+            {badge ? <span className="badge panel-text-truncate border-ember-300/30 bg-ember-400/10 text-ember-200" title={badge} data-icon="🏷️">{badge}</span> : null}
           </div>
           {description ? (
-            <p className="mt-1 text-sm text-slate-400">{description}</p>
+            <p className="panel-text-truncate mt-1 text-sm text-slate-400" title={description} data-icon="📝">{description}</p>
           ) : null}
         </div>
-        <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 transition group-open:rotate-180">
+        <span className="panel-text-truncate rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 transition group-open:rotate-180" title="Развернуть / свернуть" data-icon="⌄">
           ⌄
         </span>
       </summary>
@@ -5686,12 +5710,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         <span className="font-medium text-white">
                           Панель мастера:{" "}
                           <AdaptiveLabel
-                            full={
-                              panelId === "admin"
-                                ? "Сцена: админ-панель"
-                                : "Существа: токены"
-                            }
+                            full={masterPanelMeta[panelId].title}
                             short={masterPanelShortLabels[panelId]}
+                            icon={masterPanelIcons[panelId]}
                           />
                         </span>
                         <button
