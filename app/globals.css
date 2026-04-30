@@ -188,11 +188,11 @@ body {
   position: fixed;
   top: 0;
   right: 0;
-  z-index: 95;
+  z-index: 140;
   height: 100dvh;
   width: clamp(360px, var(--drawer-width, 520px), 92vw);
   max-width: 92vw;
-  overflow-y: auto;
+  overflow: hidden;
   border-left: 1px solid rgba(255, 255, 255, 0.12);
   background:
     radial-gradient(circle at 0% 15%, rgba(139, 92, 246, 0.16), transparent 32%),
@@ -205,7 +205,7 @@ body {
 .master-side-drawer__backdrop {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 130;
   border: 0;
   background: rgba(2, 6, 23, 0.72);
   backdrop-filter: blur(2px);
@@ -214,8 +214,8 @@ body {
 .master-side-drawer__handle {
   position: fixed;
   top: 50%;
-  right: 0;
-  z-index: 96;
+  right: max(0.5rem, env(safe-area-inset-right));
+  z-index: 150;
   display: flex;
   height: 5.5rem;
   width: 1.75rem;
@@ -244,9 +244,9 @@ body {
 
 .master-side-drawer__controls {
   position: fixed;
-  top: 1rem;
-  right: 1rem;
-  z-index: 96;
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1rem, calc(env(safe-area-inset-right) + 1rem));
+  z-index: 150;
   width: clamp(320px, calc(var(--drawer-width, 520px) - 2rem), calc(92vw - 2rem));
   max-width: calc(92vw - 2rem);
   border-radius: 1.25rem;
