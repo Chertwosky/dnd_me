@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type DrawerTab = "tokens" | "party";
 const MASTER_SIDE_DRAWER_PANEL_ID = "master-side-drawer-panel";
@@ -8,6 +8,10 @@ const DRAWER_ICON_OPEN = "‹";
 const DRAWER_ICON_CLOSE = "›";
 const DRAWER_WIDTH_COMPACT = 480;
 const DRAWER_WIDTH_ULTRA_COMPACT = 420;
+const DRAWER_WIDTH_MIN = 360;
+const DRAWER_WIDTH_MAX_DESKTOP = 980;
+const DRAWER_WIDTH_MAX_TABLET = 760;
+const DRAWER_WIDTH_MAX_MOBILE = 560;
 
 const tabLabels: Record<DrawerTab, string> = {
   tokens: "Существа",
@@ -53,6 +57,37 @@ export function MasterSideDrawer({
   }, [open, onOpenChange]);
   const isCompact = width < DRAWER_WIDTH_COMPACT;
   const isUltraCompact = width < DRAWER_WIDTH_ULTRA_COMPACT;
+  const [drawerRangeMax, setDrawerRangeMax] = useState(DRAWER_WIDTH_MAX_DESKTOP);
+
+  useEffect(() => {
+    const updateDrawerRange = () => {
+      const viewportWidth = window.innerWidth;
+      const responsiveMax = Math.floor(viewportWidth * 0.92);
+      const breakpointMax =
+        viewportWidth < 768
+          ? DRAWER_WIDTH_MAX_MOBILE
+          : viewportWidth < 1280
+            ? DRAWER_WIDTH_MAX_TABLET
+            : DRAWER_WIDTH_MAX_DESKTOP;
+      const nextMax = Math.max(DRAWER_WIDTH_MIN, Math.min(responsiveMax, breakpointMax));
+      setDrawerRangeMax(nextMax);
+    };
+
+    updateDrawerRange();
+    window.addEventListener("resize", updateDrawerRange);
+    return () => window.removeEventListener("resize", updateDrawerRange);
+  }, []);
+
+  useEffect(() => {
+    if (width > drawerRangeMax) {
+      onWidthChange(drawerRangeMax);
+    }
+  }, [drawerRangeMax, onWidthChange, width]);
+
+  const clampedWidth = useMemo(
+    () => Math.min(Math.max(width, DRAWER_WIDTH_MIN), drawerRangeMax),
+    [drawerRangeMax, width],
+  );
 
   return (
     <>
@@ -79,11 +114,11 @@ export function MasterSideDrawer({
       <div
         id={MASTER_SIDE_DRAWER_PANEL_ID}
         className="master-side-drawer__controls"
-        style={{ width: `min(92vw, ${width}px)` }}
+        style={{ ["--drawer-width" as string]: `${clampedWidth}px` }}
         hidden={!open}
         data-state={open ? "open" : "closed"}
       >
-        <div className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
+        <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden sm:gap-2">
           {(["tokens", "party"] as const).map((tab) => (
             <button
               key={tab}
@@ -106,7 +141,7 @@ export function MasterSideDrawer({
             type="button"
             onClick={() => onOpenChange(false)}
             aria-label="Спрятать"
-            className={`ml-auto min-w-0 shrink rounded-full border border-white/10 bg-slate-950/30 py-2 text-xs text-slate-300 transition hover:border-white/25 hover:text-white ${
+            className={`ml-auto min-w-0 shrink overflow-hidden truncate rounded-full border border-white/10 bg-slate-950/30 py-2 text-xs text-slate-300 transition hover:border-white/25 hover:text-white ${
               isCompact ? "px-2" : "px-3"
             }`}
             title="Спрятать"
@@ -115,19 +150,19 @@ export function MasterSideDrawer({
           </button>
         </div>
         <label
-          className={`mt-2 flex min-w-0 items-center gap-2 rounded-full border border-white/10 bg-slate-950/35 text-xs text-slate-300 ${
+          className={`mt-2 flex min-w-0 items-center gap-2 overflow-hidden rounded-full border border-white/10 bg-slate-950/35 text-xs text-slate-300 ${
             isCompact ? "px-2 py-1.5" : "px-3 py-1.5"
           }`}
           title="Ширина"
         >
-          <span className="shrink-0" aria-hidden="true">
+          <span className="shrink-0 overflow-hidden truncate" aria-hidden="true">
             {isCompact ? "↔" : "Ширина"}
           </span>
           <input
             type="range"
-            min="360"
-            max="980"
-            value={width}
+            min={DRAWER_WIDTH_MIN}
+            max={drawerRangeMax}
+            value={Math.min(width, drawerRangeMax)}
             onChange={(event) => onWidthChange(Number(event.target.value))}
             className="min-w-0 flex-1"
             aria-label="Ширина боковой шторки"
