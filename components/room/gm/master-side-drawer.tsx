@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  DRAWER_WIDTH_MAX_DESKTOP,
   DRAWER_WIDTH_MIN,
   clampDrawerWidth,
   closeDrawer,
