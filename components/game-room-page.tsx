@@ -22,6 +22,8 @@ import { RoomStatusGrid } from "@/components/room/shell/room-status-grid";
 import {
   type LayoutConfig as MasterLayoutConfig,
   type MasterPanelSize as MasterLayoutSize,
+  getMasterPanelDefinition,
+  getMasterPanelSpanTokens,
   normalizeSavedLayoutConfig,
 } from "@/lib/master-panel-layout";
 import {
@@ -349,22 +351,8 @@ const masterGroupLabels: Record<"scene" | "creatures" | "combat" | "narrative", 
   narrative: "Нарратив",
 };
 
-function widthToPanelSize(width: number): MasterLayoutSize {
-  if (width <= 420) return "compact";
-  if (width <= 620) return "regular";
-  if (width <= 980) return "wide";
-  return "full";
-}
-
-function panelSizeToWidth(size: MasterLayoutSize): number {
-  if (size === "compact") return 360;
-  if (size === "regular") return 560;
-  if (size === "wide") return 860;
-  return 1100;
-}
-
-function getMasterPanelGridSpan(width: number) {
-  return Math.max(1, Math.min(4, Math.round(width / 320)));
+function getMasterPanelGridSpan(panelId: MasterPanelId, size: MasterLayoutSize) {
+  return getMasterPanelSpanTokens(panelId, size).xl;
 }
 
 const layerPalette: Record<LayerKind, string[]> = {
@@ -3159,28 +3147,28 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     useState<MasterPanelId | null>(null);
   const [dragOverMasterPanel, setDragOverMasterPanel] =
     useState<MasterPanelId | null>(null);
-  const [gmPanelWidths, setGmPanelWidths] = useState<
-    Record<"admin" | "tokens" | "party" | "initiative" | "tools", number>
+  const [gmPanelSizes, setGmPanelSizes] = useState<
+    Record<"admin" | "tokens" | "party" | "initiative" | "tools", MasterLayoutSize>
   >({
-    admin: 440,
-    tokens: 440,
-    party: 999,
-    initiative: 999,
-    tools: 320,
+    admin: "regular",
+    tokens: "regular",
+    party: "wide",
+    initiative: "wide",
+    tools: "full",
   });
   const gmLayoutConfig = useMemo<MasterLayoutConfig>(
     () => ({
       version: 2,
       order: gmPanelOrder,
       panels: {
-        admin: { size: widthToPanelSize(gmPanelWidths.admin) },
-        tokens: { size: widthToPanelSize(gmPanelWidths.tokens) },
-        party: { size: widthToPanelSize(gmPanelWidths.party) },
-        initiative: { size: widthToPanelSize(gmPanelWidths.initiative) },
-        tools: { size: widthToPanelSize(gmPanelWidths.tools + 320) },
+        admin: { size: gmPanelSizes.admin },
+        tokens: { size: gmPanelSizes.tokens },
+        party: { size: gmPanelSizes.party },
+        initiative: { size: gmPanelSizes.initiative },
+        tools: { size: gmPanelSizes.tools },
       },
     }),
-    [gmPanelOrder, gmPanelWidths],
+    [gmPanelOrder, gmPanelSizes],
   );
 
   const cols = mapState.cols;
@@ -3417,14 +3405,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (parsed.gmLayout) {
         const normalizedLayout = normalizeSavedLayoutConfig(parsed.gmLayout);
         setGmPanelOrder(normalizedLayout.order);
-        setGmPanelWidths((current) => ({
-          ...current,
-          admin: panelSizeToWidth(normalizedLayout.panels.admin.size),
-          tokens: panelSizeToWidth(normalizedLayout.panels.tokens.size),
-          party: panelSizeToWidth(normalizedLayout.panels.party.size),
-          initiative: panelSizeToWidth(normalizedLayout.panels.initiative.size),
-          tools: Math.max(220, panelSizeToWidth(normalizedLayout.panels.tools.size) - 320),
-        }));
+        setGmPanelSizes(normalizedLayout.panels);
         if ("panelOrder" in parsed.gmLayout || "panelWidths" in parsed.gmLayout) {
           setToasts((current) => [
             ...current,
@@ -3616,14 +3597,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         description: masterPanelMeta[panelId].description,
         visibility: panelVisibility[panelId],
         priority: gmPanelOrder.indexOf(panelId),
-        size: widthToPanelSize(gmPanelWidths[panelId]),
+        size: gmPanelSizes[panelId],
         matchesSearch:
           !query ||
           masterPanelMeta[panelId].title.toLowerCase().includes(query) ||
           masterPanelMeta[panelId].description.toLowerCase().includes(query),
       }));
     },
-    [globalSearch, gmPanelOrder, gmPanelWidths, panelVisibility],
+    [globalSearch, gmPanelOrder, gmPanelSizes, panelVisibility],
   );
   const masterPanelSearchMap = useMemo(
     () =>
@@ -5090,21 +5071,16 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       panelId: "admin" | "tokens" | "party" | "initiative" | "tools",
       width: number,
     ) => {
-      setGmPanelWidths((current) => ({ ...current, [panelId]: width }));
+      const options = getMasterPanelDefinition(panelId).allowedSizes;
+      const nextSize = options[Math.max(0, Math.min(options.length - 1, width))];
+      setGmPanelSizes((current) => ({ ...current, [panelId]: nextSize }));
     },
     [],
   );
 
   const handleSetLayoutPanelSize = useCallback(
     (panelId: MasterPanelId, size: MasterLayoutSize) => {
-      const nextWidth = panelSizeToWidth(size);
-      setGmPanelWidths((current) => ({
-        ...current,
-        [panelId]:
-          panelId === "tools"
-            ? Math.max(220, nextWidth - 320)
-            : nextWidth,
-      }));
+      setGmPanelSizes((current) => ({ ...current, [panelId]: size }));
     },
     [],
   );
@@ -5691,7 +5667,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                       }}
                       style={{
                         order: gmPanelOrder.indexOf(panelId),
-                        gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths[panelId])} / span ${getMasterPanelGridSpan(gmPanelWidths[panelId])}`,
+                        gridColumn: `span ${getMasterPanelGridSpan(panelId, gmPanelSizes[panelId])} / span ${getMasterPanelGridSpan(panelId, gmPanelSizes[panelId])}`,
                       }}
                       className={`space-y-2 rounded-3xl ${draggedMasterPanel === panelId ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === panelId ? "ring-2 ring-fuchsia-400/60" : ""}`}
                     >
@@ -5733,12 +5709,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         >
                           ↓
                         </button>
-                        <span className="text-slate-500">Ширина</span>
+                        <span className="text-slate-500">Размер</span>
                         <input
                           type="range"
-                          min="240"
-                          max="1200"
-                          value={gmPanelWidths[panelId]}
+                          min={0}
+                          max={getMasterPanelDefinition(panelId).allowedSizes.length - 1}
+                          step={1}
+                          value={Math.max(0, getMasterPanelDefinition(panelId).allowedSizes.indexOf(gmPanelSizes[panelId]))}
                           onChange={(event) =>
                             handleGmPanelWidthChange(
                               panelId,
@@ -6276,7 +6253,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     ? { ["--drawer-width" as string]: `${creaturesDrawerWidth}px` }
                     : {
                         order: gmPanelOrder.indexOf("party"),
-                        gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.party)} / span ${getMasterPanelGridSpan(gmPanelWidths.party)}`,
+                        gridColumn: `span ${getMasterPanelGridSpan("party", gmPanelSizes.party)} / span ${getMasterPanelGridSpan("party", gmPanelSizes.party)}`,
                       }
                 }
               >
@@ -7390,7 +7367,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   role === "gm"
                     ? {
                         order: gmPanelOrder.indexOf("initiative"),
-                        gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.initiative)} / span ${getMasterPanelGridSpan(gmPanelWidths.initiative)}`,
+                        gridColumn: `span ${getMasterPanelGridSpan("initiative", gmPanelSizes.initiative)} / span ${getMasterPanelGridSpan("initiative", gmPanelSizes.initiative)}`,
                       }
                     : undefined
                 }
@@ -7430,12 +7407,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     >
                       ↓
                     </button>
-                    <span className="text-slate-500">Ширина</span>
+                    <span className="text-slate-500">Размер</span>
                     <input
                       type="range"
-                      min="260"
-                      max="1400"
-                      value={gmPanelWidths.initiative}
+                      min={0}
+                      max={getMasterPanelDefinition("initiative").allowedSizes.length - 1}
+                      step={1}
+                      value={Math.max(0, getMasterPanelDefinition("initiative").allowedSizes.indexOf(gmPanelSizes.initiative))}
                       onChange={(event) =>
                         handleGmPanelWidthChange(
                           "initiative",
@@ -7741,11 +7719,11 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   }}
                   style={{
                     order: gmPanelOrder.indexOf("tools"),
-                    gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)} / span ${getMasterPanelGridSpan(gmPanelWidths.tools + 320)}`,
+                    gridColumn: `span ${getMasterPanelGridSpan("tools", gmPanelSizes.tools)} / span ${getMasterPanelGridSpan("tools", gmPanelSizes.tools)}`,
                   }}
                   className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""} ${!panelVisibility.tools || !masterPanelSearchMap.tools ? "hidden" : ""}`}
                 >
-                  <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+                  <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)]">
                     <div className="space-y-2">
                       <div
                         draggable
@@ -7780,12 +7758,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         >
                           ↓
                         </button>
-                        <span className="text-slate-500">Ширина</span>
+                        <span className="text-slate-500">Размер</span>
                         <input
                           type="range"
-                          min="220"
-                          max="1100"
-                          value={gmPanelWidths.tools}
+                          min={0}
+                          max={getMasterPanelDefinition("tools").allowedSizes.length - 1}
+                          step={1}
+                          value={Math.max(0, getMasterPanelDefinition("tools").allowedSizes.indexOf(gmPanelSizes.tools))}
                           onChange={(event) =>
                             handleGmPanelWidthChange(
                               "tools",
