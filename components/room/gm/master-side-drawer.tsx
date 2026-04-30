@@ -6,10 +6,22 @@ type DrawerTab = "tokens" | "party";
 const MASTER_SIDE_DRAWER_PANEL_ID = "master-side-drawer-panel";
 const DRAWER_ICON_OPEN = "‹";
 const DRAWER_ICON_CLOSE = "›";
+const DRAWER_WIDTH_COMPACT = 480;
+const DRAWER_WIDTH_ULTRA_COMPACT = 420;
 
 const tabLabels: Record<DrawerTab, string> = {
   tokens: "Существа",
   party: "Персонажи",
+};
+
+const tabCompactLabels: Record<DrawerTab, string> = {
+  tokens: "Сущ.",
+  party: "Перс.",
+};
+
+const tabIcons: Record<DrawerTab, string> = {
+  tokens: "🧟",
+  party: "🧙",
 };
 
 export function MasterSideDrawer({
@@ -39,6 +51,8 @@ export function MasterSideDrawer({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [open, onOpenChange]);
+  const isCompact = width < DRAWER_WIDTH_COMPACT;
+  const isUltraCompact = width < DRAWER_WIDTH_ULTRA_COMPACT;
 
   return (
     <>
@@ -69,31 +83,46 @@ export function MasterSideDrawer({
         hidden={!open}
         data-state={open ? "open" : "closed"}
       >
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
           {(["tokens", "party"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => onTabChange(tab)}
-              className={`rounded-full border px-3 py-2 text-xs transition ${
+              aria-label={tabLabels[tab]}
+              className={`min-w-0 shrink truncate rounded-full border py-2 text-xs transition ${
+                isUltraCompact ? "px-2" : isCompact ? "px-2.5" : "px-3"
+              } ${
                 activeTab === tab
                   ? "border-ember-300/60 bg-ember-400/15 text-ember-100"
                   : "border-white/10 bg-slate-950/40 text-slate-300 hover:border-rune-400/40 hover:text-white"
               }`}
+              title={tabLabels[tab]}
             >
-              {tabLabels[tab]}
+              {isUltraCompact ? tabIcons[tab] : isCompact ? tabCompactLabels[tab] : tabLabels[tab]}
             </button>
           ))}
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="ml-auto rounded-full border border-white/10 bg-slate-950/30 px-3 py-2 text-xs text-slate-300 transition hover:border-white/25 hover:text-white"
+            aria-label="Спрятать"
+            className={`ml-auto min-w-0 shrink rounded-full border border-white/10 bg-slate-950/30 py-2 text-xs text-slate-300 transition hover:border-white/25 hover:text-white ${
+              isCompact ? "px-2" : "px-3"
+            }`}
+            title="Спрятать"
           >
-            Спрятать
+            {isCompact ? "✕" : "Спрятать"}
           </button>
         </div>
-        <label className="mt-2 flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/35 px-3 py-1.5 text-xs text-slate-300">
-          Ширина
+        <label
+          className={`mt-2 flex min-w-0 items-center gap-2 rounded-full border border-white/10 bg-slate-950/35 text-xs text-slate-300 ${
+            isCompact ? "px-2 py-1.5" : "px-3 py-1.5"
+          }`}
+          title="Ширина"
+        >
+          <span className="shrink-0" aria-hidden="true">
+            {isCompact ? "↔" : "Ширина"}
+          </span>
           <input
             type="range"
             min="360"
@@ -101,6 +130,7 @@ export function MasterSideDrawer({
             value={width}
             onChange={(event) => onWidthChange(Number(event.target.value))}
             className="min-w-0 flex-1"
+            aria-label="Ширина боковой шторки"
           />
         </label>
       </div>
