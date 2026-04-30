@@ -190,6 +190,7 @@ body {
   right: 0;
   z-index: 95;
   height: 100dvh;
+  width: clamp(360px, var(--drawer-width, 520px), 92vw);
   max-width: 92vw;
   overflow-y: auto;
   border-left: 1px solid rgba(255, 255, 255, 0.12);
@@ -246,6 +247,7 @@ body {
   top: 1rem;
   right: 1rem;
   z-index: 96;
+  width: clamp(320px, calc(var(--drawer-width, 520px) - 2rem), calc(92vw - 2rem));
   max-width: calc(92vw - 2rem);
   border-radius: 1.25rem;
   border: 1px solid rgba(255, 255, 255, 0.12);

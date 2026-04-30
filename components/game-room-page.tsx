@@ -272,6 +272,7 @@ type SavedRoomState = {
         panelOrder?: MasterPanelId[];
         panelWidths?: Partial<Record<MasterPanelId, number>>;
       };
+  creaturesDrawerWidth?: number;
 };
 
 type SavedMapPreset = {
@@ -3410,6 +3411,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             parsed.sheets ?? initialSheets,
           ),
         );
+      if (typeof parsed.creaturesDrawerWidth === "number") {
+        setCreaturesDrawerWidth(parsed.creaturesDrawerWidth);
+      }
       if (parsed.gmLayout) {
         const normalizedLayout = normalizeSavedLayoutConfig(parsed.gmLayout);
         setGmPanelOrder(normalizedLayout.order);
@@ -3455,6 +3459,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       journal,
       initiative,
       gmLayout: gmLayoutConfig,
+      creaturesDrawerWidth,
     });
     try {
       window.localStorage.setItem(getRoomStorageKey(roomId), JSON.stringify(payload));
@@ -3469,6 +3474,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     isLoadedFromStorage,
     journal,
     gmLayoutConfig,
+    creaturesDrawerWidth,
     mapName,
     mapState,
     roomId,
@@ -4126,6 +4132,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         mainMapSnapshot,
         initiative,
         gmLayout: gmLayoutConfig,
+        creaturesDrawerWidth,
       });
       window.localStorage.setItem(
         getRoomStorageKey(roomId),
@@ -4164,6 +4171,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       mainMapSnapshot,
       initiative,
       gmLayout: gmLayoutConfig,
+      creaturesDrawerWidth,
     });
     window.localStorage.setItem(getRoomStorageKey(roomId), JSON.stringify(payload));
     addJournalEntry(
@@ -4201,6 +4209,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       mainMapSnapshot,
       initiative,
       gmLayout: gmLayoutConfig,
+      creaturesDrawerWidth,
     });
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -6264,7 +6273,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                 className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role !== "gm" && !masterPanelSearchMap.party ? "hidden" : ""} ${role === "gm" ? `master-side-drawer p-4 pt-28 ${isCreaturesDrawerOpen && creaturesDrawerTab === "party" ? "translate-x-0" : "translate-x-full pointer-events-none"}` : ""}`}
                 style={
                   role === "gm"
-                    ? { width: `min(92vw, ${creaturesDrawerWidth}px)` }
+                    ? { ["--drawer-width" as string]: `${creaturesDrawerWidth}px` }
                     : {
                         order: gmPanelOrder.indexOf("party"),
                         gridColumn: `span ${getMasterPanelGridSpan(gmPanelWidths.party)} / span ${getMasterPanelGridSpan(gmPanelWidths.party)}`,
@@ -8365,7 +8374,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             />
             <aside
               className={`master-side-drawer p-4 pt-28 ${isCreaturesDrawerOpen && creaturesDrawerTab === "tokens" ? "translate-x-0" : "translate-x-full pointer-events-none"}`}
-              style={{ width: `min(92vw, ${creaturesDrawerWidth}px)` }}
+              style={{ ["--drawer-width" as string]: `${creaturesDrawerWidth}px` }}
               aria-hidden={!isCreaturesDrawerOpen || creaturesDrawerTab !== "tokens"}
             >
               <CompactSection
