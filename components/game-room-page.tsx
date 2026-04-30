@@ -6270,7 +6270,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   setDraggedMasterPanel(null);
                   setDragOverMasterPanel(null);
                 }}
-                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role !== "gm" && !masterPanelSearchMap.party ? "hidden" : ""} ${role === "gm" ? `master-side-drawer p-4 pt-28 ${isCreaturesDrawerOpen && creaturesDrawerTab === "party" ? "translate-x-0" : "translate-x-full pointer-events-none"}` : ""}`}
+                className={`space-y-2 rounded-3xl ${draggedMasterPanel === "party" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "party" ? "ring-2 ring-fuchsia-400/60" : ""} ${role !== "gm" && !masterPanelSearchMap.party ? "hidden" : ""} ${role === "gm" ? `master-side-drawer fixed inset-y-0 right-0 h-dvh max-h-dvh overflow-y-auto p-4 pt-28 ${isCreaturesDrawerOpen && creaturesDrawerTab === "party" ? "translate-x-0" : "translate-x-full pointer-events-none"}` : ""}`}
                 style={
                   role === "gm"
                     ? { ["--drawer-width" as string]: `${creaturesDrawerWidth}px` }
@@ -8373,7 +8373,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               onWidthChange={setCreaturesDrawerWidth}
             />
             <aside
-              className={`master-side-drawer p-4 pt-28 ${isCreaturesDrawerOpen && creaturesDrawerTab === "tokens" ? "translate-x-0" : "translate-x-full pointer-events-none"}`}
+              className={`master-side-drawer fixed inset-y-0 right-0 h-dvh max-h-dvh overflow-y-auto p-4 pt-28 ${isCreaturesDrawerOpen && creaturesDrawerTab === "tokens" ? "translate-x-0" : "translate-x-full pointer-events-none"}`}
               style={{ ["--drawer-width" as string]: `${creaturesDrawerWidth}px` }}
               aria-hidden={!isCreaturesDrawerOpen || creaturesDrawerTab !== "tokens"}
             >
