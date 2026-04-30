@@ -8055,54 +8055,56 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     >
                       <div className="space-y-4">
                         <div className="rounded-2xl border border-white/8 bg-slate-950/40 p-4">
-                          <div className="mb-4 flex items-center justify-between">
+                          <div className="mb-4 flex min-w-0 items-center justify-between gap-2">
                             <h2 className="text-lg font-semibold text-white">
                               Чат / заметка
                             </h2>
-                            <span className="text-sm text-slate-400">
+                            <span className="truncate text-xs text-slate-400 sm:text-sm">
                               локально в журнал
                             </span>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex min-w-0 flex-wrap gap-2 sm:flex-nowrap">
                             <input
                               value={chatInput}
                               onChange={(event) =>
                                 setChatInput(event.target.value)
                               }
                               placeholder="Например: Борин идёт к двери"
-                              className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+                              className="min-w-0 w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
                             />
                             <button
                               onClick={handleSendChat}
-                              className="rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white"
+                              className="min-h-10 min-w-[6rem] rounded-2xl bg-fuchsia-500 px-4 py-3 text-sm font-medium text-white"
                             >
-                              Отправить
+                              <span className="sm:hidden">↗ Отпр.</span>
+                              <span className="hidden sm:inline">Отправить</span>
                             </button>
                           </div>
                         </div>
 
                         <div className="rounded-2xl border border-white/8 bg-slate-950/40 p-4">
-                          <div className="mb-4 flex items-center justify-between">
+                          <div className="mb-4 flex min-w-0 items-center justify-between gap-2">
                             <h2 className="text-lg font-semibold text-white">
                               Кубы
                             </h2>
-                            <span className="text-sm text-slate-400">
+                            <span className="truncate text-xs text-slate-400 sm:text-sm">
                               NdM±K
                             </span>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex min-w-0 flex-wrap gap-2 sm:flex-nowrap">
                             <input
                               value={diceFormula}
                               onChange={(event) =>
                                 setDiceFormula(event.target.value)
                               }
-                              className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none"
+                              className="min-w-0 w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none"
                             />
                             <button
                               onClick={handleRoll}
-                              className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950"
+                              className="min-h-10 min-w-[6rem] rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-medium text-slate-950"
                             >
-                              Roll
+                              <span className="sm:hidden">🎲 d20</span>
+                              <span className="hidden sm:inline">Roll</span>
                             </button>
                           </div>
                         </div>
@@ -8140,7 +8142,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                         value={journalSearch}
                         onChange={(event) => setJournalSearch(event.target.value)}
                         placeholder="Поиск по журналу"
-                        className="min-w-[16rem] rounded-full border border-white/10 bg-slate-900/70 px-4 py-2 text-sm text-white"
+                        className="min-w-0 max-w-full flex-1 rounded-full border border-white/10 bg-slate-900/70 px-4 py-2 text-sm text-white"
                       />
                     </div>
                     <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1 text-sm">
@@ -8153,7 +8155,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                             <span>{entry.type}</span>
                             <span>{entry.time}</span>
                           </div>
-                          <p className="mt-2 break-words whitespace-pre-wrap text-slate-200">
+                          <p className="mt-2 line-clamp-2 break-words whitespace-pre-wrap text-slate-200 sm:line-clamp-none">
                             {entry.text}
                           </p>
                         </div>
@@ -8229,7 +8231,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
 
           {role === "gm" ? (
             <div className="space-y-4">
-              <div className="card flex flex-wrap items-center gap-2 px-3 py-2">
+              <div className="card flex min-w-0 flex-wrap items-center gap-2 px-3 py-2">
                 <button
                   type="button"
                   onClick={handleReturnToMainMap}
@@ -8258,7 +8260,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   value={quickMapTabName}
                   onChange={(event) => setQuickMapTabName(event.target.value)}
                   placeholder="Новая вкладка"
-                  className="min-w-[11rem] rounded-full border border-white/10 bg-slate-900/80 px-3 py-2 text-xs text-white"
+                  className="min-w-0 max-w-full rounded-full border border-white/10 bg-slate-900/80 px-3 py-2 text-xs text-white"
                 />
                 <label className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs text-slate-300">
                   <input
