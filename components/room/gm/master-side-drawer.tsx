@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 type DrawerTab = "tokens" | "party";
 const MASTER_SIDE_DRAWER_PANEL_ID = "master-side-drawer-panel";
 const DRAWER_ICON_OPEN = "‹";
@@ -25,8 +27,29 @@ export function MasterSideDrawer({
   onTabChange: (tab: DrawerTab) => void;
   onWidthChange: (width: number) => void;
 }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onOpenChange(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, onOpenChange]);
+
   return (
     <>
+      {open ? (
+        <button
+          type="button"
+          className="master-side-drawer__backdrop"
+          onClick={() => onOpenChange(false)}
+          aria-label="Закрыть шторку мастера"
+        />
+      ) : null}
       <button
         type="button"
         className="master-side-drawer__handle"
