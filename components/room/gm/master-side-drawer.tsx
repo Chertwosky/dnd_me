@@ -1,6 +1,9 @@
 "use client";
 
 type DrawerTab = "tokens" | "party";
+const MASTER_SIDE_DRAWER_PANEL_ID = "master-side-drawer-panel";
+const DRAWER_ICON_OPEN = "‹";
+const DRAWER_ICON_CLOSE = "›";
 
 const tabLabels: Record<DrawerTab, string> = {
   tokens: "Существа",
@@ -29,53 +32,55 @@ export function MasterSideDrawer({
         className="master-side-drawer__handle"
         onClick={() => onOpenChange(!open)}
         aria-expanded={open}
+        aria-controls={MASTER_SIDE_DRAWER_PANEL_ID}
         aria-label={open ? "Скрыть шторку мастера" : "Показать шторку мастера"}
+        data-state={open ? "open" : "closed"}
       >
-        <span aria-hidden="true">{open ? "›" : "‹"}</span>
+        <span aria-hidden="true">{open ? DRAWER_ICON_CLOSE : DRAWER_ICON_OPEN}</span>
       </button>
 
-      {open ? (
-        <div
-          className="master-side-drawer__controls"
-          style={{ width: `min(92vw, ${width}px)` }}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            {(["tokens", "party"] as const).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => onTabChange(tab)}
-                className={`rounded-full border px-3 py-2 text-xs transition ${
-                  activeTab === tab
-                    ? "border-ember-300/60 bg-ember-400/15 text-ember-100"
-                    : "border-white/10 bg-slate-950/40 text-slate-300 hover:border-rune-400/40 hover:text-white"
-                }`}
-              >
-                {tabLabels[tab]}
-              </button>
-            ))}
+      <div
+        id={MASTER_SIDE_DRAWER_PANEL_ID}
+        className="master-side-drawer__controls"
+        style={{ width: `min(92vw, ${width}px)` }}
+        hidden={!open}
+        data-state={open ? "open" : "closed"}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {(["tokens", "party"] as const).map((tab) => (
             <button
+              key={tab}
               type="button"
-              onClick={() => onOpenChange(false)}
-              className="ml-auto rounded-full border border-white/10 bg-slate-950/30 px-3 py-2 text-xs text-slate-300 transition hover:border-white/25 hover:text-white"
+              onClick={() => onTabChange(tab)}
+              className={`rounded-full border px-3 py-2 text-xs transition ${
+                activeTab === tab
+                  ? "border-ember-300/60 bg-ember-400/15 text-ember-100"
+                  : "border-white/10 bg-slate-950/40 text-slate-300 hover:border-rune-400/40 hover:text-white"
+              }`}
             >
-              Спрятать
+              {tabLabels[tab]}
             </button>
-          </div>
-          <label className="mt-2 flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/35 px-3 py-1.5 text-xs text-slate-300">
-            Ширина
-            <input
-              type="range"
-              min="360"
-              max="980"
-              value={width}
-              onChange={(event) => onWidthChange(Number(event.target.value))}
-              className="min-w-0 flex-1"
-            />
-          </label>
+          ))}
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="ml-auto rounded-full border border-white/10 bg-slate-950/30 px-3 py-2 text-xs text-slate-300 transition hover:border-white/25 hover:text-white"
+          >
+            Спрятать
+          </button>
         </div>
-      ) : null}
+        <label className="mt-2 flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/35 px-3 py-1.5 text-xs text-slate-300">
+          Ширина
+          <input
+            type="range"
+            min="360"
+            max="980"
+            value={width}
+            onChange={(event) => onWidthChange(Number(event.target.value))}
+            className="min-w-0 flex-1"
+          />
+        </label>
+      </div>
     </>
   );
 }
-
