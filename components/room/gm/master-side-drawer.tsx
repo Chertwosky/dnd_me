@@ -2,16 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  DRAWER_WIDTH_MIN,
+  clampDrawerWidth,
+  closeDrawer,
+  getDrawerRangeMax,
+  isDrawerCompact,
+  isDrawerUltraCompact,
+  shouldClampDrawerWidth,
+  toggleDrawerOpen,
+} from "../../../lib/master-side-drawer-state.ts";
+
 type DrawerTab = "tokens" | "party";
 const MASTER_SIDE_DRAWER_PANEL_ID = "master-side-drawer-panel";
 const DRAWER_ICON_OPEN = "‹";
 const DRAWER_ICON_CLOSE = "›";
-const DRAWER_WIDTH_COMPACT = 480;
-const DRAWER_WIDTH_ULTRA_COMPACT = 420;
-const DRAWER_WIDTH_MIN = 360;
-const DRAWER_WIDTH_MAX_DESKTOP = 980;
-const DRAWER_WIDTH_MAX_TABLET = 760;
-const DRAWER_WIDTH_MAX_MOBILE = 560;
 
 const tabLabels: Record<DrawerTab, string> = {
   tokens: "Существа",
@@ -50,7 +55,7 @@ export function MasterSideDrawer({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onOpenChange(false);
+        onOpenChange(closeDrawer());
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -59,22 +64,13 @@ export function MasterSideDrawer({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [open, onOpenChange]);
-  const isCompact = width < DRAWER_WIDTH_COMPACT;
-  const isUltraCompact = width < DRAWER_WIDTH_ULTRA_COMPACT;
+  const isCompact = isDrawerCompact(width);
+  const isUltraCompact = isDrawerUltraCompact(width);
   const [drawerRangeMax, setDrawerRangeMax] = useState(DRAWER_WIDTH_MAX_DESKTOP);
 
   useEffect(() => {
     const updateDrawerRange = () => {
-      const viewportWidth = window.innerWidth;
-      const responsiveMax = Math.floor(viewportWidth * 0.92);
-      const breakpointMax =
-        viewportWidth < 768
-          ? DRAWER_WIDTH_MAX_MOBILE
-          : viewportWidth < 1280
-            ? DRAWER_WIDTH_MAX_TABLET
-            : DRAWER_WIDTH_MAX_DESKTOP;
-      const nextMax = Math.max(DRAWER_WIDTH_MIN, Math.min(responsiveMax, breakpointMax));
-      setDrawerRangeMax(nextMax);
+      setDrawerRangeMax(getDrawerRangeMax(window.innerWidth));
     };
 
     updateDrawerRange();
@@ -83,13 +79,13 @@ export function MasterSideDrawer({
   }, []);
 
   useEffect(() => {
-    if (width > drawerRangeMax) {
+    if (shouldClampDrawerWidth(width, drawerRangeMax)) {
       onWidthChange(drawerRangeMax);
     }
   }, [drawerRangeMax, onWidthChange, width]);
 
   const clampedWidth = useMemo(
-    () => Math.min(Math.max(width, DRAWER_WIDTH_MIN), drawerRangeMax),
+    () => clampDrawerWidth(width, drawerRangeMax),
     [drawerRangeMax, width],
   );
 
@@ -99,14 +95,14 @@ export function MasterSideDrawer({
         <button
           type="button"
           className="master-side-drawer__backdrop"
-          onClick={() => onOpenChange(false)}
+          onClick={() => onOpenChange(closeDrawer())}
           aria-label="Закрыть шторку мастера"
         />
       ) : null}
       <button
         type="button"
         className="master-side-drawer__handle"
-        onClick={() => onOpenChange(!open)}
+        onClick={() => onOpenChange(toggleDrawerOpen(open))}
         aria-expanded={open}
         aria-controls={MASTER_SIDE_DRAWER_PANEL_ID}
         aria-label={open ? "Скрыть шторку мастера" : "Показать шторку мастера"}
@@ -143,7 +139,7 @@ export function MasterSideDrawer({
           ))}
           <button
             type="button"
-            onClick={() => onOpenChange(false)}
+            onClick={() => onOpenChange(closeDrawer())}
             aria-label="Спрятать"
             className={`ml-auto min-w-0 shrink overflow-hidden truncate rounded-full border border-white/10 bg-slate-950/30 py-2 text-xs text-slate-300 transition hover:border-white/25 hover:text-white ${
               isCompact ? "px-2" : "px-3"
