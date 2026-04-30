@@ -188,7 +188,7 @@ body {
   position: fixed;
   top: 0;
   right: 0;
-  z-index: 55;
+  z-index: 95;
   height: 100dvh;
   max-width: 92vw;
   overflow-y: auto;
@@ -201,11 +201,20 @@ body {
   transition: transform 260ms ease;
 }
 
+.master-side-drawer__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  border: 0;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(2px);
+}
+
 .master-side-drawer__handle {
   position: fixed;
   top: 50%;
   right: 0;
-  z-index: 65;
+  z-index: 96;
   display: flex;
   height: 5.5rem;
   width: 1.75rem;
@@ -236,7 +245,7 @@ body {
   position: fixed;
   top: 1rem;
   right: 1rem;
-  z-index: 60;
+  z-index: 96;
   max-width: calc(92vw - 2rem);
   border-radius: 1.25rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
