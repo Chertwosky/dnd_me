@@ -58,7 +58,7 @@ body {
   }
 
   .arcane-button-primary {
-    @apply border-ember-300/40 bg-gradient-to-r from-ember-400 to-amber-300 text-ink-950 shadow-ember-glow hover:border-ember-200 hover:from-ember-300 hover:to-parchment-200;
+    @apply border-ember-300/40 bg-gradient-to-r from-ember-400 to-amber-300 text-ink-950 shadow-ember-glow hover:border-parchment-200 hover:from-ember-300 hover:to-parchment-200;
   }
 
   .arcane-button-secondary {
