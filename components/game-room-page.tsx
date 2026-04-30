@@ -3405,7 +3405,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
       if (parsed.gmLayout) {
         const normalizedLayout = normalizeSavedLayoutConfig(parsed.gmLayout);
         setGmPanelOrder(normalizedLayout.order);
-        setGmPanelSizes(normalizedLayout.panels);
+        setGmPanelSizes({
+          admin: normalizedLayout.panels.admin.size,
+          tokens: normalizedLayout.panels.tokens.size,
+          party: normalizedLayout.panels.party.size,
+          initiative: normalizedLayout.panels.initiative.size,
+          tools: normalizedLayout.panels.tools.size,
+        });
         if ("panelOrder" in parsed.gmLayout || "panelWidths" in parsed.gmLayout) {
           setToasts((current) => [
             ...current,
