@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 
 import { Badge, Button, Field, Panel } from "@/components/ui";
 
@@ -35,46 +35,119 @@ export function JoinGate({
   onCreatePlayerCharacter: () => void;
   onImportCharacterJson: (event: ChangeEvent<HTMLInputElement>) => void;
 }) {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    onRoomAuth(joinIntent ?? undefined);
+  };
+
   return (
     <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-      <Panel eyebrow="Вход" title="Выберите роль и соберите стол без лишних настроек" description="Первый мастер задает пароль комнаты. Игроки входят по нему, а наблюдатель может подключиться только для просмотра.">
-        <div className="flex flex-wrap gap-2 text-sm">
-          <Button type="button" tone={joinIntent === "gm" ? "primary" : "ghost"} onClick={() => onJoinIntentChange("gm")}>
-            Мастер
+      <Panel
+        eyebrow="Вход"
+        title="Выберите роль и соберите стол без лишних настроек"
+        description="Первый мастер задает пароль комнаты. Игроки входят по нему, а наблюдатель может подключиться только для просмотра."
+      >
+        <form onSubmit={handleSubmit} noValidate>
+          <div className="flex flex-wrap gap-2 text-sm">
+            <Button
+              type="button"
+              tone={joinIntent === "gm" ? "primary" : "ghost"}
+              onClick={() => onJoinIntentChange("gm")}
+            >
+              Мастер
+            </Button>
+            <Button
+              type="button"
+              tone={joinIntent === "player" ? "primary" : "ghost"}
+              onClick={() => onJoinIntentChange("player")}
+            >
+              Игрок
+            </Button>
+            <Button type="button" tone="secondary" onClick={onJoinAsSpectator}>
+              Наблюдатель
+            </Button>
+          </div>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs leading-6 text-slate-400">
+            {joinIntent === "gm"
+              ? "Роль мастера доступна для первого входа в комнату."
+              : "Игроку нужен пароль комнаты и лист персонажа. Наблюдатель входит без листа."}
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <Field
+              label="Имя за столом"
+              name="displayName"
+              value={displayName}
+              onChange={(event) => onDisplayNameChange(event.target.value)}
+              placeholder="Ваше имя"
+              required
+              autoComplete="nickname"
+            />
+            <Field
+              label="Пароль комнаты"
+              name="password"
+              value={passwordInput}
+              onChange={(event) => onPasswordInputChange(event.target.value)}
+              type="password"
+              placeholder="Пароль"
+              required={joinIntent !== "gm"}
+              autoComplete="current-password"
+              invalid={Boolean(authError)}
+              errorMessage={authError || undefined}
+            />
+          </div>
+          {authError ? (
+            <div
+              id="join-auth-error"
+              role="alert"
+              aria-live="assertive"
+              className="mt-3 text-sm text-rose-300"
+            >
+              {authError}
+            </div>
+          ) : null}
+          <Button type="submit" tone="primary" className="mt-5">
+            {joinIntent === "gm" ? "Создать комнату" : "Войти в комнату"}
           </Button>
-          <Button type="button" tone={joinIntent === "player" ? "primary" : "ghost"} onClick={() => onJoinIntentChange("player")}>
-            Игрок
-          </Button>
-          <Button type="button" tone="secondary" onClick={onJoinAsSpectator}>
-            Наблюдатель
-          </Button>
-        </div>
-        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs leading-6 text-slate-400">
-          {joinIntent === "gm"
-            ? "Роль мастера доступна для первого входа в комнату."
-            : "Игроку нужен пароль комнаты и лист персонажа. Наблюдатель входит без листа."}
-        </div>
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
-          <Field label="Имя за столом" value={displayName} onChange={(event) => onDisplayNameChange(event.target.value)} placeholder="Ваше имя" />
-          <Field label="Пароль комнаты" value={passwordInput} onChange={(event) => onPasswordInputChange(event.target.value)} type="password" placeholder="Пароль" />
-        </div>
-        {authError ? <div className="mt-3 text-sm text-rose-300">{authError}</div> : null}
-        <Button type="button" tone="primary" className="mt-5" onClick={() => onRoomAuth(joinIntent ?? undefined)}>
-          {joinIntent === "gm" ? "Создать комнату" : "Войти в комнату"}
-        </Button>
+        </form>
       </Panel>
 
-      <Panel eyebrow={role === "player" && joinStep === "player-sheet" ? "Лист игрока" : "Роли"} title={role === "player" && joinStep === "player-sheet" ? "Добавьте персонажа перед входом" : "Каждая роль видит свой уровень деталей"}>
+      <Panel
+        eyebrow={
+          role === "player" && joinStep === "player-sheet"
+            ? "Лист игрока"
+            : "Роли"
+        }
+        title={
+          role === "player" && joinStep === "player-sheet"
+            ? "Добавьте персонажа перед входом"
+            : "Каждая роль видит свой уровень деталей"
+        }
+      >
         {role === "player" && joinStep === "player-sheet" ? (
           <div className="space-y-4 text-sm text-slate-300">
-            <button type="button" onClick={onCreatePlayerCharacter} className="w-full rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-4 text-left transition hover:border-emerald-300/60">
+            <button
+              type="button"
+              onClick={onCreatePlayerCharacter}
+              className="w-full rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-4 text-left transition hover:border-emerald-300/60"
+            >
               <div className="font-medium text-parchment-100">Заполнить лист в комнате</div>
-              <div className="mt-1 text-slate-300">Создается пустой шаблон персонажа для ручного заполнения.</div>
+              <div className="mt-1 text-slate-300">
+                Создается пустой шаблон персонажа для ручного заполнения.
+              </div>
             </button>
             <label className="block cursor-pointer rounded-2xl border border-rune-400/30 bg-rune-500/10 px-4 py-4 text-left transition hover:border-rune-300/60">
-              <div className="font-medium text-parchment-100">Залить JSON с longstoryshort.app</div>
-              <div className="mt-1 text-slate-300">JSON-экспорт превращается в токен и лист персонажа.</div>
-              <input type="file" accept="application/json" className="hidden" onChange={onImportCharacterJson} />
+              <div className="font-medium text-parchment-100">
+                Залить JSON с longstoryshort.app
+              </div>
+              <div className="mt-1 text-slate-300">
+                JSON-экспорт превращается в токен и лист персонажа.
+              </div>
+              <input
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={onImportCharacterJson}
+              />
             </label>
           </div>
         ) : (
@@ -84,10 +157,23 @@ export function JoinGate({
               ["Игрок", "Свой токен, лист персонажа, броски и прогрессия без мастерского шума."],
               ["Наблюдатель", "Просмотр сцены, инициативы и журнала без изменения состояния."],
             ].map(([title, text]) => (
-              <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <div
+                key={title}
+                className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
+              >
                 <div className="flex items-center justify-between gap-3">
                   <div className="font-medium text-parchment-100">{title}</div>
-                  <Badge tone={title === "Мастер" ? "ember" : title === "Игрок" ? "rune" : "arcane"}>{title}</Badge>
+                  <Badge
+                    tone={
+                      title === "Мастер"
+                        ? "ember"
+                        : title === "Игрок"
+                          ? "rune"
+                          : "arcane"
+                    }
+                  >
+                    {title}
+                  </Badge>
                 </div>
                 <div className="mt-1 leading-6">{text}</div>
               </div>
@@ -98,4 +184,3 @@ export function JoinGate({
     </section>
   );
 }
-

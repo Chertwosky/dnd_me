@@ -16,10 +16,25 @@ import { LevelUpBanner } from "@/components/level-up-banner";
 import { LevelUpDrawer } from "@/components/level-up-drawer";
 import { MasterLayoutEditor } from "@/components/master-layout-editor";
 import { MasterWorkspaceHeader } from "@/components/master-workspace-header";
+import { CompactSection } from "@/components/room/compact-section";
+import { GameRoomShell } from "@/components/room/game-room-shell";
+import { RoomBoardArea } from "@/components/room/sections/board-area";
 import { MasterSideDrawer } from "@/components/room/gm/master-side-drawer";
 import { JoinGate } from "@/components/room/join/join-gate";
 import { RoomHeader } from "@/components/room/shell/room-header";
 import { RoomStatusGrid } from "@/components/room/shell/room-status-grid";
+import { ToastStack, type ToastMessage } from "@/components/ui";
+import {
+  createCell,
+  createEmptyMap,
+  getCellIndex,
+  type CellData,
+} from "@/lib/room/board-render";
+import {
+  getStatusMeta,
+  tokenStatusCatalog,
+  type TokenStatusKey,
+} from "@/lib/room/token-status";
 import {
   type LayoutConfig as MasterLayoutConfig,
   type MasterPanelSize as MasterLayoutSize,
@@ -61,16 +76,6 @@ type TokenKind = "player" | "npc" | "monster" | "object";
 type BoardKind = "public" | "gm";
 type LootCrBand = "0-4" | "5-10" | "11-16" | "17+";
 type MasterViewPreset = "combat" | "explore" | "prep";
-type TokenStatusKey =
-  | "poisoned"
-  | "stunned"
-  | "prone"
-  | "concentrating"
-  | "restrained"
-  | "blessed"
-  | "invisible"
-  | "exhausted";
-
 type RoomToken = {
   id: string;
   name: string;
@@ -188,12 +193,6 @@ type JournalEntry = {
   time: string;
 };
 
-type ToastMessage = {
-  id: string;
-  tone: "success" | "info" | "warning";
-  text: string;
-};
-
 type InitiativeParticipant = {
   tokenId: string;
   name: string;
@@ -209,23 +208,6 @@ type InitiativeState = {
   round: number;
   currentTurnIndex: number;
   participants: InitiativeParticipant[];
-};
-
-type CellData = {
-  terrain: string;
-  terrainPreset?: "stone" | "wood" | "water" | "earth" | "grass";
-  obstacle: string | null;
-  obstacleScale?: "full" | "half" | "quarter";
-  obstacleAnchor?: "center" | "tl" | "tr" | "bl" | "br";
-  obstaclePreset?: "stone-wall" | "wood-wall" | "door" | "column" | "light";
-  texture: string | null;
-  texturePreset?: "moss" | "rubble" | "sand" | "blood" | "tiles";
-  furniture: string | null;
-  furnitureScale?: "full" | "half" | "quarter";
-  furnitureAnchor?: "center" | "tl" | "tr" | "bl" | "br";
-  furniturePreset?: "table" | "chair" | "stage" | "crate" | "altar";
-  furnitureVariant?: "wood" | "stone" | "velvet";
-  fog: boolean;
 };
 
 type RoomAccessState = {
@@ -414,71 +396,6 @@ const toolMeta: Array<{
   { value: "furniture", label: "Столы/объекты", layer: "furniture" },
   { value: "fog", label: "Туман" },
   { value: "erase", label: "Стереть" },
-];
-
-const tokenStatusCatalog: Array<{
-  key: TokenStatusKey;
-  label: string;
-  short: string;
-  colorClass: string;
-  description: string;
-}> = [
-  {
-    key: "poisoned",
-    label: "Poisoned",
-    short: "PSN",
-    colorClass: "bg-emerald-500/20 text-emerald-200 border-emerald-400/30",
-    description: "помеха на атаки и проверки",
-  },
-  {
-    key: "stunned",
-    label: "Stunned",
-    short: "STN",
-    colorClass: "bg-amber-500/20 text-amber-100 border-amber-400/30",
-    description: "без действий и реакций",
-  },
-  {
-    key: "prone",
-    label: "Prone",
-    short: "PRN",
-    colorClass: "bg-slate-500/30 text-slate-100 border-slate-300/20",
-    description: "лежит на земле",
-  },
-  {
-    key: "concentrating",
-    label: "Concentrating",
-    short: "CON",
-    colorClass: "bg-violet-500/20 text-violet-100 border-violet-400/30",
-    description: "держит концентрацию",
-  },
-  {
-    key: "restrained",
-    label: "Restrained",
-    short: "RST",
-    colorClass: "bg-rose-500/20 text-rose-100 border-rose-400/30",
-    description: "скорость 0, помеха на ЛОВ",
-  },
-  {
-    key: "blessed",
-    label: "Blessed",
-    short: "BLS",
-    colorClass: "bg-cyan-500/20 text-cyan-100 border-cyan-400/30",
-    description: "бафф на атаки/спасброски",
-  },
-  {
-    key: "invisible",
-    label: "Invisible",
-    short: "INV",
-    colorClass: "bg-indigo-500/20 text-indigo-100 border-indigo-400/30",
-    description: "сложнее заметить и атаковать",
-  },
-  {
-    key: "exhausted",
-    label: "Exhausted",
-    short: "EXH",
-    colorClass: "bg-orange-500/20 text-orange-100 border-orange-400/30",
-    description: "накапливаемое истощение",
-  },
 ];
 
 const randomEventPool = [
@@ -1759,139 +1676,10 @@ const initialSheets: CharacterSheet[] = [
   },
 ];
 
-function createCell(): CellData {
-  return {
-    terrain: DEFAULT_TERRAIN,
-    terrainPreset: "stone",
-    obstacle: null,
-    obstacleScale: "full",
-    obstacleAnchor: "center",
-    obstaclePreset: undefined,
-    texture: null,
-    texturePreset: undefined,
-    furniture: null,
-    furnitureScale: "full",
-    furnitureAnchor: "center",
-    furniturePreset: undefined,
-    furnitureVariant: "wood",
-    fog: false,
-  };
-}
-
-function getStampStyle(
-  scale: "full" | "half" | "quarter" = "full",
-  anchor: "center" | "tl" | "tr" | "bl" | "br" = "center",
-): CSSProperties {
-  if (scale === "full") return { inset: "12%" };
-
-  const size = scale === "half" ? "50%" : "25%";
-  if (anchor === "center") {
-    return {
-      width: size,
-      height: size,
-      left: "50%",
-      top: "50%",
-      transform: "translate(-50%, -50%)",
-    };
-  }
-
-  const inset = "14%";
-  const style: CSSProperties = { width: size, height: size };
-  if (anchor.includes("t")) style.top = inset;
-  if (anchor.includes("b")) style.bottom = inset;
-  if (anchor.includes("l")) style.left = inset;
-  if (anchor.includes("r")) style.right = inset;
-  return style;
-}
-
 function findBrushColor<
   T extends ReadonlyArray<{ id: string; color: string }>,
 >(catalog: T, id: string | undefined, fallback: string) {
   return catalog.find((item) => item.id === id)?.color ?? fallback;
-}
-
-function getTerrainBackground(cell: CellData): CSSProperties {
-  const preset = cell.terrainPreset;
-  if (preset === "water") {
-    return {
-      backgroundColor: "#1d4ed8",
-      backgroundImage:
-        "repeating-radial-gradient(circle at 30% 30%, rgba(255,255,255,0.16) 0 5px, transparent 5px 13px)",
-    };
-  }
-  if (preset === "wood") {
-    return {
-      backgroundColor: "#92400e",
-      backgroundImage:
-        "repeating-linear-gradient(90deg, rgba(255,255,255,0.1) 0 3px, rgba(0,0,0,0.08) 3px 10px)",
-    };
-  }
-  if (preset === "earth") {
-    return {
-      backgroundColor: "#7c2d12",
-      backgroundImage:
-        "radial-gradient(circle at 25% 20%, rgba(255,255,255,0.1), transparent 40%), radial-gradient(circle at 70% 80%, rgba(0,0,0,0.2), transparent 45%)",
-    };
-  }
-  if (preset === "grass") {
-    return {
-      backgroundColor: "#166534",
-      backgroundImage:
-        "repeating-linear-gradient(65deg, rgba(255,255,255,0.1) 0 1px, transparent 1px 6px)",
-    };
-  }
-  return {
-    backgroundColor: cell.terrain,
-    backgroundImage:
-      "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.09), transparent 35%), radial-gradient(circle at 80% 70%, rgba(15,23,42,0.24), transparent 42%)",
-  };
-}
-
-function getTextureOverlay(cell: CellData): CSSProperties | null {
-  if (!cell.texture && !cell.texturePreset) return null;
-  if (cell.texturePreset === "moss") {
-    return {
-      backgroundImage:
-        "radial-gradient(circle, rgba(34,197,94,0.35) 0 30%, transparent 35%)",
-      backgroundSize: "12px 12px",
-    };
-  }
-  if (cell.texturePreset === "rubble") {
-    return {
-      backgroundImage:
-        "repeating-linear-gradient(130deg, rgba(161,161,170,0.5) 0 2px, transparent 2px 8px)",
-    };
-  }
-  if (cell.texturePreset === "sand") {
-    return {
-      backgroundImage:
-        "radial-gradient(circle, rgba(250,204,21,0.35) 0 20%, transparent 24%)",
-      backgroundSize: "8px 8px",
-    };
-  }
-  if (cell.texturePreset === "blood") {
-    return {
-      backgroundImage:
-        "radial-gradient(circle at 35% 40%, rgba(220,38,38,0.6), transparent 36%), radial-gradient(circle at 65% 65%, rgba(153,27,27,0.5), transparent 30%)",
-    };
-  }
-  if (cell.texturePreset === "tiles") {
-    return {
-      backgroundImage:
-        "linear-gradient(rgba(148,163,184,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.5) 1px, transparent 1px)",
-      backgroundSize: "10px 10px",
-    };
-  }
-  return {
-    backgroundImage:
-      "repeating-linear-gradient(45deg, transparent 0 7px, currentColor 7px 9px)",
-    color: cell.texture ?? "#22c55e",
-    mixBlendMode: "screen",
-  };
-}
-
-function createEmptyMap(cols: number, rows: number) {
-  return Array.from({ length: cols * rows }, createCell);
 }
 
 function createInitialMapState(): MapState {
@@ -2120,10 +1908,6 @@ function rollTreasureFromTables(crBand: LootCrBand): LootResult {
     rolledMagicItems: magicItems,
     rolledGems,
   };
-}
-
-function getCellIndex(x: number, y: number, cols: number) {
-  return y * cols + x;
 }
 
 function cellCoordinate(x: number, y: number) {
@@ -2424,10 +2208,6 @@ function normalizeToken(token: RoomToken): RoomToken {
       ? Array.from(new Set(token.statuses))
       : [],
   };
-}
-
-function getStatusMeta(status: TokenStatusKey) {
-  return tokenStatusCatalog.find((item) => item.key === status);
 }
 
 function getInitiativeModifier(token: RoomToken, sheets: CharacterSheet[]) {
@@ -2762,281 +2542,6 @@ function characterSections(sheet: CharacterSheet) {
   ].filter((section) => section.value);
 }
 
-function Board({
-  boardId,
-  title,
-  subtitle,
-  cols,
-  rows,
-  tiles,
-  tokens,
-  zoom,
-  showZoomOverlay,
-  onZoomOut,
-  onZoomIn,
-  onZoomChange,
-  onZoomFit,
-  onReturnToMain,
-  showReturnToMain,
-  visibleMask,
-  onBoardPointerDown,
-  onTokenPointerDown,
-  activeTokenId,
-}: {
-  boardId: string;
-  title: string;
-  subtitle: string;
-  cols: number;
-  rows: number;
-  tiles: CellData[];
-  tokens: RoomToken[];
-  zoom: number;
-  showZoomOverlay?: boolean;
-  onZoomOut?: () => void;
-  onZoomIn?: () => void;
-  onZoomChange?: (value: number) => void;
-  onZoomFit?: () => void;
-  onReturnToMain?: () => void;
-  showReturnToMain?: boolean;
-  visibleMask?: boolean[];
-  onBoardPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onTokenPointerDown?: (
-    tokenId: string,
-  ) => (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  activeTokenId?: string | null;
-}) {
-  const aspectRatio = `${cols} / ${rows}`;
-  const minWidth = Math.max(600, cols * 44);
-
-  return (
-    <div className="arcane-panel p-4">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div>
-          <div className="eyebrow">Тактическая карта</div>
-          <h2 className="mt-1 text-lg font-semibold text-parchment-100">{title}</h2>
-          <p className="text-sm text-slate-400">{subtitle}</p>
-        </div>
-        <span className="badge border-rune-400/30 bg-rune-500/10 text-rune-100">
-          {cols}×{rows}
-        </span>
-      </div>
-
-      <div className="overflow-auto rounded-3xl border border-white/10 bg-ink-950/80 p-3 shadow-inner">
-        <div className="relative">
-          {showZoomOverlay ? (
-            <div className="absolute right-2 top-2 z-20 flex items-center gap-2 rounded-2xl border border-white/15 bg-ink-950/90 px-2 py-2 shadow-rune-glow backdrop-blur">
-              <button
-                type="button"
-                onClick={onZoomOut}
-                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-100 transition hover:border-rune-400/50"
-              >
-                −
-              </button>
-              <input
-                type="range"
-                min="20"
-                max="180"
-                value={Math.round(zoom * 100)}
-                onChange={(event) => onZoomChange?.(Number(event.target.value) / 100)}
-                className="w-24"
-              />
-              <button
-                type="button"
-                onClick={onZoomIn}
-                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-100 transition hover:border-rune-400/50"
-              >
-                +
-              </button>
-              <button
-                type="button"
-                onClick={onZoomFit}
-                className="rounded-lg border border-white/15 px-2 py-1 text-[11px] text-slate-200 transition hover:border-rune-400/50"
-              >
-                fit
-              </button>
-              {showReturnToMain ? (
-                <button
-                  type="button"
-                  onClick={onReturnToMain}
-                  className="rounded-lg border border-emerald-300/30 px-2 py-1 text-[11px] text-emerald-200 transition hover:border-emerald-300/70"
-                >
-                  main
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          <div
-            id={boardId}
-            onPointerDown={onBoardPointerDown}
-            className="relative touch-none select-none overflow-hidden rounded-3xl border border-white/10 bg-slate-900"
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-            gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-            transform: `scale(${zoom})`,
-            transformOrigin: "top left",
-            aspectRatio,
-            minWidth,
-          }}
-        >
-          {Array.from({ length: cols * rows }, (_, index) => {
-            const x = index % cols;
-            const y = Math.floor(index / cols);
-            const cell = tiles[index] ?? createCell();
-            const isVisible = visibleMask ? visibleMask[index] : true;
-            const textureOverlay = getTextureOverlay(cell);
-            return (
-              <div
-                key={`${title}-${x}-${y}`}
-                className="relative"
-                style={getTerrainBackground(cell)}
-              >
-                {textureOverlay ? (
-                  <div
-                    className="absolute inset-0 opacity-55"
-                    style={{
-                      ...textureOverlay,
-                      backgroundPosition: `${x * 10}px ${y * 10}px`,
-                    }}
-                  />
-                ) : null}
-                {cell.obstacle ? (
-                  <div
-                    className="absolute flex items-center justify-center rounded-md border-2 opacity-90"
-                    style={{
-                      ...getStampStyle(cell.obstacleScale, cell.obstacleAnchor),
-                      borderColor: cell.obstacle,
-                      backgroundColor: `${cell.obstacle}4D`,
-                      boxShadow: `inset 0 0 0 1px ${cell.obstacle}AA`,
-                    }}
-                  >
-                    {cell.obstaclePreset === "door" ? (
-                      <span className="text-[10px] font-black text-amber-100">
-                        🚪
-                      </span>
-                    ) : cell.obstaclePreset === "column" ? (
-                      <span className="text-[10px] font-black text-slate-100">
-                        ◉
-                      </span>
-                    ) : cell.obstaclePreset === "light" ? (
-                      <span className="text-[10px] font-black text-yellow-100">
-                        ✦
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-                {cell.furniture ? (
-                  <div
-                    className="absolute flex items-center justify-center rounded-sm"
-                    style={{
-                      ...getStampStyle(cell.furnitureScale, cell.furnitureAnchor),
-                      backgroundColor: cell.furniture,
-                      backgroundImage:
-                        cell.furniturePreset === "stage"
-                          ? cell.furnitureVariant === "stone"
-                            ? "linear-gradient(180deg, rgba(226,232,240,0.6), rgba(71,85,105,0.45))"
-                            : cell.furnitureVariant === "velvet"
-                              ? "repeating-linear-gradient(90deg, rgba(244,114,182,0.6) 0 3px, rgba(131,24,67,0.5) 3px 6px)"
-                              : "repeating-linear-gradient(90deg, rgba(245,158,11,0.45) 0 4px, rgba(120,53,15,0.45) 4px 8px)"
-                          : "linear-gradient(120deg, rgba(255,255,255,0.2), rgba(15,23,42,0.22))",
-                    }}
-                  >
-                    {cell.furniturePreset === "table" ? "▭" : null}
-                    {cell.furniturePreset === "chair" ? "◍" : null}
-                    {cell.furniturePreset === "stage" ? "▤" : null}
-                    {cell.furniturePreset === "crate" ? "▣" : null}
-                    {cell.furniturePreset === "altar" ? "✢" : null}
-                  </div>
-                ) : null}
-                {cell.fog ? (
-                  <div className="absolute inset-0 bg-slate-950/70" />
-                ) : null}
-                {!isVisible ? (
-                  <div className="absolute inset-0 bg-black" />
-                ) : null}
-              </div>
-            );
-          })}
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              backgroundImage:
-                "linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.14) 1px, transparent 1px)",
-              backgroundSize: `${100 / cols}% ${100 / rows}%`,
-            }}
-          />
-
-          {tokens.map((token) => {
-            const left = `${((token.x + 0.5) / cols) * 100}%`;
-            const top = `${((token.y + 0.5) / rows) * 100}%`;
-            const isActive = activeTokenId === token.id;
-            const visibleStatuses = (token.statuses ?? [])
-              .slice(0, 2)
-              .flatMap((status) => {
-                const meta = getStatusMeta(status);
-                return meta ? [meta] : [];
-              });
-            const extraStatusCount = Math.max(
-              (token.statuses ?? []).length - visibleStatuses.length,
-              0,
-            );
-            const style: CSSProperties = {
-              left,
-              top,
-              transform: `translate(-50%, -50%) scale(${1 / zoom})`,
-              transformOrigin: "center",
-              borderColor: token.color,
-              backgroundColor: `${token.color}33`,
-              boxShadow: isActive
-                ? `0 0 0 3px rgba(250, 204, 21, 0.9), 0 0 30px ${token.color}88`
-                : `0 0 24px ${token.color}55`,
-            };
-            const isHiddenByMask = visibleMask
-              ? !visibleMask[getCellIndex(token.x, token.y, cols)]
-              : false;
-            if (isHiddenByMask) return null;
-            return (
-              <button
-                key={token.id}
-                onPointerDown={
-                  onTokenPointerDown ? onTokenPointerDown(token.id) : undefined
-                }
-                className="absolute flex h-12 w-12 items-center justify-center rounded-full border-2 text-sm font-semibold text-white shadow-lg transition"
-                style={style}
-                title={
-                  (token.statuses ?? []).length
-                    ? `${token.name}: ${(token.statuses ?? []).map((status) => getStatusMeta(status)?.label ?? status).join(", ")}`
-                    : token.name
-                }
-              >
-                {token.short}
-                {visibleStatuses.length ? (
-                  <span className="absolute -bottom-5 left-1/2 flex -translate-x-1/2 gap-1">
-                    {visibleStatuses.map((status) => (
-                      <span
-                        key={`${token.id}-${status.key}`}
-                        className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none ${status.colorClass}`}
-                      >
-                        {status.short}
-                      </span>
-                    ))}
-                    {extraStatusCount ? (
-                      <span className="rounded-full border border-white/10 bg-slate-950/90 px-1.5 py-0.5 text-[9px] font-bold leading-none text-slate-200">
-                        +{extraStatusCount}
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function GameRoomPage({ roomId }: { roomId: string }) {
   const inviteLink =
     typeof window === "undefined"
@@ -3050,6 +2555,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
   const [joinStep, setJoinStep] = useState<JoinStep>("auth");
   const [authError, setAuthError] = useState("");
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [mapName, setMapName] = useState("Руины старой башни");
   const [mapState, setMapState] = useState<MapState>(createInitialMapState);
@@ -3214,6 +2720,14 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     const fitByHeight = 700 / (rows * 44);
     setZoom(clamp(Math.min(fitByWidth, fitByHeight), 0.2, 1.8));
   }, [cols, rows]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setPrefersReducedMotion(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   const selectedToken = useMemo(
     () => tokens.find((token) => token.id === selectedTokenId) ?? tokens[0],
@@ -3543,6 +3057,13 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     },
     [],
   );
+
+  useEffect(() => {
+    if (!isLoadedFromStorage || saveState === "idle") return;
+    if (saveState === "error") {
+      pushToast("Не удалось сохранить сцену в localStorage.", "warning");
+    }
+  }, [isLoadedFromStorage, pushToast, saveState]);
 
   const onboardingSteps = useMemo(() => {
     const isAuthDone = joinStep === "ready";
@@ -5581,25 +5102,28 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
           </CompactSection>
         ) : null}
 
-        {joinStep !== "ready" ? (
-          <JoinGate
-            role={role}
-            joinStep={joinStep}
-            joinIntent={joinIntent}
-            displayName={displayName}
-            passwordInput={passwordInput}
-            authError={authError}
-            onJoinIntentChange={setJoinIntent}
-            onDisplayNameChange={setDisplayName}
-            onPasswordInputChange={setPasswordInput}
-            onJoinAsSpectator={handleJoinAsSpectator}
-            onRoomAuth={handleRoomAuth}
-            onCreatePlayerCharacter={createPlayerCharacter}
-            onImportCharacterJson={handleImportCharacterJson}
-          />
-        ) : null}
-
+        <GameRoomShell
+          viewModel={{ roomId, role, joinStep }}
+          auth={
+            <JoinGate
+              role={role}
+              joinStep={joinStep}
+              joinIntent={joinIntent}
+              displayName={displayName}
+              passwordInput={passwordInput}
+              authError={authError}
+              onJoinIntentChange={setJoinIntent}
+              onDisplayNameChange={setDisplayName}
+              onPasswordInputChange={setPasswordInput}
+              onJoinAsSpectator={handleJoinAsSpectator}
+              onRoomAuth={handleRoomAuth}
+              onCreatePlayerCharacter={createPlayerCharacter}
+              onImportCharacterJson={handleImportCharacterJson}
+            />
+          }
+        >
         {joinStep === "ready" ? (
+          <>
           <section className="card px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -5628,7 +5152,6 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
               ))}
             </div>
           </section>
-        ) : null}
 
         <RoomStatusGrid
           role={role}
@@ -7746,7 +7269,8 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                     order: gmPanelOrder.indexOf("tools"),
                     gridColumn: `span ${getMasterPanelGridSpan("tools", gmPanelSizes.tools)} / span ${getMasterPanelGridSpan("tools", gmPanelSizes.tools)}`,
                   }}
-                  className={`space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""} ${!panelVisibility.tools || !masterPanelSearchMap.tools ? "hidden" : ""}`}
+                  className={`master-panel-shell--defer space-y-2 rounded-3xl ${draggedMasterPanel === "tools" ? "ring-2 ring-cyan-400/50" : ""} ${dragOverMasterPanel === "tools" ? "ring-2 ring-fuchsia-400/60" : ""} ${!panelVisibility.tools || !masterPanelSearchMap.tools ? "hidden" : ""}`}
+                  data-master-panel="tools"
                 >
                   <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)]">
                     <div className="space-y-2">
@@ -8524,6 +8048,9 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
             </aside>
           </>
         ) : null}
+        </>
+        ) : null}
+        </GameRoomShell>
       </div>
       <MasterLayoutEditor
         open={isLayoutEditorOpen}
@@ -8540,22 +8067,7 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
         onChange={handlePatchLevelUpDraft}
         onConfirm={handleConfirmLevelUp}
       />
-      <div className="pointer-events-none fixed right-4 top-4 z-[70] space-y-2">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`rounded-2xl border px-4 py-2 text-sm text-white shadow-lg ${
-              toast.tone === "success"
-                ? "border-emerald-400/40 bg-emerald-500/20"
-                : toast.tone === "warning"
-                  ? "border-amber-400/40 bg-amber-500/20"
-                  : "border-cyan-400/40 bg-cyan-500/20"
-            }`}
-          >
-            {toast.text}
-          </div>
-        ))}
-      </div>
+      <ToastStack toasts={toasts} />
     </div>
   );
 }
