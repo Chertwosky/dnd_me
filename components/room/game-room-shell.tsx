@@ -12,18 +12,20 @@ import { LevelUpSection } from "@/features/level-up";
 type GameRoomShellProps = {
   viewModel: RoomViewModel;
   auth: ReactNode;
-  masterWorkspace: ReactNode;
-  board: ReactNode;
-  tokens: ReactNode;
-  party: ReactNode;
-  initiative: ReactNode;
-  journal: ReactNode;
-  levelUp: ReactNode;
+  children?: ReactNode;
+  masterWorkspace?: ReactNode;
+  board?: ReactNode;
+  tokens?: ReactNode;
+  party?: ReactNode;
+  initiative?: ReactNode;
+  journal?: ReactNode;
+  levelUp?: ReactNode;
 };
 
 export function GameRoomShell({
   viewModel,
   auth,
+  children,
   masterWorkspace,
   board,
   tokens,
@@ -34,6 +36,10 @@ export function GameRoomShell({
 }: GameRoomShellProps) {
   if (viewModel.joinStep !== "ready") {
     return <RoomAuthSection isVisible>{auth}</RoomAuthSection>;
+  }
+
+  if (children) {
+    return <>{children}</>;
   }
 
   const role = viewModel.role ?? "spectator";

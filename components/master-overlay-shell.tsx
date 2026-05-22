@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 type OverlayPlacement = "center" | "right";
 
@@ -8,7 +8,6 @@ export function MasterOverlayShell({
   open,
   onClose,
   placement = "center",
-  zIndexClass = "z-[80]",
   panelClassName,
   contentClassName,
   children,
@@ -21,46 +20,61 @@ export function MasterOverlayShell({
   contentClassName?: string;
   children: ReactNode;
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
   useEffect(() => {
-    if (!open) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open, onClose]);
+    const dialog = dialogRef.current;
+    if (!dialog) return;
 
-  if (!open) return null;
-
-  const justifyClass =
-    placement === "right" ? "items-stretch justify-end" : "items-center justify-center";
-
-  const handleBackdropClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
-      onClose();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      return;
     }
-  };
+
+    if (!open && dialog.open) {
+      dialog.close();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const handleCancel = (event: Event) => {
+      event.preventDefault();
+      onClose();
+    };
+
+    const handleClose = () => {
+      if (open) onClose();
+    };
+
+    dialog.addEventListener("cancel", handleCancel);
+    dialog.addEventListener("close", handleClose);
+    return () => {
+      dialog.removeEventListener("cancel", handleCancel);
+      dialog.removeEventListener("close", handleClose);
+    };
+  }, [onClose, open]);
 
   return (
-    <div
-      className={`fixed inset-0 ${zIndexClass} flex ${justifyClass} bg-slate-950/75 p-4 backdrop-blur-sm`}
-      onClick={handleBackdropClick}
-      role="presentation"
+    <dialog
+      ref={dialogRef}
+      className={`arcane-dialog ${placement === "right" ? "arcane-dialog--right" : "arcane-dialog--center"}`}
+      onClick={(event) => {
+        if (event.target === dialogRef.current) {
+          onClose();
+        }
+      }}
     >
       <div
-        className={panelClassName ?? "card flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden"}
-        role="dialog"
-        aria-modal="true"
+        className={
+          panelClassName ??
+          "card flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden"
+        }
       >
         <div className={contentClassName ?? "overflow-y-auto"}>{children}</div>
       </div>
-    </div>
+    </dialog>
   );
 }

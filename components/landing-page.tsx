@@ -55,8 +55,14 @@ export function LandingPage() {
 
       <main className="mx-auto max-w-7xl space-y-16 px-6 py-12 md:py-16">
         <section className="relative grid gap-8 overflow-hidden rounded-4xl border border-white/10 bg-panel-sheen bg-ink-950/70 p-8 shadow-arcane-panel lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:p-10">
-          <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-rune-400/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-28 left-1/4 h-72 w-72 rounded-full bg-ember-400/10 blur-3xl" />
+          <div
+            className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-rune-400/10 blur-3xl"
+            aria-hidden="true"
+          />
+          <div
+            className="pointer-events-none absolute -bottom-28 left-1/4 h-72 w-72 rounded-full bg-ember-400/10 blur-3xl"
+            aria-hidden="true"
+          />
           <div className="relative">
             <Badge tone="ember">Dark fantasy virtual tabletop</Badge>
             <h1 className="mt-5 max-w-4xl text-4xl font-semibold tracking-tight text-parchment-100 md:text-6xl">

@@ -15,6 +15,7 @@ export function MasterPanelShell({
   description,
   size,
   hidden = false,
+  deferRender = false,
   style,
   className,
   children,
@@ -25,6 +26,7 @@ export function MasterPanelShell({
   description: string;
   size: MasterPanelSize;
   hidden?: boolean;
+  deferRender?: boolean;
   style?: React.CSSProperties;
   className?: string;
   children: ReactNode;
@@ -35,7 +37,7 @@ export function MasterPanelShell({
       style={style}
       className={`master-panel-shell master-panel-shell--desk min-w-0 space-y-3 ${
         hidden ? "hidden" : ""
-      } ${className ?? ""}`.trim()}
+      } ${deferRender ? "master-panel-shell--defer" : ""} ${className ?? ""}`.trim()}
     >
       <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-white/10 bg-ink-950/75 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">

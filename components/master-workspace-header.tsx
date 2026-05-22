@@ -1,6 +1,7 @@
 "use client";
 
 import { type MasterPanelGroup } from "@/lib/master-panel-layout";
+import { startViewTransition } from "@/lib/ui/view-transition";
 
 type MasterViewPreset = "combat" | "explore" | "prep";
 
@@ -37,8 +38,12 @@ export function MasterWorkspaceHeader({
   onOpenShortcuts: () => void;
   initiativeOrder: string[];
 }) {
+  const handlePresetChange = (preset: MasterViewPreset) => {
+    startViewTransition(() => onPresetChange(preset));
+  };
+
   return (
-    <section className="master-workspace-header card relative z-10 space-y-4 overflow-hidden px-4 py-4 md:px-5">
+    <section className="master-workspace-header master-preset-transition card relative z-10 space-y-4 overflow-hidden px-4 py-4 md:px-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="eyebrow">Стол мастера</div>
@@ -78,7 +83,7 @@ export function MasterWorkspaceHeader({
             <button
               key={preset}
               type="button"
-              onClick={() => onPresetChange(preset)}
+              onClick={() => handlePresetChange(preset)}
               className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                 masterPreset === preset
                   ? "bg-ember-400 text-ink-950 shadow-ember-glow"

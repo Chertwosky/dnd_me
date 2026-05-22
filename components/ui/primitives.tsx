@@ -1,4 +1,8 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+"use client";
+
+import { useRef, type ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+
+import { useFieldAriaInvalid } from "./use-field-aria-invalid";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -79,12 +83,39 @@ export function Badge({
 export function Field({
   label,
   className,
+  errorMessage,
+  invalid,
+  id,
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & { label?: string }) {
+}: InputHTMLAttributes<HTMLInputElement> & {
+  label?: string;
+  errorMessage?: string;
+  invalid?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { errorId, invalid: ariaInvalid } = useFieldAriaInvalid(inputRef, invalid);
+  const showInvalid = ariaInvalid || Boolean(invalid);
+
   return (
-    <label className="flex min-w-0 flex-col gap-2">
-      {label ? <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">{label}</span> : null}
-      <input className={cx("arcane-input", className)} {...props} />
+    <label className="field min-w-0">
+      {label ? (
+        <span className="mb-2 block text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+          {label}
+        </span>
+      ) : null}
+      <input
+        ref={inputRef}
+        id={id}
+        className={cx("arcane-input", className)}
+        aria-invalid={showInvalid || undefined}
+        aria-errormessage={errorMessage ? errorId : undefined}
+        {...props}
+      />
+      {errorMessage ? (
+        <span id={errorId} className="field__error mt-2 text-sm text-rose-300">
+          {errorMessage}
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -106,4 +137,3 @@ export function EmptyState({
     </div>
   );
 }
-

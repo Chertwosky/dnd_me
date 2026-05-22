@@ -266,3 +266,134 @@ body {
     grid-column: span var(--master-panel-span-xl, 12) / span var(--master-panel-span-xl, 12);
   }
 }
+
+/* Native dialog overlays (modern-web-guidance) */
+.arcane-dialog {
+  margin: auto;
+  max-height: none;
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  padding: 1rem;
+  border: none;
+  background: transparent;
+  overflow: visible;
+}
+
+.arcane-dialog::backdrop {
+  background: rgba(2, 6, 23, 0.75);
+  backdrop-filter: blur(4px);
+}
+
+.arcane-dialog--center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.arcane-dialog--right {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.arcane-dialog--right > .card,
+.arcane-dialog--right > div {
+  margin: 0;
+  max-height: 100vh;
+  border-radius: 0;
+}
+
+/* Form validation (:user-invalid) */
+.field:has(.arcane-input:user-invalid) .arcane-input {
+  border-color: rgba(251, 113, 133, 0.55);
+}
+
+.field:has(.arcane-input:user-invalid) .field__error {
+  display: block;
+}
+
+.arcane-input:user-invalid {
+  border-color: rgba(251, 113, 133, 0.55);
+}
+
+/* Deferred panel rendering */
+.master-panel-shell {
+  container-type: inline-size;
+  container-name: master-panel;
+}
+
+.master-panel-shell--defer {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px auto 560px;
+}
+
+.compact-section:not([open]) .compact-section__body {
+  content-visibility: hidden;
+}
+
+/* GM drawer popover */
+.master-side-drawer__controls:popover-open {
+  display: block;
+}
+
+.master-side-drawer__controls::backdrop {
+  background: rgba(2, 6, 23, 0.35);
+}
+
+.master-side-drawer[popover],
+.master-side-drawer.master-side-drawer--panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  margin: 0;
+  border: none;
+  height: 100dvh;
+  max-width: 92vw;
+  overflow-y: auto;
+}
+
+@container master-panel (max-width: 420px) {
+  .master-panel-shell .arcane-button {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    font-size: 0.75rem;
+  }
+}
+
+.master-preset-transition {
+  view-transition-name: master-preset-surface;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .master-side-drawer,
+  .master-side-drawer__handle,
+  .tactical-board-grid {
+    transition: none !important;
+  }
+
+  .master-preset-transition {
+    view-transition-name: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .card,
+  .arcane-panel,
+  .arcane-dialog::backdrop,
+  .master-side-drawer,
+  .master-side-drawer__handle,
+  .master-side-drawer__controls,
+  .master-side-drawer__controls::backdrop {
+    backdrop-filter: none;
+  }
+
+  .arcane-dialog::backdrop {
+    background: rgba(2, 6, 23, 0.92);
+  }
+}
