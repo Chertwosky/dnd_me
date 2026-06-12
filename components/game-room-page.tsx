@@ -292,6 +292,31 @@ type SavedCharacterPreset = {
   sheet: CharacterSheet;
 };
 
+type SilkNpcTemplate = {
+  name: string;
+  short: string;
+  kind: TokenKind;
+  color: string;
+  hp: number;
+  maxHp: number;
+  ac: number;
+  speed: number;
+  statuses?: TokenStatusKey[];
+};
+
+type SilkLocation = {
+  id: string;
+  name: string;
+  atmosphere: string;
+  usualGuests: string;
+  sceneGoal: string;
+  rewards: string;
+  danger: string;
+  terrainPreset: CellData["terrainPreset"];
+  texturePreset?: CellData["texturePreset"];
+  npcs: SilkNpcTemplate[];
+};
+
 const DEFAULT_COLS = 16;
 const DEFAULT_ROWS = 10;
 const MIN_GRID = 4;
@@ -1759,6 +1784,211 @@ const initialSheets: CharacterSheet[] = [
   },
 ];
 
+const silkMainHallId = "silk-main-hall";
+
+const silkThroneLocations: SilkLocation[] = [
+  {
+    id: silkMainHallId,
+    name: "Главный салон / Зал Белой Вуали",
+    atmosphere: "Вино, духи, сигары, тёплый свет и музыка за шёлковыми ширмами.",
+    usualGuests: "Знать, гости, Верена, Валлис, Освин, Марчел.",
+    sceneGoal: "Главный публичный узел: тост, слухи и первые политические удары.",
+    rewards: "Первые слухи фракций, реакция дома, зацепки на все ветки.",
+    danger: "Любая реплика становится политическим заявлением на весь дом.",
+    terrainPreset: "wood",
+    texturePreset: "tiles",
+    npcs: [
+      { name: "Верена", short: "ВЕ", kind: "npc", color: "rgb(236 72 153)", hp: 32, maxHp: 32, ac: 15, speed: 30 },
+      { name: "Валлис", short: "ВА", kind: "npc", color: "rgb(59 130 246)", hp: 30, maxHp: 30, ac: 14, speed: 30 },
+      { name: "Освин Дрейк", short: "ОС", kind: "npc", color: "rgb(245 158 11)", hp: 38, maxHp: 38, ac: 16, speed: 30 },
+      { name: "Марчел", short: "МА", kind: "npc", color: "rgb(168 85 247)", hp: 29, maxHp: 29, ac: 14, speed: 30 },
+      { name: "Мирон", short: "МИ", kind: "npc", color: "rgb(14 165 233)", hp: 22, maxHp: 22, ac: 13, speed: 30 },
+    ],
+  },
+  {
+    id: "silk-morrow-laundry",
+    name: "Закрытая прачечная Морроу",
+    atmosphere: "Сырость, старое мыло, мокрая ткань и свеча над картой дома.",
+    usualGuests: "Арвена Морроу и её люди.",
+    sceneGoal: "Экспозиция, улики и общий заход в ночь.",
+    rewards: "Карта дома, маски входа и первое понимание фракций.",
+    danger: "Морроу на грани срыва и толкает в силовой сценарий.",
+    terrainPreset: "stone",
+    texturePreset: "moss",
+    npcs: [
+      { name: "Арвена Морроу", short: "АМ", kind: "npc", color: "rgb(248 113 113)", hp: 42, maxHp: 42, ac: 16, speed: 30, statuses: ["exhausted"] },
+    ],
+  },
+  {
+    id: "silk-white-gloves-lobby",
+    name: "Вестибюль белых перчаток",
+    atmosphere: "Холодные зеркала, серебряные подносы и камердинеры.",
+    usualGuests: "Охрана, камердинеры, новые гости.",
+    sceneGoal: "Проверка легенд входа и метки подозрения.",
+    rewards: "Первое впечатление дома и понимание, как он «читает» гостей.",
+    danger: "Провал маски ведёт к почти немедленному сопровождению охраной.",
+    terrainPreset: "stone",
+    texturePreset: "tiles",
+    npcs: [{ name: "Старший камердинер", short: "СК", kind: "npc", color: "rgb(226 232 240)", hp: 18, maxHp: 18, ac: 13, speed: 30 }],
+  },
+  {
+    id: "silk-mirror-gallery",
+    name: "Зеркальная галерея",
+    atmosphere: "Свечи, длинные зеркала, сухое шампанское и лилии.",
+    usualGuests: "Валлис, знать и придворные гости.",
+    sceneGoal: "Разговор о порядке, архиве и компромате.",
+    rewards: "Протоколы, допуск знати и связи с домами.",
+    danger: "Стабильность продаётся как «разумная» грязь.",
+    terrainPreset: "stone",
+    texturePreset: "tiles",
+    npcs: [{ name: "Валлис", short: "ВА", kind: "npc", color: "rgb(59 130 246)", hp: 30, maxHp: 30, ac: 14, speed: 30 }],
+  },
+  {
+    id: "silk-jasmine-baths",
+    name: "Жасминовые купальни",
+    atmosphere: "Тёплый пар, жасмин, масла и мрамор.",
+    usualGuests: "Верена, банщицы и богатые клиенты.",
+    sceneGoal: "Линия нейтралитета дома, эксплуатации и выживания.",
+    rewards: "Внутренние маршруты и помощь слуг.",
+    danger: "Мягкая подача скрывает цену чужой слабости.",
+    terrainPreset: "water",
+    texturePreset: "sand",
+    npcs: [{ name: "Верена", short: "ВЕ", kind: "npc", color: "rgb(236 72 153)", hp: 32, maxHp: 32, ac: 15, speed: 30 }],
+  },
+  {
+    id: "silk-winter-garden",
+    name: "Зимний сад под тёплым стеклом",
+    atmosphere: "Влажное тепло, растения, склянки, настойки и купол.",
+    usualGuests: "Феррейн, аптекари, зависимые гости.",
+    sceneGoal: "Дурманы, фальшивое лечение и рынок боли.",
+    rewards: "Яды, антидоты, клиентские журналы.",
+    danger: "Прагматичная мерзость легко нормализуется.",
+    terrainPreset: "grass",
+    texturePreset: "moss",
+    npcs: [{ name: "Феррейн", short: "ФЕ", kind: "npc", color: "rgb(34 197 94)", hp: 27, maxHp: 27, ac: 13, speed: 30 }],
+  },
+  {
+    id: "silk-velvet-chapel",
+    name: "Бархатная часовня",
+    atmosphere: "Решётка исповеди, ладан и тёплый красноватый свет.",
+    usualGuests: "Марчел, послушники культа, сломанные гости.",
+    sceneGoal: "Культ Масок: стыд, признание и подчинение.",
+    rewards: "Личные тайны и культовые связи.",
+    danger: "Из слабости делают поводок.",
+    terrainPreset: "earth",
+    texturePreset: "blood",
+    npcs: [{ name: "Марчел", short: "МА", kind: "npc", color: "rgb(168 85 247)", hp: 29, maxHp: 29, ac: 14, speed: 30 }],
+  },
+  {
+    id: "silk-cigar-room",
+    name: "Сигарная комната",
+    atmosphere: "Тёмное дерево, густой дым, бренди, карты и расписки.",
+    usualGuests: "Освин Дрейк, Чёрная Сеть, телохранители.",
+    sceneGoal: "Переговоры о рынке, долгах и перевозках.",
+    rewards: "Деньги, поддельные бумаги и криминальная логистика.",
+    danger: "Выгода затмевает моральную цену сделки.",
+    terrainPreset: "wood",
+    texturePreset: "sand",
+    npcs: [{ name: "Освин Дрейк", short: "ОС", kind: "npc", color: "rgb(245 158 11)", hp: 38, maxHp: 38, ac: 16, speed: 30 }],
+  },
+  {
+    id: "silk-cold-pantry",
+    name: "Холодная кладовая на служебной лестнице",
+    atmosphere: "Камень, уголь, кровь на рукаве и связки ключей.",
+    usualGuests: "Арвена Морроу, изгнанники, раненые союзники.",
+    sceneGoal: "Показать надлом Морроу без официальной маски.",
+    rewards: "Ключи и план силового захвата.",
+    danger: "Легко перейти от правосудия к расправе.",
+    terrainPreset: "stone",
+    texturePreset: "rubble",
+    npcs: [{ name: "Арвена Морроу", short: "АМ", kind: "npc", color: "rgb(248 113 113)", hp: 42, maxHp: 42, ac: 16, speed: 30, statuses: ["restrained"] }],
+  },
+  {
+    id: "silk-laundry-basement",
+    name: "Прачечный подвал",
+    atmosphere: "Щёлок, мокрое бельё, плач и узкие проходы.",
+    usualGuests: "Сера, прачки, слуги и сломанные люди дома.",
+    sceneGoal: "Показать цену роскоши через живых людей.",
+    rewards: "Нижние маршруты и касса побега.",
+    danger: "Сцена ломает моральную дистанцию.",
+    terrainPreset: "water",
+    texturePreset: "blood",
+    npcs: [{ name: "Сера", short: "СЕ", kind: "npc", color: "rgb(16 185 129)", hp: 24, maxHp: 24, ac: 12, speed: 30 }],
+  },
+  {
+    id: "silk-silver-box-2",
+    name: "Серебряный бокс №2",
+    atmosphere: "Душный кабинет, чай, хрусталь и перегородка.",
+    usualGuests: "Энна Вейл, Хейм, судья Рей или люди давления.",
+    sceneGoal: "Разговор о ложных показаниях и выживании.",
+    rewards: "Живой свидетель и прямые связки по делу Морроу.",
+    danger: "Потеря Энны ломает линию живой правды.",
+    terrainPreset: "wood",
+    texturePreset: "tiles",
+    npcs: [{ name: "Энна Вейл", short: "ЭВ", kind: "npc", color: "rgb(125 211 252)", hp: 15, maxHp: 15, ac: 11, speed: 30, statuses: ["stunned"] }],
+  },
+  {
+    id: "silk-side-gallery",
+    name: "Боковая галерея",
+    atmosphere: "Полутень, быстрые шаги, служебные двери и переходы.",
+    usualGuests: "Мирон, слуги, бегущие посредники.",
+    sceneGoal: "Погоня и перехват перед полуночным узлом.",
+    rewards: "След к Красному кабинету и папки Мирона.",
+    danger: "Сцена уходит в хаос и потери времени.",
+    terrainPreset: "stone",
+    texturePreset: "rubble",
+    npcs: [{ name: "Мирон", short: "МИ", kind: "npc", color: "rgb(14 165 233)", hp: 22, maxHp: 22, ac: 13, speed: 30 }],
+  },
+  {
+    id: "silk-card-catalog",
+    name: "Комната карт / картотечная",
+    atmosphere: "Бумага, пыль, шкафы и шифровальные пластины.",
+    usualGuests: "Мирон, писцы, люди архива.",
+    sceneGoal: "Коды, шифры и скрытые записи.",
+    rewards: "Пластины, ключи, карточки гостей, часть архива.",
+    danger: "Упущение комнаты делает финал грязнее.",
+    terrainPreset: "earth",
+    texturePreset: "sand",
+    npcs: [{ name: "Старший писец", short: "ПС", kind: "npc", color: "rgb(196 181 253)", hp: 16, maxHp: 16, ac: 11, speed: 30 }],
+  },
+  {
+    id: "silk-service-routes",
+    name: "Служебные коридоры и лестницы",
+    atmosphere: "Узко, темно, пахнет углём, потом и бельём.",
+    usualGuests: "Слуги, Сера, люди Верены, курьеры.",
+    sceneGoal: "Скрытые переходы между сценами и побеги.",
+    rewards: "Тайные маршруты и быстрый доступ к комнатам.",
+    danger: "Легко потерять свидетеля или врезаться в охрану.",
+    terrainPreset: "stone",
+    texturePreset: "moss",
+    npcs: [{ name: "Служебный курьер", short: "КР", kind: "npc", color: "rgb(251 191 36)", hp: 14, maxHp: 14, ac: 12, speed: 35 }],
+  },
+  {
+    id: "silk-carriage-arch",
+    name: "Каретная арка / выезд из дома",
+    atmosphere: "Камень, колёса, ночной воздух и тени экипажей.",
+    usualGuests: "Курьеры, охрана, люди на вывоз.",
+    sceneGoal: "Побег, эвакуация и передача людей наружу.",
+    rewards: "Спасение свидетеля и вывоз архива.",
+    danger: "Кто контролирует арку, решает судьбу рассвета.",
+    terrainPreset: "stone",
+    texturePreset: "rubble",
+    npcs: [{ name: "Капитан выезда", short: "КВ", kind: "npc", color: "rgb(148 163 184)", hp: 26, maxHp: 26, ac: 15, speed: 30 }],
+  },
+  {
+    id: "silk-red-cabinet",
+    name: "Красный кабинет",
+    atmosphere: "Шёлк, сейф, тишина и тяжёлый стол завещания.",
+    usualGuests: "Финально — все, кто дожил и дошёл.",
+    sceneGoal: "Кульминация: завещание, архив и выбор наследника.",
+    rewards: "Право назвать хозяина дома и полный архив.",
+    danger: "Здесь рушатся союзы и начинается финальная схватка.",
+    terrainPreset: "wood",
+    texturePreset: "blood",
+    npcs: [{ name: "Баронский нотариус", short: "НТ", kind: "npc", color: "rgb(239 68 68)", hp: 21, maxHp: 21, ac: 13, speed: 30 }],
+  },
+];
+
 function createCell(): CellData {
   return {
     terrain: DEFAULT_TERRAIN,
@@ -1901,6 +2131,66 @@ function createInitialMapState(): MapState {
     publicTiles: createEmptyMap(DEFAULT_COLS, DEFAULT_ROWS),
     gmTiles: createEmptyMap(DEFAULT_COLS, DEFAULT_ROWS),
   };
+}
+
+function buildSilkLocationMapState(location: SilkLocation): MapState {
+  const cols = DEFAULT_COLS;
+  const rows = DEFAULT_ROWS;
+  const publicTiles = createEmptyMap(cols, rows).map((cell) => ({
+    ...cell,
+    terrainPreset: location.terrainPreset,
+    texturePreset: location.texturePreset,
+    terrain: findBrushColor(terrainBrushes, location.terrainPreset, DEFAULT_TERRAIN),
+  }));
+  const gmTiles = publicTiles.map((cell, index) => {
+    const x = index % cols;
+    const y = Math.floor(index / cols);
+    const borderCell = x === 0 || y === 0 || x === cols - 1 || y === rows - 1;
+    return {
+      ...cell,
+      obstacle: borderCell ? "rgba(241,245,249,0.6)" : cell.obstacle,
+      obstaclePreset: borderCell ? "wood-wall" : cell.obstaclePreset,
+      obstacleScale: borderCell ? "full" : cell.obstacleScale,
+      furniture:
+        x >= 5 && x <= 10 && y >= 3 && y <= 6 && (x + y) % 2 === 0
+          ? "rgba(251,191,36,0.5)"
+          : cell.furniture,
+      furniturePreset:
+        x >= 5 && x <= 10 && y >= 3 && y <= 6 && (x + y) % 2 === 0
+          ? "table"
+          : cell.furniturePreset,
+      furnitureScale:
+        x >= 5 && x <= 10 && y >= 3 && y <= 6 && (x + y) % 2 === 0
+          ? "quarter"
+          : cell.furnitureScale,
+    };
+  });
+
+  return { cols, rows, publicTiles, gmTiles };
+}
+
+function buildSilkNpcTokens(location: SilkLocation): RoomToken[] {
+  return location.npcs.map((npc, index) => {
+    const x = 6 + (index % 3) * 2;
+    const y = 4 + Math.floor(index / 3);
+    return {
+      id: `silk-npc-${location.id}-${index}`,
+      name: npc.name,
+      short: npc.short,
+      kind: npc.kind,
+      color: npc.color,
+      x,
+      y,
+      hp: npc.hp,
+      maxHp: npc.maxHp,
+      ac: npc.ac,
+      speed: npc.speed,
+      owner: "GM",
+      roleOwner: "gm",
+      statuses: npc.statuses ?? [],
+      mapId: location.id,
+    };
+  });
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -4394,6 +4684,68 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
     currentMapId,
   ]);
 
+  const handleLoadSilkThroneScenario = useCallback(() => {
+    if (role !== "gm") return;
+    const mainLocation = silkThroneLocations[0];
+    const scenarioMaps = silkThroneLocations.slice(1).map((location) => ({
+      id: location.id,
+      name: location.name,
+      mapName: location.name,
+      mapState: buildSilkLocationMapState(location),
+    }));
+
+    const playerTokensOnly = tokens.filter((token) => token.kind === "player");
+    const playerTokensOnMain = playerTokensOnly.map((token, index) => ({
+      ...token,
+      x: 2 + (index % 4),
+      y: 7 + Math.floor(index / 4),
+      mapId: mainLocation.id,
+    }));
+    const mainNpcs = buildSilkNpcTokens(mainLocation);
+    const transitionTokens: RoomToken[] = scenarioMaps.map((preset, index) => ({
+      id: `silk-portal-${preset.id}`,
+      name: `Переход: ${preset.name}`,
+      short: "↪",
+      kind: "object",
+      color: "rgb(196 181 253)",
+      x: 1 + (index % 8) * 2,
+      y: index < 8 ? 1 : 8,
+      hp: 1,
+      maxHp: 1,
+      ac: 10,
+      speed: 0,
+      owner: "GM",
+      roleOwner: "gm",
+      linkedMapId: preset.id,
+      mapId: mainLocation.id,
+      statuses: [],
+    }));
+    const locationNpcTokens = silkThroneLocations
+      .slice(1)
+      .flatMap((location) => buildSilkNpcTokens(location));
+
+    const nextMainMap = buildSilkLocationMapState(mainLocation);
+    setMainMapSnapshot({ mapName: mainLocation.name, mapState: nextMainMap });
+    setMapName(mainLocation.name);
+    setMapPresetName(mainLocation.name);
+    setMapState(nextMainMap);
+    setGridColsInput(String(nextMainMap.cols));
+    setGridRowsInput(String(nextMainMap.rows));
+    setSavedMaps(scenarioMaps);
+    setActiveSavedMapId(null);
+    setTokens([
+      ...playerTokensOnMain,
+      ...mainNpcs,
+      ...transitionTokens,
+      ...locationNpcTokens,
+    ]);
+    setSelectedTokenId(playerTokensOnMain[0]?.id ?? mainNpcs[0]?.id ?? "elira");
+    addJournalEntry(
+      "map",
+      "Развернут сценарий «Шёлковый престол»: главный зал стал основной картой, а переходы ведут в отдельные локации.",
+    );
+  }, [addJournalEntry, role, tokens]);
+
   const handleDeleteSavedMap = (presetId: string) => {
     const presetIndex = savedMaps.findIndex((preset) => preset.id === presetId);
     if (presetIndex <= 0) return;
@@ -5577,6 +5929,45 @@ export function GameRoomPage({ roomId }: { roomId: string }) {
                   быстро переключаться между наборами карт.
                 </div>
               )}
+            </div>
+          </CompactSection>
+        ) : null}
+
+        {role !== "player" || joinStep !== "ready" ? (
+          <CompactSection
+            title="Сценарий: Шёлковый престол"
+            description="Подготовка всех ключевых локаций отдельными картами с NPC-токенами и переходами из Главного салона."
+            badge={`${silkThroneLocations.length} локаций`}
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleLoadSilkThroneScenario}
+                className="rounded-full bg-fuchsia-500 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Развернуть все карты «Шёлкового престола»
+              </button>
+              <div className="text-xs text-slate-400">
+                Главный зал назначается основной картой, из него появляются токены-переходы во все остальные сцены.
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              {silkThroneLocations.map((location) => (
+                <article
+                  key={`silk-location-${location.id}`}
+                  className="rounded-2xl border border-white/10 bg-slate-900/70 p-3 text-xs text-slate-200"
+                >
+                  <div className="font-semibold text-white">{location.name}</div>
+                  <div className="mt-1 text-slate-400">{location.atmosphere}</div>
+                  <div className="mt-2 space-y-1">
+                    <p><span className="text-slate-400">Кто там:</span> {location.usualGuests}</p>
+                    <p><span className="text-slate-400">Зачем сцена:</span> {location.sceneGoal}</p>
+                    <p><span className="text-slate-400">Что получить:</span> {location.rewards}</p>
+                    <p><span className="text-rose-300">Опасность:</span> {location.danger}</p>
+                    <p><span className="text-cyan-300">NPC токены:</span> {location.npcs.map((npc) => npc.name).join(", ")}</p>
+                  </div>
+                </article>
+              ))}
             </div>
           </CompactSection>
         ) : null}
